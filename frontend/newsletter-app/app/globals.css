@@ -1,0 +1,207 @@
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #e8edf4;
+  --bg-soft: #f4f7fb;
+  --text: #273a58;
+  --text-muted: #607595;
+  --line: #c8d3e3;
+  --panel-bg: #ffffff;
+  --header-bg: #1f5db8;
+  --dropdown-bg: #ffffff;
+  --pattern-line: rgba(123, 145, 178, 0.12);
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #cfd5dd;
+    --bg-soft: #ffffff;
+    --text: #0a2a57;
+    --text-muted: #1f4273;
+    --line: rgba(67, 110, 175, 0.3);
+    --panel-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(237, 245, 255, 0.96));
+    --header-bg: #f8fbff;
+    --dropdown-bg: #ffffff;
+    --pattern-line: rgba(74, 120, 188, 0.14);
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #e8edf4;
+  --bg-soft: #f4f7fb;
+  --text: #273a58;
+  --text-muted: #607595;
+  --line: #c8d3e3;
+  --panel-bg: #ffffff;
+  --header-bg: #1f5db8;
+  --dropdown-bg: #ffffff;
+  --pattern-line: rgba(123, 145, 178, 0.12);
+}
+
+:root[data-theme="light"] {
+  --bg: #e8edf4;
+  --bg-soft: #f4f7fb;
+  --text: #273a58;
+  --text-muted: #607595;
+  --line: #c8d3e3;
+  --panel-bg: #ffffff;
+  --header-bg: #1f5db8;
+  --dropdown-bg: #ffffff;
+  --pattern-line: rgba(123, 145, 178, 0.12);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui;
+  color: var(--text);
+  background: linear-gradient(180deg, #e9eef5 0%, #e5ebf3 100%);
+}
+
+/* Standard password UX: keep only the custom eye toggle, hide browser duplicate icon */
+input[type="password"]::-ms-reveal,
+input[type="password"]::-ms-clear {
+  display: none;
+}
+
+:root[data-theme="light"] body {
+  background: linear-gradient(180deg, #e9eef5 0%, #e5ebf3 100%);
+}
+
+
+.panel {
+  background: var(--panel-bg);
+  background-image: none;
+  border: 1px solid var(--line);
+  box-shadow: 0 1px 2px rgba(20, 49, 93, 0.06);
+  backdrop-filter: none;
+}
+
+.verticals-showcase {
+  border: 1px solid color-mix(in srgb, var(--line) 75%, #4ba3ff 25%);
+  background:
+    radial-gradient(1200px 380px at -8% -20%, rgba(57, 163, 255, 0.22), transparent 55%),
+    radial-gradient(900px 320px at 110% 0%, rgba(100, 204, 255, 0.18), transparent 52%),
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-soft) 88%, #0d4ea6 12%), color-mix(in srgb, var(--bg-soft) 94%, #0a3e87 6%));
+}
+
+.vertical-card {
+  border: 1px solid color-mix(in srgb, var(--line) 70%, #58a7ff 30%);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--bg-soft) 90%, #1b5ec2 10%), color-mix(in srgb, var(--bg-soft) 96%, #0f438f 4%));
+  transition: transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease;
+}
+
+.vertical-card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--line) 45%, #8fc7ff 55%);
+  box-shadow: 0 18px 40px rgba(8, 18, 33, 0.35);
+}
+
+.vertical-point {
+  position: relative;
+  padding-left: 1rem;
+}
+
+.vertical-point::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.45rem;
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #88d3ff, #38a9ff);
+}
+
+.grid-pattern {
+  background-image:
+    linear-gradient(to right, var(--pattern-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--pattern-line) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+
+/* Light mode utility overrides to keep consistent contrast across existing Tailwind classes */
+:root[data-theme="light"] .text-white,
+:root[data-theme="light"] .text-slate-100,
+:root[data-theme="light"] .text-slate-200 {
+  color: var(--text) !important;
+}
+
+:root[data-theme="light"] .text-slate-300,
+:root[data-theme="light"] .text-slate-400 {
+  color: var(--text-muted) !important;
+}
+
+:root[data-theme="light"] .bg-slate-950\/40,
+:root[data-theme="light"] .bg-slate-900\/40,
+:root[data-theme="light"] .bg-slate-900\/20 {
+  background-color: rgba(247, 251, 255, 0.9) !important;
+}
+
+:root[data-theme="light"] .border-slate-500\/30,
+:root[data-theme="light"] .border-slate-500\/20 {
+  border-color: rgba(102, 138, 184, 0.35) !important;
+}
+
+:root[data-theme="light"] .bg-brand-500\/20 {
+  background-color: rgba(23, 105, 214, 0.12) !important;
+}
+
+:root[data-theme="light"] .verticals-showcase {
+  background: linear-gradient(180deg, rgba(252, 254, 255, 0.98), rgba(223, 234, 246, 0.97));
+  border-color: rgba(97, 141, 201, 0.45);
+}
+
+:root[data-theme="light"] .vertical-card {
+  background: linear-gradient(180deg, #ffffff, #f4f8ff);
+  border-color: rgba(105, 151, 213, 0.35);
+}
+
+:root[data-theme="light"] .vertical-card:hover {
+  box-shadow: 0 18px 40px rgba(65, 111, 176, 0.18);
+}
+
+/* In light mode, interactive hover text uses the deep blue brand tone */
+:root[data-theme="light"] .hover\:text-cyanAccent:hover,
+:root[data-theme="light"] .focus-visible\:text-cyanAccent:focus-visible {
+  color: #00b8ad !important;
+}
+
+/* Stronger panel look and readable KPI accents in light mode */
+:root[data-theme="light"] .panel {
+  background-image:
+    linear-gradient(180deg, rgba(252, 254, 255, 0.98), rgba(223, 234, 246, 0.97)),
+    linear-gradient(to right, rgba(86, 129, 193, 0.16) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(86, 129, 193, 0.16) 1px, transparent 1px);
+  border-color: rgba(97, 141, 201, 0.45);
+}
+
+:root[data-theme="light"] .text-cyanAccent {
+  color: #008f85 !important;
+}
+
+:root[data-theme="light"] .text-brand-200 {
+  color: #1e6db8 !important;
+}
+
+:root[data-theme="light"] .text-brand-100 {
+  color: #2b78c7 !important;
+}
+
+/* Only blue buttons keep white label text in light mode */
+:root[data-theme="light"] .bg-brand-500 {
+  color: #ffffff !important;
+}

@@ -1,0 +1,21 @@
+_format_version: "3.0"
+_transform: true
+
+services:
+  - name: core-api
+    url: http://core-api:8080
+    routes:
+      - name: core-api-v1
+        paths:
+          - /v1
+          - /v3
+          - /swagger-ui
+          - /swagger-ui.html
+        strip_path: false
+        methods:
+          - GET
+          - POST
+          - PUT
+          - PATCH
+          - DELETE
+          - OPTIONS

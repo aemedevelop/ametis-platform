@@ -1,0 +1,165 @@
+asyncapi: 3.0.0
+info:
+  title: Core Events
+  version: 1.0.0
+  description: Domain events published by Platform Core.
+defaultContentType: application/json
+servers:
+  local:
+    host: localhost:9092
+    protocol: kafka
+channels:
+  core.user.created.v1:
+    address: core.user.created.v1
+    messages:
+      userCreated:
+        $ref: "#/components/messages/UserCreated"
+  core.tenant.created.v1:
+    address: core.tenant.created.v1
+    messages:
+      tenantCreated:
+        $ref: "#/components/messages/TenantCreated"
+  core.subscription.activated.v1:
+    address: core.subscription.activated.v1
+    messages:
+      subscriptionActivated:
+        $ref: "#/components/messages/SubscriptionActivated"
+  core.configuration.updated.v1:
+    address: core.configuration.updated.v1
+    messages:
+      configurationUpdated:
+        $ref: "#/components/messages/ConfigurationUpdated"
+  core.user.role.changed.v1:
+    address: core.user.role.changed.v1
+    messages:
+      userRoleChanged:
+        $ref: "#/components/messages/UserRoleChanged"
+operations:
+  publishUserCreated:
+    action: send
+    channel:
+      $ref: "#/channels/core.user.created.v1"
+    messages:
+      - $ref: "#/channels/core.user.created.v1/messages/userCreated"
+  publishTenantCreated:
+    action: send
+    channel:
+      $ref: "#/channels/core.tenant.created.v1"
+    messages:
+      - $ref: "#/channels/core.tenant.created.v1/messages/tenantCreated"
+  publishSubscriptionActivated:
+    action: send
+    channel:
+      $ref: "#/channels/core.subscription.activated.v1"
+    messages:
+      - $ref: "#/channels/core.subscription.activated.v1/messages/subscriptionActivated"
+  publishConfigurationUpdated:
+    action: send
+    channel:
+      $ref: "#/channels/core.configuration.updated.v1"
+    messages:
+      - $ref: "#/channels/core.configuration.updated.v1/messages/configurationUpdated"
+  publishUserRoleChanged:
+    action: send
+    channel:
+      $ref: "#/channels/core.user.role.changed.v1"
+    messages:
+      - $ref: "#/channels/core.user.role.changed.v1/messages/userRoleChanged"
+components:
+  messages:
+    UserCreated:
+      name: UserCreated
+      payload:
+        $ref: "#/components/schemas/UserCreatedEvent"
+    TenantCreated:
+      name: TenantCreated
+      payload:
+        $ref: "#/components/schemas/TenantCreatedEvent"
+    SubscriptionActivated:
+      name: SubscriptionActivated
+      payload:
+        $ref: "#/components/schemas/SubscriptionActivatedEvent"
+    ConfigurationUpdated:
+      name: ConfigurationUpdated
+      payload:
+        $ref: "#/components/schemas/ConfigurationUpdatedEvent"
+    UserRoleChanged:
+      name: UserRoleChanged
+      payload:
+        $ref: "#/components/schemas/UserRoleChangedEvent"
+  schemas:
+    EventMeta:
+      type: object
+      required: [eventId, occurredAt, version]
+      properties:
+        eventId:
+          type: string
+          format: uuid
+        occurredAt:
+          type: string
+          format: date-time
+        version:
+          type: string
+          example: v1
+    UserCreatedEvent:
+      type: object
+      required: [meta, userId, email]
+      properties:
+        meta:
+          $ref: "#/components/schemas/EventMeta"
+        userId:
+          type: string
+          format: uuid
+        email:
+          type: string
+        fullName:
+          type: string
+    TenantCreatedEvent:
+      type: object
+      required: [meta, tenantId, slug, name]
+      properties:
+        meta:
+          $ref: "#/components/schemas/EventMeta"
+        tenantId:
+          type: string
+          format: uuid
+        slug:
+          type: string
+        name:
+          type: string
+    SubscriptionActivatedEvent:
+      type: object
+      required: [meta, tenantId, planCode]
+      properties:
+        meta:
+          $ref: "#/components/schemas/EventMeta"
+        tenantId:
+          type: string
+          format: uuid
+        planCode:
+          type: string
+    ConfigurationUpdatedEvent:
+      type: object
+      required: [meta, tenantId, configKey]
+      properties:
+        meta:
+          $ref: "#/components/schemas/EventMeta"
+        tenantId:
+          type: string
+          format: uuid
+        configKey:
+          type: string
+    UserRoleChangedEvent:
+      type: object
+      required: [meta, tenantId, userId, roleCode]
+      properties:
+        meta:
+          $ref: "#/components/schemas/EventMeta"
+        tenantId:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        roleCode:
+          type: string

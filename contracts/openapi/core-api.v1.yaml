@@ -1,0 +1,311 @@
+openapi: 3.1.0
+info:
+  title: Core API
+  version: 1.0.0
+  description: Core services for tenant, access control, subscriptions and authorization checks.
+servers:
+  - url: http://localhost:8000/v1
+security:
+  - bearerAuth: []
+tags:
+  - name: Health
+  - name: Tenants
+  - name: Memberships
+  - name: Roles
+  - name: Permissions
+  - name: Subscriptions
+  - name: Authorization
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      responses:
+        "200":
+          description: Service healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+  /tenants:
+    post:
+      tags: [Tenants]
+      summary: Create tenant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTenantRequest"
+      responses:
+        "201":
+          description: Tenant created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tenant"
+    get:
+      tags: [Tenants]
+      summary: List tenants for current user
+      responses:
+        "200":
+          description: Tenant list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Tenant"
+  /tenants/{tenantId}/memberships:
+    get:
+      tags: [Memberships]
+      summary: List tenant memberships
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+      responses:
+        "200":
+          description: Membership list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/UserTenant"
+    post:
+      tags: [Memberships]
+      summary: Add user membership to tenant
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMembershipRequest"
+      responses:
+        "201":
+          description: Membership created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserTenant"
+  /roles:
+    get:
+      tags: [Roles]
+      summary: List available roles
+      responses:
+        "200":
+          description: Role list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Role"
+  /permissions:
+    get:
+      tags: [Permissions]
+      summary: List permissions
+      parameters:
+        - in: query
+          name: vertical
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Permission list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Permission"
+  /tenants/{tenantId}/subscription:
+    get:
+      tags: [Subscriptions]
+      summary: Get tenant subscription
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+      responses:
+        "200":
+          description: Current subscription
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Subscription"
+    put:
+      tags: [Subscriptions]
+      summary: Change tenant plan
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSubscriptionRequest"
+      responses:
+        "200":
+          description: Updated subscription
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Subscription"
+  /authorization/check:
+    post:
+      tags: [Authorization]
+      summary: Evaluate if user can execute permission within tenant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AuthorizationCheckRequest"
+      responses:
+        "200":
+          description: Authorization decision
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthorizationCheckResponse"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    TenantId:
+      in: path
+      name: tenantId
+      required: true
+      schema:
+        type: string
+        format: uuid
+  schemas:
+    Tenant:
+      type: object
+      required: [id, slug, name, businessProfile, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        slug:
+          type: string
+        name:
+          type: string
+        businessProfile:
+          type: string
+          enum: [PYME, CONSULTOR, PROVEEDOR, LEAD]
+        status:
+          type: string
+          enum: [ACTIVE, SUSPENDED]
+    CreateTenantRequest:
+      type: object
+      required: [slug, name, businessProfile]
+      properties:
+        slug:
+          type: string
+        name:
+          type: string
+        businessProfile:
+          type: string
+          enum: [PYME, CONSULTOR, PROVEEDOR, LEAD]
+    UserTenant:
+      type: object
+      required: [userId, tenantId, roleCode, membershipStatus]
+      properties:
+        userId:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+          format: uuid
+        roleCode:
+          type: string
+          enum: [OWNER, ADMIN, MEMBER, VIEWER]
+        membershipStatus:
+          type: string
+          enum: [ACTIVE, INVITED, DISABLED]
+    CreateMembershipRequest:
+      type: object
+      required: [userId, roleCode]
+      properties:
+        userId:
+          type: string
+          format: uuid
+        roleCode:
+          type: string
+          enum: [OWNER, ADMIN, MEMBER, VIEWER]
+    Role:
+      type: object
+      required: [id, code, name]
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        name:
+          type: string
+    Permission:
+      type: object
+      required: [id, code, vertical, resource, action]
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        vertical:
+          type: string
+        resource:
+          type: string
+        action:
+          type: string
+    Subscription:
+      type: object
+      required: [tenantId, planCode, status]
+      properties:
+        tenantId:
+          type: string
+          format: uuid
+        planCode:
+          type: string
+          enum: [FREE, PRO, BUSINESS, ENTERPRISE]
+        status:
+          type: string
+          enum: [ACTIVE, CANCELED, PAST_DUE]
+    UpdateSubscriptionRequest:
+      type: object
+      required: [planCode]
+      properties:
+        planCode:
+          type: string
+          enum: [FREE, PRO, BUSINESS, ENTERPRISE]
+    AuthorizationCheckRequest:
+      type: object
+      required: [tenantId, permissionCode]
+      properties:
+        tenantId:
+          type: string
+          format: uuid
+        permissionCode:
+          type: string
+          example: comercial.pricing.optimize
+    AuthorizationCheckResponse:
+      type: object
+      required: [allowed, reasons]
+      properties:
+        allowed:
+          type: boolean
+        reasons:
+          type: array
+          items:
+            type: string

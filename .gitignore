@@ -1,0 +1,94 @@
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE / editors
+.vscode/
+.idea/
+*.iml
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.local
+*.pem
+*.key
+*.crt
+
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build outputs
+.next/
+out/
+dist/
+build/
+coverage/
+target/
+**/target/
+.tmp/
+tmp/
+temp/
+.cache/
+*.tsbuildinfo
+*.class
+*.jar
+*.war
+*.ear
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Docker / local data
+docker-data/
+postgres-data/
+volumes/
+*.pid
+
+# Archives / extracted content
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.gz
+*.rar
+*.7z
+.tmp_extracted/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+venv/
+.venv/
+
+# Java / Maven / Gradle
+.mvn/
+.gradle/
+pom.xml.versionsBackup
+
+# Frontend specific
+frontend/**/.next/
+frontend/**/out/
+frontend/**/dist/
+frontend/**/coverage/
+frontend/**/node_modules/
+frontend/**/.turbo/
+
+# Misc generated files
+*.orig
+*.bak
+*.tmp

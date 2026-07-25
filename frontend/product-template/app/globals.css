@@ -1,0 +1,62 @@
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #081121;
+  --bg-soft: #102441;
+  --text: #eaf3ff;
+  --text-muted: #9cb4d3;
+  --line: rgba(126, 167, 214, 0.22);
+  --panel-bg: linear-gradient(180deg, rgba(18, 39, 71, 0.9), rgba(10, 26, 49, 0.88));
+  --header-bg: #071123;
+  --dropdown-bg: #102b52;
+  --pattern-line: rgba(135, 171, 213, 0.07);
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #cfd5dd;
+    --bg-soft: #ffffff;
+    --text: #0a2a57;
+    --text-muted: #1f4273;
+    --line: rgba(67, 110, 175, 0.3);
+    --panel-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(237, 245, 255, 0.96));
+    --header-bg: #f8fbff;
+    --dropdown-bg: #ffffff;
+    --pattern-line: rgba(74, 120, 188, 0.14);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  padding: 0;
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui;
+  color: var(--text);
+  background:
+    radial-gradient(1000px 600px at 88% -10%, rgba(32, 105, 230, 0.28), transparent 60%),
+    radial-gradient(800px 520px at 0% 10%, rgba(0, 212, 200, 0.14), transparent 58%),
+    linear-gradient(180deg, var(--bg) 0%, color-mix(in srgb, var(--bg) 88%, #1e3d75 12%) 48%, var(--bg) 100%);
+}
+
+.panel {
+  background-image:
+    var(--panel-bg),
+    linear-gradient(to right, var(--pattern-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--pattern-line) 1px, transparent 1px);
+  background-size: auto, 44px 44px, 44px 44px;
+  background-position: 0 0, 0 0, 0 0;
+  border: 1px solid var(--line);
+  backdrop-filter: blur(10px);
+}

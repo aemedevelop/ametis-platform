@@ -1,0 +1,53 @@
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_database WHERE datname = 'keycloak_db') THEN
+    EXECUTE 'CREATE DATABASE keycloak_db';
+  END IF;
+  IF NOT EXISTS (SELECT FROM pg_database WHERE datname = 'core_db') THEN
+    EXECUTE 'CREATE DATABASE core_db';
+  END IF;
+  IF NOT EXISTS (SELECT FROM pg_database WHERE datname = 'newsletter_db') THEN
+    EXECUTE 'CREATE DATABASE newsletter_db';
+  END IF;
+END
+$$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'core_user') THEN
+    CREATE ROLE core_user LOGIN PASSWORD 'core_pass';
+  END IF;
+  IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'newsletter_user') THEN
+    CREATE ROLE newsletter_user LOGIN PASSWORD 'newsletter_pass';
+  END IF;
+END
+$$;
+
+GRANT ALL PRIVILEGES ON DATABASE core_db TO core_user;
+GRANT ALL PRIVILEGES ON DATABASE newsletter_db TO newsletter_user;
+
+\connect core_db
+
+CREATE SCHEMA IF NOT EXISTS core AUTHORIZATION core_user;
+
+GRANT USAGE, CREATE ON SCHEMA core TO core_user;
+ALTER ROLE core_user IN DATABASE core_db SET search_path TO core,public;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA core
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO core_user;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA core
+GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO core_user;
+
+\connect newsletter_db
+
+CREATE SCHEMA IF NOT EXISTS newsletter AUTHORIZATION newsletter_user;
+
+GRANT USAGE, CREATE ON SCHEMA newsletter TO newsletter_user;
+ALTER ROLE newsletter_user IN DATABASE newsletter_db SET search_path TO newsletter,public;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA newsletter
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO newsletter_user;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA newsletter
+GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO newsletter_user;

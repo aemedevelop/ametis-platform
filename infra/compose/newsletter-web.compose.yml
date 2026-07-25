@@ -1,0 +1,12 @@
+services:
+  newsletter-web:
+    build:
+      context: ../../frontend/newsletter-app
+      dockerfile: Dockerfile
+    image: ametis/newsletter-web:0.1.0
+    container_name: ametis-newsletter-web
+    environment:
+      NEXT_PUBLIC_NEWSLETTER_API_BASE_URL: ${NEWSLETTER_API_BASE_URL:-http://localhost:8082}
+      NEXT_PUBLIC_HUB_URL: ${HUB_WEB_URL:-http://localhost:3000}
+    ports:
+      - "3100:3100"

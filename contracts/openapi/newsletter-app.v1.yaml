@@ -1,0 +1,35 @@
+openapi: 3.0.3
+info:
+  title: AMETIS Newsletter API
+  version: 1.0.0
+  description: Newsletter product API integrated with AMETIS core.
+paths:
+  /api/newsletter/health:
+    get:
+      summary: Health check
+      responses:
+        "200":
+          description: OK
+  /api/newsletter/me/context:
+    get:
+      summary: Current user context
+      responses:
+        "200":
+          description: Context response
+  /api/newsletter/me/access:
+    get:
+      summary: Current user product access
+      responses:
+        "200":
+          description: Access response
+  /api/newsletter/projects:
+    get:
+      summary: List projects
+      responses:
+        "200":
+          description: Projects
+    post:
+      summary: Create project
+      responses:
+        "201":
+          description: Created
