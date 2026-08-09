@@ -3,6 +3,7 @@ import "./globals.css";
 import IntlProviderClient from "../components/IntlProviderClient";
 import ThemeProviderClient from "../components/ThemeProviderClient";
 import { SessionWatcher } from "../components/session-watcher";
+import { CopilotChat } from "../components/copilot-chat";
 import es from "../locales/es.json";
 import en from "../locales/en.json";
 
@@ -30,6 +31,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <IntlProviderClient defaultLocale={defaultLocale} messages={messages}>
             <SessionWatcher />
             {children}
+            <CopilotChat />
           </IntlProviderClient>
         </ThemeProviderClient>
       </body>

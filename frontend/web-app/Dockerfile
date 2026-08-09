@@ -5,6 +5,13 @@ RUN npm install
 
 FROM node:20-alpine AS build
 WORKDIR /app
+ARG NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+ARG NEXT_PUBLIC_CHAT_API_URL=/api/rag-chat
+ARG NEXT_PUBLIC_CHAT_TENANT_ID=aeme
+ENV NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
+ENV NEXT_PUBLIC_CHAT_API_URL=${NEXT_PUBLIC_CHAT_API_URL}
+ENV NEXT_PUBLIC_CHAT_TENANT_ID=${NEXT_PUBLIC_CHAT_TENANT_ID}
+ENV RAG_CHAT_API_URL=http://localhost:8000/tenants/aeme/agents/support_agent/knowledge-bases/landing/query
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npm run build

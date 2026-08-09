@@ -1,6 +1,7 @@
 import type { AuthorizationCheckResult, HealthResponse } from "@/lib/types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+const DEFAULT_CHAT_API_URL = "/api/rag-chat";
 
 export class ApiError extends Error {
   code?: string;
@@ -55,6 +56,21 @@ export type ProfileResponse = {
   userId: string;
   email: string;
   fullName: string;
+};
+
+export type ChatResponseType = "quick_reply" | "rag_answer" | "fallback";
+
+export type ChatResponse = {
+  tenant_id: string;
+  question: string;
+  answer: string;
+  response_type: ChatResponseType;
+  suggestions: string[];
+};
+
+export type ChatQuestionPayload = {
+  tenant_id: string;
+  question: string;
 };
 
 export type UpdateProfilePayload = {
@@ -190,6 +206,29 @@ export async function exchangeAuthorizationCode(payload: AuthCodeExchangePayload
   return response.json() as Promise<LoginResponse>;
 }
 
+export async function askCopilot(payload: ChatQuestionPayload): Promise<ChatResponse> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const token = getOptionalAuthToken();
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  const response = await fetch(getChatApiUrl(), {
+    method: "POST",
+    headers,
+    body: JSON.stringify(buildChatRequestBody(payload)),
+    cache: "no-store"
+  });
+
+  if (!response.ok) {
+    const error = await parseApiError(response, `Chat request failed with status ${response.status}`);
+    throw new ApiError(error.message, response.status, error.code);
+  }
+
+  const body = (await response.json()) as unknown;
+  return normalizeChatResponse(body, payload);
+}
+
 export function storeSessionTokens(tokens: LoginResponse) {
   if (typeof window === "undefined") return;
   const storage = getTokenStorage();
@@ -221,6 +260,11 @@ function getAuthToken(): string {
   return token;
 }
 
+function getOptionalAuthToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("core_access_token") || sessionStorage.getItem("core_access_token");
+}
+
 function getRefreshToken(): string {
   if (typeof window === "undefined") {
     throw new ApiError("Not authenticated", 401, "authentication_error");
@@ -241,6 +285,61 @@ function getTokenStorage(): Storage {
   return localStorage;
 }
 
+function getChatApiUrl(): string {
+  return process.env.NEXT_PUBLIC_CHAT_API_URL ?? DEFAULT_CHAT_API_URL;
+}
+
+function buildChatRequestBody(payload: ChatQuestionPayload): Record<string, string> {
+  if (getChatApiUrl().includes("/tenants/") && getChatApiUrl().endsWith("/query")) {
+    return { question: payload.question };
+  }
+  return payload;
+}
+
+function normalizeChatResponse(body: unknown, fallback: ChatQuestionPayload): ChatResponse {
+  const value = unwrapChatResponse(body);
+  const responseType = normalizeResponseType(value.response_type);
+
+  return {
+    tenant_id: toNonEmptyString(value.tenant_id) ?? fallback.tenant_id,
+    question: toNonEmptyString(value.question) ?? fallback.question,
+    answer: toNonEmptyString(value.answer) ?? "",
+    response_type: responseType,
+    suggestions: normalizeSuggestions(value.suggestions)
+  };
+}
+
+function unwrapChatResponse(body: unknown): Record<string, unknown> {
+  if (isRecord(body)) {
+    if (isRecord(body.data)) return body.data;
+    if (isRecord(body.response)) return body.response;
+    return body;
+  }
+  return {};
+}
+
+function normalizeResponseType(value: unknown): ChatResponseType {
+  if (value === "quick_reply" || value === "rag_answer" || value === "fallback") {
+    return value;
+  }
+  return "fallback";
+}
+
+function normalizeSuggestions(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map(toNonEmptyString).filter((suggestion): suggestion is string => Boolean(suggestion));
+}
+
+function toNonEmptyString(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 async function parseApiError(response: Response, fallback: string): Promise<{ message: string; code?: string }> {
   try {
     const contentType = response.headers.get("content-type") ?? "";
@@ -255,6 +354,9 @@ async function parseApiError(response: Response, fallback: string): Promise<{ me
     }
     const text = await response.text();
     if (text.trim().length > 0) {
+      if (text.trimStart().toLowerCase().startsWith("<!doctype html") || text.trimStart().toLowerCase().startsWith("<html")) {
+        return { message: fallback };
+      }
       return { message: text };
     }
   } catch {
