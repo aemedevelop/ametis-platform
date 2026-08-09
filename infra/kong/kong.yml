@@ -19,3 +19,16 @@ services:
           - PATCH
           - DELETE
           - OPTIONS
+
+  - name: agent-factory-app
+    url: http://agent-factory-app:8083
+    routes:
+      - name: agent-factory-api
+        paths:
+          - /api/agent-factory
+        strip_path: false
+        methods:
+          - GET
+          - POST
+          - DELETE
+          - OPTIONS

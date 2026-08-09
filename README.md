@@ -33,7 +33,8 @@ This repository contains an executable blueprint for the Core platform:
 |- infra/
 |  |- docker-compose.yml
 |  |- keycloak/
-|  |  `- realm-export.json
+|  |  |- realm-export.json
+|  |  `- themes/ametis/
 |  `- kong/
 |     `- kong.yml
 |- frontend/
@@ -55,6 +56,21 @@ Result:
 
 `ALLOW = authenticated AND tenant_membership AND role_permission AND plan_feature`
 
+## Autenticación OIDC
+
+- Keycloak centraliza la autenticación y el SSO en el realm `ametis`.
+- Cada SPA utiliza un cliente público independiente: `ametis-hub-web`, `newsletter-web` y `agent-factory-web`.
+- Los clientes web usan Authorization Code con PKCE `S256`, sin secretos en el navegador y con callbacks exactos.
+- `core-api` es un cliente confidencial de servidor y no se reutiliza desde los frontends.
+- El intercambio de código en Core solo admite clientes públicos incluidos en `AUTH_KEYCLOAK_PUBLIC_CLIENT_IDS`.
+- El tema `ametis` extiende `keycloak.v2` y personaliza estilos y mensajes sin duplicar plantillas FreeMarker.
+
+Para actualizar un realm local ya existente sin eliminar usuarios:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\configure-keycloak.ps1
+```
+
 ## Quick Start
 
 Requirements:
@@ -75,6 +91,21 @@ npm install
 npm run dev
 ```
 
+Prepare Agent Factory:
+
+```powershell
+./db/apply-db-config.ps1
+$env:AGENT_FACTORY_GOOGLE_ROOT_FOLDER_ID="<drive-root-folder-id>"
+$env:AGENT_FACTORY_GOOGLE_AUTH_MODE="workspace-oauth"
+$env:AGENT_FACTORY_GOOGLE_OAUTH_CLIENT_ID="<oauth-client-id>"
+$env:AGENT_FACTORY_GOOGLE_OAUTH_CLIENT_SECRET="<oauth-client-secret>"
+$env:AGENT_FACTORY_GOOGLE_OAUTH_REDIRECT_URI="https://agents.example.com/api/agent-factory/drive/oauth/callback"
+$env:AGENT_FACTORY_GOOGLE_FRONTEND_RETURN_URI="https://agents.example.com"
+docker compose -f ./infra/docker-compose.yml -f ./infra/platform-stack.compose.yml up -d --build agent-factory-app agent-factory-web kong
+```
+
+Register `AGENT_FACTORY_GOOGLE_OAUTH_REDIRECT_URI` as an authorized redirect URI in the Google OAuth web client. Workspace users then connect their own account from Agent Factory; refresh tokens are encrypted server-side and never pass through the frontend. AMETIS AI can continue reading with its current service account. The legacy `service-account` mode remains available for roots located in a Google Shared Drive.
+
 Useful endpoints after startup:
 
 - Kong proxy: `http://localhost:8000`
@@ -82,6 +113,8 @@ Useful endpoints after startup:
 - Keycloak: `http://localhost:8081`
 - PostgreSQL: `localhost:5432`
 - Kafka: `localhost:9092`
+- Agent Factory API: `http://localhost:8000/api/agent-factory`
+- Agent Factory Web: `http://localhost:3200`
 
 ## Notes
 

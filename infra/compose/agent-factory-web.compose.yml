@@ -1,0 +1,16 @@
+services:
+  agent-factory-web:
+    build:
+      context: ../../frontend/agent-factory-app
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_AGENT_FACTORY_API_BASE_URL: ${AGENT_FACTORY_PUBLIC_API_URL:-http://localhost:8000}
+        NEXT_PUBLIC_API_BASE_URL: ${HUB_API_BASE_URL:-http://localhost:8000}
+        NEXT_PUBLIC_APP_URL: ${AGENT_FACTORY_WEB_URL:-http://localhost:3200}
+        NEXT_PUBLIC_HUB_URL: ${HUB_WEB_URL:-http://localhost:3000}
+        NEXT_PUBLIC_KEYCLOAK_AUTH_URL: ${KEYCLOAK_AUTH_URL:-http://localhost:8081/realms/ametis/protocol/openid-connect/auth}
+        NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: ${AGENT_FACTORY_KEYCLOAK_CLIENT_ID:-agent-factory-web}
+    image: ametis/agent-factory-web:0.1.0
+    container_name: ametis-agent-factory-web
+    ports:
+      - "3200:3200"

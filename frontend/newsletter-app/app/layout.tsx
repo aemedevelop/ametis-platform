@@ -7,6 +7,7 @@ import { NewsletterShell } from "@/components/newsletter-shell";
 import { SessionWatcher } from "@/components/session-watcher";
 import es from "@/locales/es.json";
 import en from "@/locales/en.json";
+import { Suspense } from "react";
 
 export const metadata: Metadata = {
   title: "AMETIS Newsletter",
@@ -27,7 +28,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <IntlProviderClient defaultLocale={defaultLocale} messages={messages}>
             <SessionWatcher />
             <QueryProvider>
-              <NewsletterShell>{children}</NewsletterShell>
+              <Suspense fallback={null}>
+                <NewsletterShell>{children}</NewsletterShell>
+              </Suspense>
             </QueryProvider>
           </IntlProviderClient>
         </ThemeProviderClient>

@@ -41,6 +41,7 @@ export async function loginUser(payload: {
 }
 
 export async function exchangeAuthorizationCode(payload: {
+  clientId: string;
   code: string;
   redirectUri: string;
   codeVerifier?: string;

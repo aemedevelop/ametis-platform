@@ -71,6 +71,7 @@ public class AuthController {
   @PostMapping("/code/exchange")
   @Operation(summary = "Exchange authorization code", description = "Exchanges OIDC authorization code for token payload.")
   public AuthLoginResponse exchangeCode(@Valid @RequestBody AuthCodeExchangeRequest request) {
-    return authService.exchangeAuthorizationCode(request.code(), request.redirectUri(), request.codeVerifier());
+    return authService.exchangeAuthorizationCode(
+        request.clientId(), request.code(), request.redirectUri(), request.codeVerifier());
   }
 }

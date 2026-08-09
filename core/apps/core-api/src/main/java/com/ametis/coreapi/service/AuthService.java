@@ -7,9 +7,12 @@ import com.ametis.coreapi.api.dto.AuthRegisterResponse;
 import com.ametis.coreapi.domain.UserEntity;
 import com.ametis.coreapi.repository.UserRepository;
 import java.net.URI;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.http.HttpStatusCode;
@@ -30,6 +33,7 @@ public class AuthService {
   private final String realm;
   private final String clientId;
   private final String clientSecret;
+  private final Set<String> publicClientIds;
   private final String adminRealm;
   private final String adminClientId;
   private final String adminClientSecret;
@@ -44,6 +48,7 @@ public class AuthService {
       @Value("${auth.keycloak.realm:ametis}") String realm,
       @Value("${auth.keycloak.client-id:core-api}") String clientId,
       @Value("${auth.keycloak.client-secret:}") String clientSecret,
+      @Value("${auth.keycloak.public-client-ids:ametis-hub-web,newsletter-web,agent-factory-web}") String publicClientIds,
       @Value("${auth.keycloak.admin-realm:master}") String adminRealm,
       @Value("${auth.keycloak.admin-client-id:admin-cli}") String adminClientId,
       @Value("${auth.keycloak.admin-client-secret:}") String adminClientSecret,
@@ -56,6 +61,10 @@ public class AuthService {
     this.realm = realm;
     this.clientId = clientId;
     this.clientSecret = clientSecret;
+    this.publicClientIds = Arrays.stream(publicClientIds.split(","))
+        .map(String::trim)
+        .filter(value -> !value.isEmpty())
+        .collect(Collectors.toUnmodifiableSet());
     this.adminRealm = adminRealm;
     this.adminClientId = adminClientId;
     this.adminClientSecret = adminClientSecret;
@@ -125,13 +134,14 @@ public class AuthService {
     }
   }
 
-  public AuthLoginResponse exchangeAuthorizationCode(String code, String redirectUri, String codeVerifier) {
+  public AuthLoginResponse exchangeAuthorizationCode(
+      String requestedClientId, String code, String redirectUri, String codeVerifier) {
+    if (!publicClientIds.contains(requestedClientId)) {
+      throw new AuthenticationException("OIDC client is not allowed for authorization code exchange.");
+    }
     MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
     form.add("grant_type", "authorization_code");
-    form.add("client_id", clientId);
-    if (clientSecret != null && !clientSecret.isBlank()) {
-      form.add("client_secret", clientSecret);
-    }
+    form.add("client_id", requestedClientId);
     form.add("code", code);
     form.add("redirect_uri", redirectUri);
     if (codeVerifier != null && !codeVerifier.isBlank()) {

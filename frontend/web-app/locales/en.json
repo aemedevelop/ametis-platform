@@ -9,6 +9,13 @@
     "actions.logout":  "Sign out",
     "actions.login":  "Log in",
     "actions.backHome":  "Back to homepage",
+    "auth.oidc.preparing": "Preparing secure access…",
+    "auth.oidc.redirecting": "Redirecting to AMETIS secure access…",
+    "auth.oidc.processing": "Processing authentication…",
+    "auth.oidc.failed": "Authentication could not be completed.",
+    "auth.oidc.invalid": "The authentication response is invalid.",
+    "auth.oidc.expired": "The authentication session has expired. Try again.",
+    "auth.oidc.unauthorized": "Unauthorized. Verify your account access.",
     "auth.fullName":  "Full name",
     "auth.email":  "Email",
     "auth.password":  "Password",
@@ -344,6 +351,9 @@
     "auth.register.error.identityExists":  "A user with this email already exists.",
     "auth.register.error.emailExists":  "This email is already registered on the platform.",
     "auth.register.error.identityProvider":  "Unable to create the account in the identity service. Please try again in a few minutes.",
-    "auth.register.error.validation":  "Please review the form data and try again."
+    "auth.register.error.validation":  "Please review the form data and try again.",
+    "tools.agentFactory.title": "Agent Factory",
+    "tools.agentFactory.short": "Agents",
+    "tools.agentFactory.description": "Manage documents, knowledge, and future agent configurations."
 }
 

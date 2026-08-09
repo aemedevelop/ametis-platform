@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: postgres
     ports:
-      - "5432:5432"
+      - "${PLATFORM_POSTGRES_PORT:-5432}:5432"
     volumes:
       - ametis_postgres_data:/var/lib/postgresql/data
       - ../db/postgres/01-init-databases.sql:/docker-entrypoint-initdb.d/01-init-databases.sql:ro
@@ -56,10 +56,13 @@ services:
       KC_DB_PASSWORD: postgres
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_HOSTNAME: http://localhost:8081
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
     ports:
       - "8081:8080"
     volumes:
       - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
+      - ./keycloak/themes:/opt/keycloak/themes:ro
 
   core-api:
     build:
@@ -77,9 +80,11 @@ services:
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: postgres
       CORE_DB_SCHEMA: core
-      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: http://keycloak:8080/realms/ametis
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: http://localhost:8081/realms/ametis
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://keycloak:8080/realms/ametis/protocol/openid-connect/certs
       AUTH_KEYCLOAK_BASE_URL: http://keycloak:8080
       AUTH_KEYCLOAK_CLIENT_SECRET: core-api-secret
+      AUTH_KEYCLOAK_PUBLIC_CLIENT_IDS: ametis-hub-web,newsletter-web,agent-factory-web
       AUTH_KEYCLOAK_ADMIN_REALM: master
       AUTH_KEYCLOAK_ADMIN_USERNAME: admin
       AUTH_KEYCLOAK_ADMIN_PASSWORD: admin
@@ -100,10 +105,10 @@ services:
       KONG_ADMIN_ERROR_LOG: /dev/stderr
       KONG_ADMIN_LISTEN: 0.0.0.0:8001
     ports:
-      - "8000:8000"
-      - "8443:8443"
-      - "8001:8001"
-      - "8444:8444"
+      - "${KONG_PROXY_PORT:-8000}:8000"
+      - "${KONG_PROXY_TLS_PORT:-8443}:8443"
+      - "${KONG_ADMIN_PORT:-8001}:8001"
+      - "${KONG_ADMIN_TLS_PORT:-8444}:8444"
     volumes:
       - ./kong/kong.yml:/usr/local/kong/declarative/kong.yml:ro
 

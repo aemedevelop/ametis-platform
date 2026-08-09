@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useT } from "@/components/IntlProviderClient";
 import { ApiError, registerUser } from "@/lib/api";
@@ -28,6 +28,10 @@ function EyeOffIcon() {
 }
 
 export default function RegisterPage() {
+  return <Suspense fallback={null}><RegisterContent /></Suspense>;
+}
+
+function RegisterContent() {
   const t = useT();
   const router = useRouter();
   const searchParams = useSearchParams();

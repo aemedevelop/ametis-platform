@@ -12,6 +12,7 @@ export async function buildAuthorizationRequest(params: {
   clientId: string;
   redirectUri: string;
   redirectTarget: string;
+  locale?: string;
 }): Promise<string> {
   const state = randomString(48);
   const codeVerifier = randomString(96);
@@ -33,6 +34,7 @@ export async function buildAuthorizationRequest(params: {
   url.searchParams.set("nonce", nonce);
   url.searchParams.set("code_challenge", codeChallenge);
   url.searchParams.set("code_challenge_method", "S256");
+  if (params.locale) url.searchParams.set("ui_locales", params.locale);
   return url.toString();
 }
 

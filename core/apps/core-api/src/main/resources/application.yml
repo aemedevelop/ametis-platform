@@ -40,6 +40,7 @@ auth:
     realm: ${AUTH_KEYCLOAK_REALM:ametis}
     client-id: ${AUTH_KEYCLOAK_CLIENT_ID:core-api}
     client-secret: ${AUTH_KEYCLOAK_CLIENT_SECRET:}
+    public-client-ids: ${AUTH_KEYCLOAK_PUBLIC_CLIENT_IDS:ametis-hub-web,newsletter-web,agent-factory-web}
     admin-realm: ${AUTH_KEYCLOAK_ADMIN_REALM:master}
     admin-client-id: ${AUTH_KEYCLOAK_ADMIN_CLIENT_ID:admin-cli}
     admin-client-secret: ${AUTH_KEYCLOAK_ADMIN_CLIENT_SECRET:}

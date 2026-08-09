@@ -22,6 +22,7 @@ export class AuthClientError extends Error {
 const CORE_API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
 export async function exchangeAuthorizationCode(payload: {
+  clientId: string;
   code: string;
   redirectUri: string;
   codeVerifier?: string;

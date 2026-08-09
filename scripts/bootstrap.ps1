@@ -4,6 +4,8 @@ $ErrorActionPreference = "Stop"
 Write-Host "Starting Core blueprint infrastructure..."
 docker compose -f ./infra/docker-compose.yml up -d
 
+& "$PSScriptRoot/configure-keycloak.ps1"
+
 Write-Host ""
 Write-Host "Services starting:"
 Write-Host " - Kong proxy:  http://localhost:8000"

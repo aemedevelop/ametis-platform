@@ -9,6 +9,13 @@
   "actions.logout": "Cerrar sesión",
   "actions.login": "Acceder",
   "actions.backHome": "Volver a la página principal",
+  "auth.oidc.preparing": "Preparando acceso seguro…",
+  "auth.oidc.redirecting": "Redirigiendo al acceso seguro de AMETIS…",
+  "auth.oidc.processing": "Procesando autenticación…",
+  "auth.oidc.failed": "No se pudo completar la autenticación.",
+  "auth.oidc.invalid": "La respuesta de autenticación no es válida.",
+  "auth.oidc.expired": "La sesión de autenticación ha expirado. Inténtalo de nuevo.",
+  "auth.oidc.unauthorized": "No autorizado. Verifica el acceso de tu cuenta.",
   "auth.fullName": "Nombre completo",
   "auth.email": "Correo electrónico",
   "auth.password": "Contraseña",
@@ -343,5 +350,8 @@
   "newsletter.publications.table.scheduled": "Programada",
   "newsletter.publication.title": "Publicación",
   "newsletter.publication.status": "Estado: {value}",
-  "newsletter.publication.placeholder": "Empieza a redactar tu newsletter..."
+  "newsletter.publication.placeholder": "Empieza a redactar tu newsletter...",
+  "tools.agentFactory.title": "Fábrica de agentes",
+  "tools.agentFactory.short": "Agentes",
+  "tools.agentFactory.description": "Gestiona documentos, conocimiento y futuras configuraciones de agentes."
 }

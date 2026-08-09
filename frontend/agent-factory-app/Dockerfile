@@ -1,0 +1,30 @@
+FROM node:20-alpine AS deps
+WORKDIR /app
+COPY package.json package-lock.json* ./
+RUN npm install
+
+FROM node:20-alpine AS build
+WORKDIR /app
+ARG NEXT_PUBLIC_AGENT_FACTORY_API_BASE_URL=http://localhost:8000
+ARG NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+ARG NEXT_PUBLIC_APP_URL=http://localhost:3200
+ARG NEXT_PUBLIC_HUB_URL=http://localhost:3000
+ARG NEXT_PUBLIC_KEYCLOAK_AUTH_URL=http://localhost:8081/realms/ametis/protocol/openid-connect/auth
+ARG NEXT_PUBLIC_KEYCLOAK_CLIENT_ID=agent-factory-web
+ENV NEXT_PUBLIC_AGENT_FACTORY_API_BASE_URL=$NEXT_PUBLIC_AGENT_FACTORY_API_BASE_URL
+ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
+ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
+ENV NEXT_PUBLIC_HUB_URL=$NEXT_PUBLIC_HUB_URL
+ENV NEXT_PUBLIC_KEYCLOAK_AUTH_URL=$NEXT_PUBLIC_KEYCLOAK_AUTH_URL
+ENV NEXT_PUBLIC_KEYCLOAK_CLIENT_ID=$NEXT_PUBLIC_KEYCLOAK_CLIENT_ID
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+RUN npm run build
+
+FROM node:20-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+ENV PORT=3200
+COPY --from=build /app/.next/standalone ./
+COPY --from=build /app/.next/static ./.next/static
+CMD ["node", "server.js"]

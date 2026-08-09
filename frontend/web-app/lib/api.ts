@@ -47,6 +47,7 @@ export type RefreshPayload = {
 };
 
 export type AuthCodeExchangePayload = {
+  clientId: string;
   code: string;
   redirectUri: string;
   codeVerifier?: string;

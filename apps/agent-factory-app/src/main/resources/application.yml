@@ -1,0 +1,65 @@
+server:
+  port: 8083
+
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/agent_factory_db}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:postgres}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate:
+        default_schema: agent_factory
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    default-schema: agent_factory
+    schemas: agent_factory
+  servlet:
+    multipart:
+      max-file-size: ${AGENT_FACTORY_MAX_FILE_SIZE:25MB}
+      max-request-size: ${AGENT_FACTORY_MAX_REQUEST_SIZE:26MB}
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI:http://localhost:8081/realms/ametis}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+agent-factory:
+  product:
+    code: ${AGENT_FACTORY_PRODUCT_CODE:agent-factory}
+  core:
+    base-url: ${AGENT_FACTORY_CORE_BASE_URL:http://localhost:8000}
+    authorization-path: ${AGENT_FACTORY_CORE_AUTH_PATH:/v1/authorization/check}
+    product-access-path-template: ${AGENT_FACTORY_CORE_PRODUCT_ACCESS_PATH_TEMPLATE:/v1/tenants/{tenantId}/products/{productCode}/access/me}
+    tenants-path: ${AGENT_FACTORY_CORE_TENANTS_PATH:/v1/tenants}
+  drive:
+    auth-mode: ${AGENT_FACTORY_GOOGLE_AUTH_MODE:workspace-oauth}
+    credentials-file: ${AGENT_FACTORY_GOOGLE_CREDENTIALS_FILE:}
+    oauth-client-id: ${AGENT_FACTORY_GOOGLE_OAUTH_CLIENT_ID:}
+    oauth-client-secret: ${AGENT_FACTORY_GOOGLE_OAUTH_CLIENT_SECRET:}
+    oauth-refresh-token: ${AGENT_FACTORY_GOOGLE_OAUTH_REFRESH_TOKEN:}
+    oauth-redirect-uri: ${AGENT_FACTORY_GOOGLE_OAUTH_REDIRECT_URI:}
+    frontend-return-uri: ${AGENT_FACTORY_GOOGLE_FRONTEND_RETURN_URI:}
+    token-encryption-key: ${AGENT_FACTORY_GOOGLE_TOKEN_ENCRYPTION_KEY:}
+    root-folder-id: ${AGENT_FACTORY_GOOGLE_ROOT_FOLDER_ID:}
+    application-name: ${AGENT_FACTORY_GOOGLE_APPLICATION_NAME:AMETIS Agent Factory}
+  documents:
+    max-file-size-bytes: ${AGENT_FACTORY_MAX_FILE_SIZE_BYTES:26214400}
+  cors:
+    allowed-origin-patterns: ${AGENT_FACTORY_CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:*,http://127.0.0.1:*,https://localhost:*,https://127.0.0.1:*}

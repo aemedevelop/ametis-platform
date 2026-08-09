@@ -1,5 +1,7 @@
 {
   "brand.name": "Ametis",
+  "auth.preparing": "Preparando acceso seguro…",
+  "auth.redirecting": "Redirigiendo al acceso seguro de AMETIS…",
   "newsletter.app.title": "Newsletter App",
   "newsletter.app.subtitle": "Canal de curación, tono editorial y newsletters listos para negocio.",
   "newsletter.workspace.label": "Workspace",

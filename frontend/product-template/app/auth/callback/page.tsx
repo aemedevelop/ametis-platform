@@ -36,6 +36,7 @@ export default function ProductOidcCallbackPage() {
         const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? window.location.origin;
         const redirectUri = `${appUrl}/auth/callback`;
         const tokens = await exchangeAuthorizationCode({
+          clientId: process.env.NEXT_PUBLIC_KEYCLOAK_CLIENT_ID ?? "replace-with-product-client-id",
           code,
           redirectUri,
           codeVerifier: stored.codeVerifier

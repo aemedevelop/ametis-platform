@@ -1,10 +1,16 @@
 {
   "realm": "ametis",
   "enabled": true,
-  "displayName": "Plataforma Inteligencia Empresarial",
+  "displayName": "AMETIS",
   "registrationAllowed": false,
   "resetPasswordAllowed": true,
   "rememberMe": true,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "internationalizationEnabled": true,
+  "supportedLocales": ["es", "en"],
+  "defaultLocale": "es",
+  "loginTheme": "ametis",
   "roles": {
     "realm": [
       {
@@ -16,26 +22,79 @@
   "clients": [
     {
       "clientId": "core-api",
-      "name": "Core API",
+      "name": "AMETIS Core API",
       "enabled": true,
       "protocol": "openid-connect",
       "publicClient": false,
       "secret": "core-api-secret",
       "serviceAccountsEnabled": true,
-      "standardFlowEnabled": true,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
       "directAccessGrantsEnabled": true,
+      "redirectUris": [],
+      "webOrigins": []
+    },
+    {
+      "clientId": "ametis-hub-web",
+      "name": "AMETIS Hub",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "serviceAccountsEnabled": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
       "redirectUris": [
-        "http://localhost:8000/*",
-        "http://localhost:3000/*",
-        "http://localhost:3100/*",
-        "http://localhost:3200/*"
+        "http://localhost:3000/auth/callback",
+        "http://localhost:3010/auth/callback"
       ],
       "webOrigins": [
-        "http://localhost:8000",
         "http://localhost:3000",
-        "http://localhost:3100",
+        "http://localhost:3010"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      }
+    },
+    {
+      "clientId": "newsletter-web",
+      "name": "AMETIS Newsletter",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "serviceAccountsEnabled": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": [
+        "http://localhost:3100/auth/callback"
+      ],
+      "webOrigins": [
+        "http://localhost:3100"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      }
+    },
+    {
+      "clientId": "agent-factory-web",
+      "name": "AMETIS Agent Factory",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "serviceAccountsEnabled": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": [
+        "http://localhost:3200/auth/callback"
+      ],
+      "webOrigins": [
         "http://localhost:3200"
-      ]
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      }
     }
   ],
   "users": [

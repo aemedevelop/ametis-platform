@@ -62,6 +62,7 @@ export default function NewsletterOidcCallbackPage() {
         const appUrl = process.env.NEXT_PUBLIC_NEWSLETTER_WEB_URL ?? window.location.origin;
         const redirectUri = `${appUrl}/auth/callback`;
         const tokens = await exchangeAuthorizationCode({
+          clientId: process.env.NEXT_PUBLIC_KEYCLOAK_CLIENT_ID ?? "newsletter-web",
           code,
           redirectUri,
           codeVerifier: stored.codeVerifier

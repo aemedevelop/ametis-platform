@@ -29,7 +29,7 @@ export default function ProductOidcLoginPage() {
   useEffect(() => {
     async function startLogin() {
       const authUrl = process.env.NEXT_PUBLIC_KEYCLOAK_AUTH_URL ?? "http://localhost:8081/realms/ametis/protocol/openid-connect/auth";
-      const clientId = process.env.NEXT_PUBLIC_KEYCLOAK_CLIENT_ID ?? "core-api";
+      const clientId = process.env.NEXT_PUBLIC_KEYCLOAK_CLIENT_ID ?? "replace-with-product-client-id";
       const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? window.location.origin;
       const redirectUri = `${appUrl}/auth/callback`;
       const redirectTarget = resolveRedirectTarget(searchParams.get("redirect"));

@@ -48,6 +48,13 @@ export const TOOL_NAV_ITEMS: ToolNavItem[] = [
     verticalId: "enterprise-copilot"
   },
   {
+    href: "/tools/agent-factory",
+    titleKey: "tools.agentFactory.title",
+    shortLabelKey: "tools.agentFactory.short",
+    descriptionKey: "tools.agentFactory.description",
+    verticalId: "enterprise-copilot"
+  },
+  {
     href: "/tools/pricing",
     titleKey: "tools.pricing.title",
     shortLabelKey: "tools.pricing.short",
@@ -93,7 +100,7 @@ export const SOLUTION_VERTICALS: SolutionVertical[] = [
     id: "enterprise-copilot",
     titleKey: "vertical.enterpriseCopilot.title",
     descriptionKey: "vertical.enterpriseCopilot.description",
-    toolHrefs: ["/tools/newsletter"]
+    toolHrefs: ["/tools/newsletter", "/tools/agent-factory"]
   }
 ];
 
@@ -103,7 +110,8 @@ export const SIDEBAR_GROUPS: SidebarGroup[] = [
     items: [
       { labelKey: "sidebar.executiveSummary", href: "/dashboard" },
       { labelKey: "tools.market.title", href: "/tools/market" },
-      { labelKey: "tools.newsletter.title", href: "/tools/newsletter" }
+      { labelKey: "tools.newsletter.title", href: "/tools/newsletter" },
+      { labelKey: "tools.agentFactory.title", href: "/tools/agent-factory" }
     ]
   },
   {

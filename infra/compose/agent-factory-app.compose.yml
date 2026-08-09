@@ -1,0 +1,19 @@
+services:
+  agent-factory-app:
+    build:
+      context: ../../apps/agent-factory-app
+      dockerfile: Dockerfile
+    image: ametis/agent-factory-app:0.1.0
+    container_name: ametis-agent-factory-app
+    environment:
+      SPRING_DATASOURCE_URL: ${AGENT_FACTORY_DB_URL:-jdbc:postgresql://postgres:5432/agent_factory_db}
+      SPRING_DATASOURCE_USERNAME: ${AGENT_FACTORY_DB_USER:-agent_factory_user}
+      SPRING_DATASOURCE_PASSWORD: ${AGENT_FACTORY_DB_PASSWORD:-agent_factory_pass}
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${AGENT_FACTORY_JWT_ISSUER:-http://keycloak:8080/realms/ametis}
+      AGENT_FACTORY_CORE_BASE_URL: ${AGENT_FACTORY_CORE_BASE_URL:-http://kong:8000}
+      AGENT_FACTORY_GOOGLE_CREDENTIALS_FILE: /run/secrets/google-drive-service-account.json
+      AGENT_FACTORY_GOOGLE_ROOT_FOLDER_ID: ${AGENT_FACTORY_GOOGLE_ROOT_FOLDER_ID:-}
+    volumes:
+      - ${AGENT_FACTORY_GOOGLE_CREDENTIALS_HOST_FILE:-../../../ametis-ai/docker/compose/rag/secrets/google-drive-service-account.json}:/run/secrets/google-drive-service-account.json:ro
+    ports:
+      - "8083:8083"
