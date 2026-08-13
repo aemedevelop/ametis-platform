@@ -9,4 +9,6 @@ public interface DocumentAssetRepository extends JpaRepository<DocumentAsset, UU
   Optional<DocumentAsset> findByTenantIdAndSha256(UUID tenantId, String sha256);
   Optional<DocumentAsset> findByTenantIdAndDriveFileId(UUID tenantId, String driveFileId);
   List<DocumentAsset> findAllByTenantIdOrderByCreatedAtDesc(UUID tenantId);
+  List<DocumentAsset> findAllByTenantIdAndDriveFileIdIn(UUID tenantId, List<String> driveFileIds);
+  List<DocumentAsset> findAllByTenantIdAndIdIn(UUID tenantId, List<UUID> ids);
 }

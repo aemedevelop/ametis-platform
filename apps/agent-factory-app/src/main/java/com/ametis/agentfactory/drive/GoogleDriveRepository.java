@@ -114,6 +114,21 @@ public class GoogleDriveRepository {
         .execute();
   }
 
+  public void renameWorkspaceFolder(UUID tenantId, String folderId, String workspaceId, String namespace, String displayName)
+      throws IOException {
+    Drive drive = driveClientFactory.create(tenantId);
+    File metadata = new File()
+        .setName(namespace)
+        .setAppProperties(Map.of(
+            "workspaceId", workspaceId,
+            "repositoryNamespace", namespace,
+            "workspaceName", displayName));
+    drive.files().update(folderId, metadata)
+        .setSupportsAllDrives(true)
+        .setFields("id,name,appProperties")
+        .execute();
+  }
+
   private Optional<File> findWorkspaceFolder(Drive drive, String workspaceId, String legacySlug) throws IOException {
     Optional<File> byProperty = findFirst(
         drive,

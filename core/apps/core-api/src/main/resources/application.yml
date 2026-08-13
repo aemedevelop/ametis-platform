@@ -28,6 +28,10 @@ management:
       exposure:
         include: health,info
 
+core:
+  cors:
+    allowed-origin-patterns: ${CORE_CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:*,http://127.0.0.1:*,https://localhost:*,https://127.0.0.1:*}
+
 springdoc:
   api-docs:
     path: /v3/api-docs

@@ -6,6 +6,7 @@ import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
+import jakarta.validation.Valid;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -14,8 +15,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
@@ -44,10 +47,22 @@ public class DocumentController {
   }
 
   @PostMapping("/repository/provision")
-  public RepositoryResponse provision(JwtAuthenticationToken authentication) {
+  public RepositoryResponse provision(
+      @Valid @RequestBody(required = false) RepositoryNamespaceRequest request,
+      JwtAuthenticationToken authentication) {
     UUID tenantId = accessGuard.requireAccess(authentication, AccessGuard.DOCUMENTS_MANAGE);
     CorePlatformClient.TenantDto tenant = accessGuard.requireTenant(authentication, tenantId);
-    return RepositoryResponse.from(provisioningService.provision(tenant));
+    String namespace = request == null ? null : request.repositoryNamespace();
+    return RepositoryResponse.from(provisioningService.provision(tenant, namespace));
+  }
+
+  @PatchMapping("/repository/namespace")
+  public RepositoryResponse renameRepository(
+      @Valid @RequestBody RepositoryNamespaceRequest request,
+      JwtAuthenticationToken authentication) {
+    UUID tenantId = accessGuard.requireAccess(authentication, AccessGuard.DOCUMENTS_MANAGE);
+    CorePlatformClient.TenantDto tenant = accessGuard.requireTenant(authentication, tenantId);
+    return RepositoryResponse.from(provisioningService.rename(tenant, request.repositoryNamespace()));
   }
 
   @GetMapping("/documents")

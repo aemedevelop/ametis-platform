@@ -14,6 +14,7 @@ import {
   RepositoryStatus,
   startDriveConnection,
   StoredDocument,
+  updateRepositoryNamespace,
   uploadDocument
 } from "@/lib/agent-factory-api";
 
@@ -24,10 +25,11 @@ type UploadResult = {
 };
 
 type Translate = (key: string, vars?: Record<string, string | number>) => string;
-type DocumentTypeFilter = "all" | "pdf" | "document" | "presentation" | "spreadsheet" | "text" | "web";
+type DocumentTypeFilter = "all" | "pdf" | "document" | "spreadsheet" | "text" | "web";
 type DocumentSort = "modified-desc" | "modified-asc" | "name-asc";
 
-const ACCEPTED_EXTENSIONS = ".txt,.pdf,.docx,.xlsx,.pptx,.csv,.url,.html,.htm";
+const SUPPORTED_EXTENSIONS = new Set(["txt", "pdf", "docx", "xlsx", "csv", "url", "html", "htm"]);
+const ACCEPTED_EXTENSIONS = Array.from(SUPPORTED_EXTENSIONS, (extension) => `.${extension}`).join(",");
 
 export default function DocumentsPage() {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -49,6 +51,8 @@ export default function DocumentsPage() {
   const [documentToDelete, setDocumentToDelete] = useState<StoredDocument | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [refreshingDocuments, setRefreshingDocuments] = useState(false);
+  const [namespaceDraft, setNamespaceDraft] = useState("");
+  const [savingNamespace, setSavingNamespace] = useState(false);
 
   const visibleDocuments = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase(locale);
@@ -75,6 +79,7 @@ export default function DocumentsPage() {
       }
       const currentRepository = await fetchRepository();
       setRepository(currentRepository);
+      setNamespaceDraft(currentRepository.repositoryAlias);
       if (currentRepository.status === "ACTIVE") {
         setDocuments(await fetchDocuments());
       }
@@ -116,8 +121,9 @@ export default function DocumentsPage() {
     setProvisioning(true);
     setError(null);
     try {
-      const result = await provisionRepository();
+      const result = await provisionRepository(namespaceDraft.trim());
       setRepository(result);
+      setNamespaceDraft(result.repositoryAlias);
       setDocuments(await fetchDocuments());
     } catch (requestError) {
       setError(requestError);
@@ -127,10 +133,45 @@ export default function DocumentsPage() {
     }
   }
 
+  async function saveNamespace() {
+    const nextNamespace = namespaceDraft.trim();
+    if (!nextNamespace || !repository || nextNamespace === repository.repositoryAlias) return;
+    setSavingNamespace(true);
+    setError(null);
+    try {
+      const result = await updateRepositoryNamespace(nextNamespace);
+      setRepository(result);
+      setNamespaceDraft(result.repositoryAlias);
+    } catch (requestError) {
+      setError(requestError);
+      setNamespaceDraft(repository.repositoryAlias);
+    } finally {
+      setSavingNamespace(false);
+    }
+  }
+
   async function uploadFiles(files: File[]) {
     if (!files.length || repository?.status !== "ACTIVE") return;
-    setUploads(files.map((file) => ({ name: file.name, state: "uploading" as const })));
-    for (const file of files) {
+    const unsupportedFiles = files.filter((file) => !SUPPORTED_EXTENSIONS.has(extensionOfFile(file.name)));
+    const supportedFiles = files.filter((file) => SUPPORTED_EXTENSIONS.has(extensionOfFile(file.name)));
+    const rejectedUploads = unsupportedFiles.map((file) => ({
+      name: file.name,
+      state: "failed" as const,
+      error: new AgentFactoryApiError(415, "error.unsupportedFileType", { name: file.name })
+    }));
+
+    setUploads([
+      ...rejectedUploads,
+      ...supportedFiles.map((file) => ({ name: file.name, state: "uploading" as const }))
+    ]);
+    if (unsupportedFiles.length) {
+      setError(rejectedUploads[0].error);
+    } else {
+      setError(null);
+    }
+    if (!supportedFiles.length) return;
+
+    for (const file of supportedFiles) {
       try {
         await uploadDocument(file);
         setUploads((current) => current.map((item) => item.name === file.name ? { ...item, state: "stored" } : item));
@@ -232,6 +273,14 @@ export default function DocumentsPage() {
             <span className="eyebrow">{t("repository.initialSetup")}</span>
             <h2>{repository?.status === "ERROR" ? t("repository.retryTitle") : t("repository.createTitle")}</h2>
             <p>{t("repository.createDescription")}</p>
+            <label className="namespace-field">
+              <span>{t("repository.namespaceInputLabel")}</span>
+              <input
+                value={namespaceDraft}
+                onChange={(event) => setNamespaceDraft(event.target.value)}
+                placeholder={t("repository.namespacePlaceholder")}
+              />
+            </label>
           </div>
           <button className="primary-button" type="button" onClick={provision} disabled={provisioning}>
             {provisioning ? t("repository.preparing") : repository?.status === "ERROR" ? t("common.retry") : t("repository.prepareAction")}
@@ -266,7 +315,34 @@ export default function DocumentsPage() {
               <span className="detail-label">{t("drive.connectedAccount")}</span>
               <strong className="connection-account">{driveConnection.accountEmail ?? t("common.notAvailable")}</strong>
               <span className="detail-label">{t("repository.namespace")}</span>
-              <code>{repository.repositoryNamespace}</code>
+              <label className="namespace-editor">
+                <span className="sr-only">{t("repository.namespaceInputLabel")}</span>
+                <input
+                  value={namespaceDraft}
+                  onChange={(event) => setNamespaceDraft(event.target.value)}
+                  onBlur={saveNamespace}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") saveNamespace();
+                    if (event.key === "Escape") setNamespaceDraft(repository.repositoryAlias);
+                  }}
+                  disabled={savingNamespace}
+                />
+                <button
+                  type="button"
+                  onClick={saveNamespace}
+                  disabled={savingNamespace || !namespaceDraft.trim() || namespaceDraft.trim() === repository.repositoryAlias}
+                >
+                  {savingNamespace ? t("repository.savingNamespace") : t("repository.saveNamespace")}
+                </button>
+              </label>
+              <div className="namespace-preview">
+                <span>{t("repository.technicalId")}</span>
+                <code>{repository.repositoryTechnicalId}</code>
+              </div>
+              <div className="namespace-preview">
+                <span>{t("repository.driveFolder")}</span>
+                <code>{repository.repositoryNamespace}</code>
+              </div>
               <p>{t("repository.notIndexed")}</p>
             </div>
           </section>
@@ -306,7 +382,6 @@ export default function DocumentsPage() {
                   <option value="all">{t("documents.filter.all")}</option>
                   <option value="pdf">{t("documents.filter.pdf")}</option>
                   <option value="document">{t("documents.filter.documents")}</option>
-                  <option value="presentation">{t("documents.filter.presentations")}</option>
                   <option value="spreadsheet">{t("documents.filter.spreadsheets")}</option>
                   <option value="text">{t("documents.filter.text")}</option>
                   <option value="web">{t("documents.filter.web")}</option>
@@ -392,6 +467,10 @@ function formatDate(value: string, locale: string): string {
   return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
 }
 
+function extensionOfFile(name: string): string {
+  return name.includes(".") ? name.split(".").pop()!.toLowerCase() : "";
+}
+
 function extensionOf(name: string, t: Translate): string {
   return name.includes(".") ? name.split(".").pop()!.slice(0, 4).toUpperCase() : t("documents.fileFallback");
 }
@@ -400,7 +479,6 @@ function categoryOf(document: StoredDocument): Exclude<DocumentTypeFilter, "all"
   const extension = document.name.includes(".") ? document.name.split(".").pop()!.toLowerCase() : "";
   if (extension === "pdf") return "pdf";
   if (extension === "docx") return "document";
-  if (extension === "pptx") return "presentation";
   if (extension === "xlsx" || extension === "csv") return "spreadsheet";
   if (extension === "html" || extension === "htm" || extension === "url") return "web";
   return "text";

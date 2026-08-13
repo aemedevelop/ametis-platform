@@ -27,7 +27,14 @@ public class RepositoryProvisioningService {
   }
 
   public RepositoryBinding provision(CorePlatformClient.TenantDto tenant) {
-    String namespace = buildNamespace(tenant.slug(), tenant.name(), tenant.id());
+    return provision(tenant, null);
+  }
+
+  public RepositoryBinding provision(CorePlatformClient.TenantDto tenant, String requestedNamespace) {
+    String namespace = requestedNamespace == null || requestedNamespace.isBlank()
+        ? buildNamespace(tenant.slug(), tenant.name(), tenant.id())
+        : buildNamespace(requestedNamespace, requestedNamespace, tenant.id());
+    ensureNamespaceAvailable(namespace, tenant.id());
     RepositoryBinding binding = bindingRepository.findByTenantId(tenant.id())
         .orElseGet(() -> RepositoryBinding.provisioning(tenant.id(), namespace));
     if (binding.getStatus() == RepositoryStatus.ACTIVE) {
@@ -51,8 +58,37 @@ public class RepositoryProvisioningService {
     }
   }
 
+  public RepositoryBinding rename(CorePlatformClient.TenantDto tenant, String requestedNamespace) {
+    if (requestedNamespace == null || requestedNamespace.isBlank()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "error.repositoryNamespaceRequired");
+    }
+    String namespace = buildNamespace(requestedNamespace, requestedNamespace, tenant.id());
+    ensureNamespaceAvailable(namespace, tenant.id());
+    RepositoryBinding binding = find(tenant.id());
+    if (binding.getStatus() != RepositoryStatus.ACTIVE || binding.getWorkspaceFolderId() == null) {
+      throw new ResponseStatusException(HttpStatus.CONFLICT, "error.repositoryNotActive");
+    }
+    if (namespace.equals(binding.getRepositoryNamespace())) {
+      return binding;
+    }
+    try {
+      googleDriveRepository.renameWorkspaceFolder(
+          tenant.id(), binding.getWorkspaceFolderId(), tenant.id().toString(), namespace, tenant.name());
+      binding.renameNamespace(namespace);
+      return bindingRepository.save(binding);
+    } catch (Exception exception) {
+      throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Google Drive namespace update failed", exception);
+    }
+  }
+
   private String buildNamespace(String tenantSlug, String tenantName, UUID tenantId) {
     return normalizeSlug(tenantSlug, tenantName) + "--" + tenantId.toString().substring(0, 8);
+  }
+
+  private void ensureNamespaceAvailable(String namespace, UUID tenantId) {
+    if (bindingRepository.existsByRepositoryNamespaceAndTenantIdNot(namespace, tenantId)) {
+      throw new ResponseStatusException(HttpStatus.CONFLICT, "error.repositoryNamespaceTaken");
+    }
   }
 
   private String normalizeSlug(String tenantSlug, String tenantName) {

@@ -88,6 +88,7 @@ services:
       AUTH_KEYCLOAK_ADMIN_REALM: master
       AUTH_KEYCLOAK_ADMIN_USERNAME: admin
       AUTH_KEYCLOAK_ADMIN_PASSWORD: admin
+      CORE_CORS_ALLOWED_ORIGIN_PATTERNS: ${CORE_CORS_ALLOWED_ORIGIN_PATTERNS:-http://localhost:*,http://127.0.0.1:*,https://localhost:*,https://127.0.0.1:*}
     ports:
       - "8090:8080"
 

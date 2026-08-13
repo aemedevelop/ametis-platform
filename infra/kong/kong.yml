@@ -30,5 +30,6 @@ services:
         methods:
           - GET
           - POST
+          - PATCH
           - DELETE
           - OPTIONS

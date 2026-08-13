@@ -72,6 +72,11 @@ public class RepositoryBinding {
     updatedAt = OffsetDateTime.now();
   }
 
+  public void renameNamespace(String namespace) {
+    repositoryNamespace = namespace;
+    updatedAt = OffsetDateTime.now();
+  }
+
   public void fail(String message) {
     status = RepositoryStatus.ERROR;
     lastError = message == null ? "Unknown Google Drive error" : message.substring(0, Math.min(message.length(), 1000));

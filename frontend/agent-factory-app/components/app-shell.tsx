@@ -63,6 +63,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const hubUrl = process.env.NEXT_PUBLIC_HUB_URL ?? "http://localhost:3000";
   const profileName = profile?.name ?? t("navigation.user");
+  const isDocumentsActive = pathname === "/";
+  const isKnowledgeBasesActive = pathname.startsWith("/knowledge-bases");
+  const isAgentsActive = pathname.startsWith("/agents");
 
   return (
     <main className={`app-layout${sidebarCollapsed ? " sidebar-collapsed" : ""}`}>
@@ -86,10 +89,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </Link>
         <nav className="side-nav">
           <span className="nav-section">{t("navigation.section.workspace")}</span>
-          <Link className="nav-item active" href="/">{t("navigation.documents")}</Link>
-          <span className="nav-item disabled">{t("navigation.agents")} <em>{t("navigation.comingSoon")}</em></span>
-          <span className="nav-item disabled">{t("navigation.knowledgeBases")}</span>
-          <span className="nav-item disabled">{t("navigation.deployments")}</span>
+          <Link className={`nav-item ${isDocumentsActive ? "active" : ""}`} href="/">{t("navigation.documents")}</Link>
+          <Link className={`nav-item ${isKnowledgeBasesActive ? "active" : ""}`} href="/knowledge-bases">{t("navigation.knowledgeBases")}</Link>
+          <Link className={`nav-item ${isAgentsActive ? "active" : ""}`} href="/agents">{t("navigation.agents")}</Link>
+          <span className="nav-item disabled">{t("navigation.deployments")} <em>{t("navigation.comingSoon")}</em></span>
         </nav>
       </aside>
       <section className="content-shell">

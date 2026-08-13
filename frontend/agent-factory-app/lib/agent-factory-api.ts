@@ -6,6 +6,8 @@ const CORE_API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localh
 export type RepositoryStatus = {
   provider: string;
   repositoryNamespace: string;
+  repositoryAlias: string;
+  repositoryTechnicalId: string;
   status: "PROVISIONING" | "ACTIVE" | "ERROR";
   lastError: string | null;
   updatedAt: string;
@@ -28,6 +30,30 @@ export type StoredDocument = {
   createdAt: string;
   modifiedAt: string;
   webViewLink: string | null;
+};
+
+export type KnowledgeBase = {
+  id: string;
+  name: string;
+  description: string | null;
+  status: "DRAFT" | "READY";
+  documentCount: number;
+  documentNames: string[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AgentDefinition = {
+  id: string;
+  name: string;
+  description: string | null;
+  instructions: string | null;
+  status: "DRAFT" | "READY";
+  knowledgeBaseCount: number;
+  knowledgeBaseNames: string[];
+  createdAt: string;
+  updatedAt: string;
+  publishedAt: string | null;
 };
 
 export class AgentFactoryApiError extends Error {
@@ -103,18 +129,71 @@ export function startDriveConnection() {
   return apiFetch<{ authorizationUrl: string }>("/api/agent-factory/drive/connection/authorize", { method: "POST" });
 }
 
-export function provisionRepository() {
-  return apiFetch<RepositoryStatus>("/api/agent-factory/repository/provision", { method: "POST" });
+export function provisionRepository(repositoryNamespace?: string) {
+  return apiFetch<RepositoryStatus>("/api/agent-factory/repository/provision", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ repositoryNamespace: repositoryNamespace || null })
+  });
+}
+
+export function updateRepositoryNamespace(repositoryNamespace: string) {
+  return apiFetch<RepositoryStatus>("/api/agent-factory/repository/namespace", {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ repositoryNamespace })
+  });
 }
 
 export function fetchDocuments() {
   return apiFetch<StoredDocument[]>("/api/agent-factory/documents");
 }
 
+export function fetchKnowledgeBases() {
+  return apiFetch<KnowledgeBase[]>("/api/agent-factory/knowledge-bases");
+}
+
+export function createKnowledgeBase(input: { name: string; description: string; documentDriveFileIds: string[] }) {
+  return apiFetch<KnowledgeBase>("/api/agent-factory/knowledge-bases", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+}
+
+export async function deleteKnowledgeBase(id: string): Promise<void> {
+  await authenticatedFetch(`/api/agent-factory/knowledge-bases/${id}`, { method: "DELETE" });
+}
+
+export function fetchAgents() {
+  return apiFetch<AgentDefinition[]>("/api/agent-factory/agents");
+}
+
+export function createAgent(input: { name: string; description: string; instructions: string; knowledgeBaseIds: string[] }) {
+  return apiFetch<AgentDefinition>("/api/agent-factory/agents", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+}
+
+export async function deleteAgent(id: string): Promise<void> {
+  await authenticatedFetch(`/api/agent-factory/agents/${id}`, { method: "DELETE" });
+}
+
+export function publishAgent(id: string) {
+  return apiFetch<AgentDefinition>(`/api/agent-factory/agents/${id}/publish`, { method: "POST" });
+}
+
 export function uploadDocument(file: File) {
   const form = new FormData();
   form.append("file", file);
-  return apiFetch<StoredDocument>("/api/agent-factory/documents", { method: "POST", body: form });
+  return apiFetch<StoredDocument>("/api/agent-factory/documents", { method: "POST", body: form }).catch((error: unknown) => {
+    if (error instanceof AgentFactoryApiError && error.status === 415) {
+      throw new AgentFactoryApiError(415, "error.unsupportedFileType", { name: file.name });
+    }
+    throw error;
+  });
 }
 
 export async function deleteDocument(document: StoredDocument): Promise<void> {

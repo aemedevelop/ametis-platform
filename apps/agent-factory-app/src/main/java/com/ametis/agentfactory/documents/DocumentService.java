@@ -30,7 +30,7 @@ import org.springframework.web.server.ResponseStatusException;
 public class DocumentService {
   private static final Logger LOGGER = LoggerFactory.getLogger(DocumentService.class);
   private static final Set<String> SUPPORTED_EXTENSIONS =
-      Set.of("txt", "pdf", "docx", "xlsx", "pptx", "csv", "url", "html", "htm");
+      Set.of("txt", "pdf", "docx", "xlsx", "csv", "url", "html", "htm");
 
   private final RepositoryProvisioningService provisioningService;
   private final DocumentAssetRepository assetRepository;
@@ -174,7 +174,7 @@ public class DocumentService {
     }
     String extension = name.contains(".") ? name.substring(name.lastIndexOf('.') + 1).toLowerCase() : "";
     if (!SUPPORTED_EXTENSIONS.contains(extension)) {
-      throw new ResponseStatusException(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "Unsupported document format");
+      throw new ResponseStatusException(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "error.unsupportedFileType");
     }
   }
 

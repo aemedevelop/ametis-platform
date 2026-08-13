@@ -1,13 +1,14 @@
 # Plataforma de Inteligencia Empresarial - Core Blueprint
 
-This repository contains an executable blueprint for the Core platform:
+Este repositorio contiene el blueprint ejecutable de AMETIS Platform:
 
-- Multi-tenant foundation.
-- Identity decoupled from business logic.
-- RBAC + subscription feature gating.
-- Event-driven integration contracts.
+- base multi-tenant;
+- identidad desacoplada de la lógica de negocio;
+- RBAC + control por suscripción;
+- contratos de integración event-driven;
+- aplicaciones de producto sobre la plataforma, incluyendo **Agent Factory**.
 
-## Repository Layout
+## Estructura del repositorio
 
 ```text
 .
@@ -24,100 +25,285 @@ This repository contains an executable blueprint for the Core platform:
 |  |  |- subscription/
 |  |  `- tenant-management/
 |  `- README.md
-|- db/
-|  |- migrations/
-|  |  |- V1__core_schema.sql
-|  |  `- V2__rbac_and_subscription_seed.sql
-|  `- postgres/
-|     `- 01-init-databases.sql
-|- infra/
-|  |- docker-compose.yml
-|  |- keycloak/
-|  |  |- realm-export.json
-|  |  `- themes/ametis/
-|  `- kong/
-|     `- kong.yml
+|- apps/
+|  |- agent-factory-app/
+|  `- newsletter-app/
 |- frontend/
+|  |- agent-factory-app/
+|  |- newsletter-app/
 |  `- web-app/
+|- db/
+|- docs/
+|- infra/
 `- scripts/
-   `- bootstrap.ps1
 ```
 
-## Core Authorization Model
+## Modelo de autorización
 
-Final authorization decision:
+La decisión final de autorización sigue esta regla:
 
-1. User is authenticated by Keycloak.
-2. User has active membership in selected tenant.
-3. Membership role grants the requested permission.
-4. Tenant subscription enables feature mapped to permission.
+```text
+ALLOW = authenticated AND tenant_membership AND role_permission AND plan_feature
+```
 
-Result:
+Flujo:
 
-`ALLOW = authenticated AND tenant_membership AND role_permission AND plan_feature`
+1. El usuario se autentica con Keycloak.
+2. El usuario pertenece al tenant activo.
+3. Su rol concede el permiso solicitado.
+4. La suscripción del tenant habilita la funcionalidad asociada.
 
 ## Autenticación OIDC
 
-- Keycloak centraliza la autenticación y el SSO en el realm `ametis`.
-- Cada SPA utiliza un cliente público independiente: `ametis-hub-web`, `newsletter-web` y `agent-factory-web`.
-- Los clientes web usan Authorization Code con PKCE `S256`, sin secretos en el navegador y con callbacks exactos.
-- `core-api` es un cliente confidencial de servidor y no se reutiliza desde los frontends.
+- Keycloak centraliza autenticación y SSO en el realm `ametis`.
+- Cada SPA utiliza un cliente público independiente:
+  - `ametis-hub-web`;
+  - `newsletter-web`;
+  - `agent-factory-web`.
+- Los frontends usan Authorization Code con PKCE `S256`.
+- No se exponen secretos en el navegador.
+- `core-api` queda como cliente confidencial de servidor y no se reutiliza desde SPAs.
 - El intercambio de código en Core solo admite clientes públicos incluidos en `AUTH_KEYCLOAK_PUBLIC_CLIENT_IDS`.
-- El tema `ametis` extiende `keycloak.v2` y personaliza estilos y mensajes sin duplicar plantillas FreeMarker.
+- El tema `ametis` extiende `keycloak.v2` para mantener continuidad visual entre las apps y Keycloak.
 
-Para actualizar un realm local ya existente sin eliminar usuarios:
+Para actualizar un realm local existente sin eliminar usuarios:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\configure-keycloak.ps1
 ```
 
+## Agent Factory / Fábrica de agentes
+
+Agent Factory es la aplicación de producto encargada de preparar el conocimiento y la configuración inicial de agentes por workspace.
+
+### Responsabilidad actual
+
+Agent Factory gestiona:
+
+- conexión del workspace con Google Drive;
+- creación o reutilización del namespace documental;
+- estructura documental `{namespace}/docs`;
+- subida, listado, descarga, refresco y eliminación de documentos;
+- agrupación de documentos en bases de conocimiento;
+- creación de agentes;
+- asociación de agentes con bases de conocimiento;
+- publicación MVP de agentes;
+- integración opcional con `ametis-ai` para disparar ingesta RAG.
+
+### Flujo funcional actual
+
+```text
+Workspace
+  -> Documentos
+  -> Bases de conocimiento
+  -> Agentes
+  -> Publicación
+  -> AMETIS AI / RAG Service
+```
+
+### Documentos
+
+- El usuario conecta su Google Drive mediante OAuth.
+- AMETIS crea o reutiliza una carpeta identificable por workspace.
+- Los documentos se guardan en:
+
+```text
+{namespace}/docs
+```
+
+- Se soportan documentos compatibles con el parser actual de AMETIS AI.
+- La interfaz permite refrescar la biblioteca si un archivo cambia manualmente en Drive.
+
+### Namespace documental
+
+- El usuario puede editar la parte legible del namespace.
+- El identificador técnico del tenant no es editable.
+- El namespace se usa como identificador documental para `ametis-ai`.
+
+Ejemplo:
+
+```text
+owner-demo--6d293a5d
+```
+
+### Bases de conocimiento
+
+Las bases de conocimiento agrupan documentos por caso de uso, área funcional o agente objetivo.
+
+En esta fase:
+
+- se guardan en la base de datos de Agent Factory;
+- se asocian a documentos almacenados;
+- no ejecutan indexación por sí solas.
+
+### Agentes
+
+Cada agente contiene:
+
+- nombre;
+- descripción;
+- instrucciones;
+- estado;
+- bases de conocimiento asociadas;
+- fecha de publicación.
+
+La publicación cambia el estado:
+
+```text
+DRAFT -> READY
+```
+
+Y exige que el agente tenga al menos una base de conocimiento asociada.
+
+### Integración con AMETIS AI
+
+La integración con `ametis-ai` es opcional y se activa configurando:
+
+```env
+AGENT_FACTORY_AMETIS_AI_RAG_BASE_URL=http://...
+```
+
+Cuando está configurada, al publicar un agente se llama al RAG service por cada base asociada:
+
+```text
+POST {AGENT_FACTORY_AMETIS_AI_RAG_BASE_URL}/tenants/{namespace}/agents/{agentId}/knowledge-bases/{knowledgeBaseId}/ingest
+```
+
+Contrato actual:
+
+- `tenant_id` en `ametis-ai` = namespace documental;
+- `agent_id` = UUID del agente en Agent Factory;
+- `knowledge_base_id` = UUID de la base de conocimiento en Agent Factory.
+
+Esta integración dispara ingesta e indexación documental, pero todavía no sincroniza la ficha completa del agente.
+
+Próximo paso previsto:
+
+```text
+POST /agents/sync
+```
+
+en `ametis-ai`, para enviar nombre, descripción, instrucciones y bases asociadas.
+
+### Backend Agent Factory
+
+Ubicación:
+
+```text
+apps/agent-factory-app
+```
+
+Responsabilidades:
+
+- API documental;
+- API de Drive OAuth;
+- API de bases de conocimiento;
+- API de agentes;
+- publicación;
+- migraciones Flyway;
+- validación de permisos contra Core.
+
+Migraciones principales:
+
+- `V3__knowledge_bases.sql`
+- `V4__agents.sql`
+- `V5__agent_publication.sql`
+
+### Frontend Agent Factory
+
+Ubicación:
+
+```text
+frontend/agent-factory-app
+```
+
+Responsabilidades:
+
+- shell visual de la aplicación;
+- soporte de tema e idioma;
+- autenticación OIDC + PKCE;
+- pantalla documental;
+- pantalla de bases de conocimiento;
+- pantalla de agentes;
+- publicación manual de agentes.
+
+Todos los textos visibles deben declararse en:
+
+```text
+frontend/agent-factory-app/locales/es.json
+frontend/agent-factory-app/locales/en.json
+```
+
+No se deben añadir literales visibles hardcodeados en componentes.
+
+### Variables relevantes
+
+```env
+AGENT_FACTORY_GOOGLE_ROOT_FOLDER_ID=
+AGENT_FACTORY_GOOGLE_AUTH_MODE=workspace-oauth
+AGENT_FACTORY_GOOGLE_OAUTH_CLIENT_ID=
+AGENT_FACTORY_GOOGLE_OAUTH_CLIENT_SECRET=
+AGENT_FACTORY_GOOGLE_OAUTH_REDIRECT_URI=
+AGENT_FACTORY_GOOGLE_FRONTEND_RETURN_URI=
+AGENT_FACTORY_GOOGLE_TOKEN_ENCRYPTION_KEY=
+AGENT_FACTORY_AMETIS_AI_RAG_BASE_URL=
+```
+
+Para local, el callback OAuth puede apuntar a `localhost`. Para VPS/producción debe configurarse con el dominio público definitivo y registrarse también en Google Cloud.
+
 ## Quick Start
 
-Requirements:
+Requisitos:
 
-- Docker Desktop (Compose v2).
+- Docker Desktop con Compose v2.
 
-Start infrastructure:
+Levantar infraestructura base:
 
 ```powershell
 ./scripts/bootstrap.ps1
 ```
 
-Start frontend:
+Levantar Agent Factory con stack de plataforma:
 
 ```powershell
-cd ./frontend/web-app
-npm install
-npm run dev
+docker compose --env-file .env -f ./infra/docker-compose.yml -f ./infra/platform-stack.compose.yml up -d --build agent-factory-app agent-factory-web kong
 ```
 
-Prepare Agent Factory:
-
-```powershell
-./db/apply-db-config.ps1
-$env:AGENT_FACTORY_GOOGLE_ROOT_FOLDER_ID="<drive-root-folder-id>"
-$env:AGENT_FACTORY_GOOGLE_AUTH_MODE="workspace-oauth"
-$env:AGENT_FACTORY_GOOGLE_OAUTH_CLIENT_ID="<oauth-client-id>"
-$env:AGENT_FACTORY_GOOGLE_OAUTH_CLIENT_SECRET="<oauth-client-secret>"
-$env:AGENT_FACTORY_GOOGLE_OAUTH_REDIRECT_URI="https://agents.example.com/api/agent-factory/drive/oauth/callback"
-$env:AGENT_FACTORY_GOOGLE_FRONTEND_RETURN_URI="https://agents.example.com"
-docker compose -f ./infra/docker-compose.yml -f ./infra/platform-stack.compose.yml up -d --build agent-factory-app agent-factory-web kong
-```
-
-Register `AGENT_FACTORY_GOOGLE_OAUTH_REDIRECT_URI` as an authorized redirect URI in the Google OAuth web client. Workspace users then connect their own account from Agent Factory; refresh tokens are encrypted server-side and never pass through the frontend. AMETIS AI can continue reading with its current service account. The legacy `service-account` mode remains available for roots located in a Google Shared Drive.
-
-Useful endpoints after startup:
+Endpoints útiles:
 
 - Kong proxy: `http://localhost:8000`
 - Kong admin: `http://localhost:8001`
 - Keycloak: `http://localhost:8081`
 - PostgreSQL: `localhost:5432`
 - Kafka: `localhost:9092`
-- Agent Factory API: `http://localhost:8000/api/agent-factory`
+- Agent Factory API: `http://localhost:8010/api/agent-factory`
 - Agent Factory Web: `http://localhost:3200`
 
-## Notes
+## Históricos
 
-- This blueprint now includes an executable Spring Boot `core-api` MVP service.
-- Before using the API, run database setup once:
-  - `powershell -ExecutionPolicy Bypass -File .\db\apply-db-config.ps1`
+Los cambios relevantes deben quedar registrados en:
+
+- `docs/historico.md` en este repositorio;
+- `docs/historico.md` en `ametis-ai` cuando el cambio afecte a IA/RAG/sincronización.
+
+## Validaciones habituales
+
+Frontend Agent Factory:
+
+```powershell
+cd frontend/agent-factory-app
+npm.cmd run typecheck
+npm.cmd run lint
+```
+
+Backend Agent Factory:
+
+```powershell
+docker run --rm -v "${PWD}:/app" -w /app/apps/agent-factory-app maven:3.9.9-eclipse-temurin-21 mvn -q test
+```
+
+Build local:
+
+```powershell
+docker compose --env-file .env -f ./infra/docker-compose.yml -f ./infra/platform-stack.compose.yml build agent-factory-app agent-factory-web
+```

@@ -6,4 +6,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface RepositoryBindingRepository extends JpaRepository<RepositoryBinding, UUID> {
   Optional<RepositoryBinding> findByTenantId(UUID tenantId);
+  boolean existsByRepositoryNamespaceAndTenantIdNot(String repositoryNamespace, UUID tenantId);
 }
