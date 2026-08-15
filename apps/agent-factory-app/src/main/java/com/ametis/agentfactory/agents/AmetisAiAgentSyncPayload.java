@@ -1,0 +1,16 @@
+package com.ametis.agentfactory.agents;
+
+import java.util.List;
+import java.util.UUID;
+
+public record AmetisAiAgentSyncPayload(
+    String tenantId,
+    UUID sourceTenantId,
+    UUID agentId,
+    String name,
+    String description,
+    String instructions,
+    AgentStatus status,
+    String publishedAt,
+    String updatedAt,
+    List<AmetisAiKnowledgeBaseSyncPayload> knowledgeBases) {}

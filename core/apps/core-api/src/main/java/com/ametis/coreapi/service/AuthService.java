@@ -115,11 +115,20 @@ public class AuthService {
     }
   }
 
-  public AuthLoginResponse refresh(String refreshToken) {
+  public AuthLoginResponse refresh(String refreshToken, String requestedClientId) {
+    String refreshClientId = clientId;
+    boolean useClientSecret = clientSecret != null && !clientSecret.isBlank();
+    if (requestedClientId != null && !requestedClientId.isBlank()) {
+      if (!publicClientIds.contains(requestedClientId)) {
+        throw new AuthenticationException("OIDC client is not allowed for refresh token.");
+      }
+      refreshClientId = requestedClientId;
+      useClientSecret = false;
+    }
     MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
     form.add("grant_type", "refresh_token");
-    form.add("client_id", clientId);
-    if (clientSecret != null && !clientSecret.isBlank()) {
+    form.add("client_id", refreshClientId);
+    if (useClientSecret) {
       form.add("client_secret", clientSecret);
     }
     form.add("refresh_token", refreshToken);

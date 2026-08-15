@@ -12,6 +12,9 @@ BEGIN
   IF NOT EXISTS (SELECT FROM pg_database WHERE datname = 'agent_factory_db') THEN
     EXECUTE 'CREATE DATABASE agent_factory_db';
   END IF;
+  IF NOT EXISTS (SELECT FROM pg_database WHERE datname = 'ametis_ai_db') THEN
+    EXECUTE 'CREATE DATABASE ametis_ai_db';
+  END IF;
 END
 $$;
 
@@ -26,12 +29,16 @@ BEGIN
   IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'agent_factory_user') THEN
     CREATE ROLE agent_factory_user LOGIN PASSWORD 'agent_factory_pass';
   END IF;
+  IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'ametis_ai_user') THEN
+    CREATE ROLE ametis_ai_user LOGIN PASSWORD 'ametis_ai_pass';
+  END IF;
 END
 $$;
 
 GRANT ALL PRIVILEGES ON DATABASE core_db TO core_user;
 GRANT ALL PRIVILEGES ON DATABASE newsletter_db TO newsletter_user;
 GRANT ALL PRIVILEGES ON DATABASE agent_factory_db TO agent_factory_user;
+GRANT ALL PRIVILEGES ON DATABASE ametis_ai_db TO ametis_ai_user;
 
 \connect core_db
 
@@ -71,3 +78,16 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO agent_factory_user;
 
 ALTER DEFAULT PRIVILEGES IN SCHEMA agent_factory
 GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO agent_factory_user;
+
+\connect ametis_ai_db
+
+CREATE SCHEMA IF NOT EXISTS ametis_ai AUTHORIZATION ametis_ai_user;
+
+GRANT USAGE, CREATE ON SCHEMA ametis_ai TO ametis_ai_user;
+ALTER ROLE ametis_ai_user IN DATABASE ametis_ai_db SET search_path TO ametis_ai,public;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA ametis_ai
+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ametis_ai_user;
+
+ALTER DEFAULT PRIVILEGES IN SCHEMA ametis_ai
+GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO ametis_ai_user;

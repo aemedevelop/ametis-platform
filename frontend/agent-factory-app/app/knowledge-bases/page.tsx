@@ -26,6 +26,7 @@ export default function KnowledgeBasesPage() {
   const [description, setDescription] = useState("");
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [baseToDelete, setBaseToDelete] = useState<KnowledgeBase | null>(null);
   const [error, setError] = useState<unknown>(null);
 
   const storedDocuments = useMemo(
@@ -89,12 +90,14 @@ export default function KnowledgeBasesPage() {
     }
   }
 
-  async function remove(base: KnowledgeBase) {
-    setDeletingId(base.id);
+  async function remove() {
+    if (!baseToDelete) return;
+    setDeletingId(baseToDelete.id);
     setError(null);
     try {
-      await deleteKnowledgeBase(base.id);
-      setKnowledgeBases((current) => current.filter((item) => item.id !== base.id));
+      await deleteKnowledgeBase(baseToDelete.id);
+      setKnowledgeBases((current) => current.filter((item) => item.id !== baseToDelete.id));
+      setBaseToDelete(null);
     } catch (requestError) {
       setError(requestError);
     } finally {
@@ -137,7 +140,10 @@ export default function KnowledgeBasesPage() {
             <input value={name} onChange={(event) => setName(event.target.value)} placeholder={t("knowledge.namePlaceholder")} />
           </label>
           <label className="form-field">
-            <span>{t("knowledge.descriptionLabel")}</span>
+            <span className="field-label">
+              {t("knowledge.descriptionLabel")}
+              <span className="field-help" tabIndex={0} aria-label={t("knowledge.descriptionPlaceholder")} title={t("knowledge.descriptionPlaceholder")}>?</span>
+            </span>
             <textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder={t("knowledge.descriptionPlaceholder")} />
           </label>
           <div className="document-picker">
@@ -183,7 +189,7 @@ export default function KnowledgeBasesPage() {
                   <div className="knowledge-meta">
                     <strong>{t("knowledge.documentCount", { count: base.documentCount })}</strong>
                     <span>{base.documentNames.slice(0, 3).join(", ") || t("knowledge.noLinkedDocuments")}</span>
-                    <button className="icon-button danger" type="button" onClick={() => remove(base)} disabled={deletingId === base.id} aria-label={t("knowledge.delete", { name: base.name })} title={t("knowledge.delete", { name: base.name })}>
+                    <button className="icon-button danger" type="button" onClick={() => setBaseToDelete(base)} disabled={deletingId === base.id} aria-label={t("knowledge.delete", { name: base.name })} title={t("knowledge.delete", { name: base.name })}>
                       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" /></svg>
                     </button>
                   </div>
@@ -195,6 +201,19 @@ export default function KnowledgeBasesPage() {
           )}
         </section>
       </section>
+      {baseToDelete ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !deletingId) setBaseToDelete(null); }}>
+          <section className="confirmation-dialog" role="alertdialog" aria-modal="true" aria-labelledby="delete-knowledge-title" aria-describedby="delete-knowledge-description">
+            <span className="confirmation-icon" aria-hidden="true">!</span>
+            <h2 id="delete-knowledge-title">{t("knowledge.deleteDialog.title")}</h2>
+            <p id="delete-knowledge-description">{t("knowledge.deleteDialog.description", { name: baseToDelete.name })}</p>
+            <div className="confirmation-actions">
+              <button className="secondary-button" type="button" onClick={() => setBaseToDelete(null)} disabled={deletingId === baseToDelete.id}>{t("common.cancel")}</button>
+              <button className="danger-button" type="button" onClick={remove} disabled={deletingId === baseToDelete.id}>{deletingId === baseToDelete.id ? t("knowledge.deleting") : t("knowledge.deleteAction")}</button>
+            </div>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }

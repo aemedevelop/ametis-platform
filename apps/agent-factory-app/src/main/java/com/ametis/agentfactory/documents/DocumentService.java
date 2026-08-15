@@ -1,6 +1,7 @@
 package com.ametis.agentfactory.documents;
 
 import com.ametis.agentfactory.drive.GoogleDriveRepository;
+import com.ametis.agentfactory.knowledge.KnowledgeBaseDocumentRepository;
 import com.google.api.client.googleapis.json.GoogleJsonResponseException;
 import com.google.api.services.drive.model.File;
 import java.io.IOException;
@@ -34,16 +35,19 @@ public class DocumentService {
 
   private final RepositoryProvisioningService provisioningService;
   private final DocumentAssetRepository assetRepository;
+  private final KnowledgeBaseDocumentRepository knowledgeBaseDocumentRepository;
   private final GoogleDriveRepository googleDriveRepository;
   private final long maxFileSizeBytes;
 
   public DocumentService(
       RepositoryProvisioningService provisioningService,
       DocumentAssetRepository assetRepository,
+      KnowledgeBaseDocumentRepository knowledgeBaseDocumentRepository,
       GoogleDriveRepository googleDriveRepository,
       @Value("${agent-factory.documents.max-file-size-bytes}") long maxFileSizeBytes) {
     this.provisioningService = provisioningService;
     this.assetRepository = assetRepository;
+    this.knowledgeBaseDocumentRepository = knowledgeBaseDocumentRepository;
     this.googleDriveRepository = googleDriveRepository;
     this.maxFileSizeBytes = maxFileSizeBytes;
   }
@@ -148,6 +152,7 @@ public class DocumentService {
       googleDriveRepository.trash(tenantId, driveFileId);
       assetRepository.findByTenantIdAndDriveFileId(tenantId, driveFileId).ifPresent(asset -> {
         asset.deleted();
+        knowledgeBaseDocumentRepository.deleteAllByTenantIdAndDocumentAssetId(tenantId, asset.getId());
         assetRepository.save(asset);
       });
     } catch (ResponseStatusException exception) {

@@ -1,6 +1,26 @@
+export type SessionTokens = {
+  accessToken: string;
+  refreshToken?: string | null;
+};
+
 export function getAuthToken(): string | null {
   if (typeof window === "undefined") return null;
   return window.localStorage.getItem("core_access_token") || window.sessionStorage.getItem("core_access_token");
+}
+
+export function getRefreshToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return window.localStorage.getItem("core_refresh_token") || window.sessionStorage.getItem("core_refresh_token");
+}
+
+export function storeSessionTokens(tokens: SessionTokens): void {
+  if (typeof window === "undefined") return;
+  const storage = getTokenStorage();
+  const cleanupStorage = storage === window.localStorage ? window.sessionStorage : window.localStorage;
+  cleanupStorage.removeItem("core_access_token");
+  cleanupStorage.removeItem("core_refresh_token");
+  storage.setItem("core_access_token", tokens.accessToken);
+  if (tokens.refreshToken) storage.setItem("core_refresh_token", tokens.refreshToken);
 }
 
 export function isAuthTokenExpired(token: string, clockSkewSeconds = 15): boolean {
@@ -32,4 +52,14 @@ export function clearSession(): void {
     storage.removeItem("core_refresh_token");
     storage.removeItem("active_tenant_id");
   }
+}
+
+function getTokenStorage(): Storage {
+  if (window.localStorage.getItem("core_access_token") || window.localStorage.getItem("core_refresh_token")) {
+    return window.localStorage;
+  }
+  if (window.sessionStorage.getItem("core_access_token") || window.sessionStorage.getItem("core_refresh_token")) {
+    return window.sessionStorage;
+  }
+  return window.localStorage;
 }

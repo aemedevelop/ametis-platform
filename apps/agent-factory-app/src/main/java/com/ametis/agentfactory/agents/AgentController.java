@@ -67,4 +67,29 @@ public class AgentController {
     UUID tenantId = accessGuard.requireAccess(authentication, AccessGuard.DOCUMENTS_MANAGE);
     return agentService.publish(tenantId, agentId);
   }
+
+  @PostMapping("/agents/{agentId}/indexing-jobs")
+  public AmetisAiCreateIndexingJobsResponse requestIndexing(
+      @PathVariable UUID agentId,
+      JwtAuthenticationToken authentication) {
+    UUID tenantId = accessGuard.requireAccess(authentication, AccessGuard.DOCUMENTS_MANAGE);
+    return agentService.requestIndexing(tenantId, agentId, accessGuard.currentUserId(authentication));
+  }
+
+  @GetMapping("/agents/{agentId}/indexing-jobs/latest")
+  public List<AgentIndexingJobResponse> latestIndexingJobs(
+      @PathVariable UUID agentId,
+      JwtAuthenticationToken authentication) {
+    UUID tenantId = accessGuard.requireAccess(authentication, AccessGuard.DOCUMENTS_READ);
+    return agentService.latestIndexingJobs(tenantId, agentId);
+  }
+
+  @PostMapping("/agents/{agentId}/test")
+  public AgentTestResponse testAgent(
+      @PathVariable UUID agentId,
+      @Valid @RequestBody AgentTestRequest request,
+      JwtAuthenticationToken authentication) {
+    UUID tenantId = accessGuard.requireAccess(authentication, AccessGuard.DOCUMENTS_READ);
+    return agentService.testAgent(tenantId, agentId, request);
+  }
 }

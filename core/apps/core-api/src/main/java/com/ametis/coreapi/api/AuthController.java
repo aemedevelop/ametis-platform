@@ -65,7 +65,7 @@ public class AuthController {
   @PostMapping("/refresh")
   @Operation(summary = "Refresh token", description = "Refreshes an access token using a refresh token.")
   public AuthLoginResponse refresh(@Valid @RequestBody AuthRefreshRequest request) {
-    return authService.refresh(request.refreshToken());
+    return authService.refresh(request.refreshToken(), request.clientId());
   }
 
   @PostMapping("/code/exchange")

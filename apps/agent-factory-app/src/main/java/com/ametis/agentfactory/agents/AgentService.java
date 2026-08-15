@@ -4,6 +4,8 @@ import com.ametis.agentfactory.documents.RepositoryBinding;
 import com.ametis.agentfactory.documents.RepositoryProvisioningService;
 import com.ametis.agentfactory.documents.RepositoryStatus;
 import com.ametis.agentfactory.knowledge.KnowledgeBase;
+import com.ametis.agentfactory.knowledge.KnowledgeBaseDocument;
+import com.ametis.agentfactory.knowledge.KnowledgeBaseDocumentRepository;
 import com.ametis.agentfactory.knowledge.KnowledgeBaseRepository;
 import jakarta.transaction.Transactional;
 import java.util.List;
@@ -20,6 +22,7 @@ public class AgentService {
   private final AgentRepository agentRepository;
   private final AgentKnowledgeBaseRepository agentKnowledgeBaseRepository;
   private final KnowledgeBaseRepository knowledgeBaseRepository;
+  private final KnowledgeBaseDocumentRepository knowledgeBaseDocumentRepository;
   private final AmetisAiRagClient ragClient;
 
   public AgentService(
@@ -27,11 +30,13 @@ public class AgentService {
       AgentRepository agentRepository,
       AgentKnowledgeBaseRepository agentKnowledgeBaseRepository,
       KnowledgeBaseRepository knowledgeBaseRepository,
+      KnowledgeBaseDocumentRepository knowledgeBaseDocumentRepository,
       AmetisAiRagClient ragClient) {
     this.provisioningService = provisioningService;
     this.agentRepository = agentRepository;
     this.agentKnowledgeBaseRepository = agentKnowledgeBaseRepository;
     this.knowledgeBaseRepository = knowledgeBaseRepository;
+    this.knowledgeBaseDocumentRepository = knowledgeBaseDocumentRepository;
     this.ragClient = ragClient;
   }
 
@@ -52,8 +57,15 @@ public class AgentService {
         .collect(Collectors.groupingBy(
             AgentKnowledgeBase::getAgentId,
             Collectors.mapping(link -> baseNames.get(link.getKnowledgeBaseId()), Collectors.filtering(name -> name != null, Collectors.toList()))));
+    Map<UUID, List<UUID>> baseIdsByAgent = links.stream()
+        .collect(Collectors.groupingBy(
+            AgentKnowledgeBase::getAgentId,
+            Collectors.mapping(AgentKnowledgeBase::getKnowledgeBaseId, Collectors.toList())));
     return agents.stream()
-        .map(agent -> AgentResponse.from(agent, namesByAgent.getOrDefault(agent.getId(), List.of())))
+        .map(agent -> AgentResponse.from(
+            agent,
+            baseIdsByAgent.getOrDefault(agent.getId(), List.of()),
+            namesByAgent.getOrDefault(agent.getId(), List.of())))
         .toList();
   }
 
@@ -70,7 +82,7 @@ public class AgentService {
     agentKnowledgeBaseRepository.saveAll(bases.stream()
         .map(base -> AgentKnowledgeBase.link(tenantId, agent.getId(), base.getId()))
         .toList());
-    return AgentResponse.from(agent, bases.stream().map(KnowledgeBase::getName).toList());
+    return AgentResponse.from(agent, bases.stream().map(KnowledgeBase::getId).toList(), bases.stream().map(KnowledgeBase::getName).toList());
   }
 
   @Transactional
@@ -84,11 +96,15 @@ public class AgentService {
     }
     agent.update(name, cleanText(request.description()), cleanText(request.instructions()));
     agentKnowledgeBaseRepository.deleteAllByTenantIdAndAgentId(tenantId, agentId);
+    agentKnowledgeBaseRepository.flush();
     List<KnowledgeBase> bases = resolveKnowledgeBases(tenantId, request.knowledgeBaseIds());
     agentKnowledgeBaseRepository.saveAll(bases.stream()
         .map(base -> AgentKnowledgeBase.link(tenantId, agent.getId(), base.getId()))
         .toList());
-    return AgentResponse.from(agentRepository.save(agent), bases.stream().map(KnowledgeBase::getName).toList());
+    return AgentResponse.from(
+        agentRepository.save(agent),
+        bases.stream().map(KnowledgeBase::getId).toList(),
+        bases.stream().map(KnowledgeBase::getName).toList());
   }
 
   @Transactional
@@ -110,12 +126,73 @@ public class AgentService {
       throw new ResponseStatusException(HttpStatus.CONFLICT, "error.agentPublishRequiresKnowledgeBase");
     }
     List<UUID> baseIds = links.stream().map(AgentKnowledgeBase::getKnowledgeBaseId).distinct().toList();
-    List<String> baseNames = knowledgeBaseRepository.findAllByTenantIdAndIdIn(tenantId, baseIds).stream()
-        .map(KnowledgeBase::getName)
-        .toList();
+    List<KnowledgeBase> bases = knowledgeBaseRepository.findAllByTenantIdAndIdIn(tenantId, baseIds);
+    Map<UUID, Long> documentCountByBase = knowledgeBaseDocumentRepository
+        .findAllByTenantIdAndKnowledgeBaseIdIn(tenantId, baseIds)
+        .stream()
+        .collect(Collectors.groupingBy(KnowledgeBaseDocument::getKnowledgeBaseId, Collectors.counting()));
     agent.publish();
-    baseIds.forEach(baseId -> ragClient.ingest(binding.getRepositoryNamespace(), agent.getId(), baseId));
-    return AgentResponse.from(agentRepository.save(agent), baseNames);
+    ragClient.syncAgent(new AmetisAiAgentSyncPayload(
+        binding.getRepositoryNamespace(),
+        tenantId,
+        agent.getId(),
+        agent.getName(),
+        agent.getDescription(),
+        agent.getInstructions(),
+        agent.getStatus(),
+        agent.getPublishedAt() == null ? null : agent.getPublishedAt().toString(),
+        agent.getUpdatedAt() == null ? null : agent.getUpdatedAt().toString(),
+        bases.stream()
+            .map(base -> new AmetisAiKnowledgeBaseSyncPayload(
+                base.getId(),
+                base.getName(),
+                documentCountByBase.getOrDefault(base.getId(), 0L).intValue()))
+            .toList()));
+    return AgentResponse.from(
+        agentRepository.save(agent),
+        bases.stream().map(KnowledgeBase::getId).toList(),
+        bases.stream().map(KnowledgeBase::getName).toList());
+  }
+
+  public AmetisAiCreateIndexingJobsResponse requestIndexing(UUID tenantId, UUID agentId, UUID requestedBy) {
+    RepositoryBinding binding = requireActiveRepository(tenantId);
+    AgentDefinition agent = agentRepository.findByIdAndTenantId(agentId, tenantId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "error.agentNotFound"));
+    if (agent.getStatus() != AgentStatus.READY) {
+      throw new ResponseStatusException(HttpStatus.CONFLICT, "error.agentIndexingRequiresPublishedAgent");
+    }
+    return ragClient.createIndexingJobs(binding.getRepositoryNamespace(), agentId, requestedBy);
+  }
+
+  public List<AgentIndexingJobResponse> latestIndexingJobs(UUID tenantId, UUID agentId) {
+    RepositoryBinding binding = requireActiveRepository(tenantId);
+    agentRepository.findByIdAndTenantId(agentId, tenantId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "error.agentNotFound"));
+    return ragClient.latestIndexingJobs(binding.getRepositoryNamespace(), agentId);
+  }
+
+  public AgentTestResponse testAgent(UUID tenantId, UUID agentId, AgentTestRequest request) {
+    RepositoryBinding binding = requireActiveRepository(tenantId);
+    AgentDefinition agent = agentRepository.findByIdAndTenantId(agentId, tenantId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "error.agentNotFound"));
+    if (agent.getStatus() != AgentStatus.READY) {
+      throw new ResponseStatusException(HttpStatus.CONFLICT, "error.agentTestRequiresPublishedAgent");
+    }
+    List<AgentKnowledgeBase> links = agentKnowledgeBaseRepository.findAllByTenantIdAndAgentIdIn(tenantId, List.of(agentId));
+    if (links.isEmpty()) {
+      throw new ResponseStatusException(HttpStatus.CONFLICT, "error.agentTestRequiresKnowledgeBase");
+    }
+    AmetisAiQueryResponse response = ragClient.query(
+        binding.getRepositoryNamespace(),
+        agentId,
+        links.get(0).getKnowledgeBaseId(),
+        request.question().trim());
+    return new AgentTestResponse(
+        response.tenantId(),
+        response.question(),
+        response.answer(),
+        response.responseType(),
+        response.suggestions());
   }
 
   private RepositoryBinding requireActiveRepository(UUID tenantId) {

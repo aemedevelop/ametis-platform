@@ -8,5 +8,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface KnowledgeBaseDocumentRepository extends JpaRepository<KnowledgeBaseDocument, UUID> {
   List<KnowledgeBaseDocument> findAllByTenantIdAndKnowledgeBaseIdIn(UUID tenantId, Collection<UUID> knowledgeBaseIds);
   List<KnowledgeBaseDocument> findAllByTenantIdAndKnowledgeBaseId(UUID tenantId, UUID knowledgeBaseId);
+  List<KnowledgeBaseDocument> findAllByTenantIdAndDocumentAssetId(UUID tenantId, UUID documentAssetId);
   void deleteAllByTenantIdAndKnowledgeBaseId(UUID tenantId, UUID knowledgeBaseId);
+  void deleteAllByTenantIdAndDocumentAssetId(UUID tenantId, UUID documentAssetId);
 }

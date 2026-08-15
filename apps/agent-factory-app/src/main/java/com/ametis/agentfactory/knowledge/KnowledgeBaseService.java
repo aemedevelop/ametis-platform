@@ -43,8 +43,16 @@ public class KnowledgeBaseService {
     List<KnowledgeBaseDocument> links = knowledgeBaseDocumentRepository.findAllByTenantIdAndKnowledgeBaseIdIn(tenantId, baseIds);
     List<UUID> documentIds = links.stream().map(KnowledgeBaseDocument::getDocumentAssetId).distinct().toList();
     Map<UUID, String> documentNames = documentAssetRepository.findAllByTenantIdAndIdIn(tenantId, documentIds).stream()
+        .filter(document -> document.getStatus() == DocumentStatus.STORED)
         .collect(Collectors.toMap(DocumentAsset::getId, DocumentAsset::getOriginalName));
+    List<KnowledgeBaseDocument> obsoleteLinks = links.stream()
+        .filter(link -> !documentNames.containsKey(link.getDocumentAssetId()))
+        .toList();
+    if (!obsoleteLinks.isEmpty()) {
+      knowledgeBaseDocumentRepository.deleteAll(obsoleteLinks);
+    }
     Map<UUID, List<String>> namesByBase = links.stream()
+        .filter(link -> documentNames.containsKey(link.getDocumentAssetId()))
         .collect(Collectors.groupingBy(
             KnowledgeBaseDocument::getKnowledgeBaseId,
             Collectors.mapping(link -> documentNames.get(link.getDocumentAssetId()), Collectors.filtering(name -> name != null, Collectors.toList()))));

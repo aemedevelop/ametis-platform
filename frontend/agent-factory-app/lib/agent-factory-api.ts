@@ -1,4 +1,13 @@
-import { clearSession, getActiveTenantId, getAuthToken, setActiveTenantId } from "@/lib/session";
+import { refreshSession } from "@/lib/auth-client";
+import {
+  clearSession,
+  getActiveTenantId,
+  getAuthToken,
+  getRefreshToken,
+  isAuthTokenExpired,
+  setActiveTenantId,
+  storeSessionTokens
+} from "@/lib/session";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_AGENT_FACTORY_API_BASE_URL ?? "http://localhost:8000";
 const CORE_API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
@@ -50,10 +59,41 @@ export type AgentDefinition = {
   instructions: string | null;
   status: "DRAFT" | "READY";
   knowledgeBaseCount: number;
+  knowledgeBaseIds: string[];
   knowledgeBaseNames: string[];
   createdAt: string;
   updatedAt: string;
   publishedAt: string | null;
+};
+
+export type AgentIndexingJob = {
+  id: string;
+  tenant_id: string;
+  agent_id: string;
+  knowledge_base_id: string;
+  status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
+  requested_by: string | null;
+  requested_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  documents: number;
+  chunks: number;
+  error_message: string | null;
+};
+
+export type CreateIndexingJobsResponse = {
+  status: string;
+  tenant_id: string;
+  agent_id: string;
+  jobs: AgentIndexingJob[];
+};
+
+export type AgentTestResponse = {
+  tenantId: string;
+  question: string;
+  answer: string;
+  responseType: string;
+  suggestions: string[];
 };
 
 export class AgentFactoryApiError extends Error {
@@ -67,6 +107,8 @@ export class AgentFactoryApiError extends Error {
   }
 }
 
+let activeRefreshRequest: Promise<string> | null = null;
+
 async function resolveTenant(token: string): Promise<string> {
   const existing = getActiveTenantId();
   if (existing) return existing;
@@ -74,7 +116,7 @@ async function resolveTenant(token: string): Promise<string> {
     headers: { Authorization: `Bearer ${token}` },
     cache: "no-store"
   });
-  if (response.status === 401) expireSession();
+  if (response.status === 401) throw new AgentFactoryApiError(401, "error.sessionExpired");
   if (!response.ok) throw new AgentFactoryApiError(response.status, "error.workspaceResolve");
   const tenants = (await response.json()) as Array<{ id: string }>;
   if (!tenants[0]) throw new AgentFactoryApiError(404, "error.workspaceMissing");
@@ -88,20 +130,17 @@ async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> 
 }
 
 async function authenticatedFetch(path: string, options: RequestInit = {}): Promise<Response> {
-  const token = getAuthToken();
-  if (!token) throw new AgentFactoryApiError(401, "error.sessionExpired");
-  const tenantId = await resolveTenant(token);
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "X-Tenant-Id": tenantId,
-      ...(options.headers ?? {})
-    },
-    cache: "no-store"
-  });
+  let response: Response;
+  try {
+    response = await fetchWithToken(path, options, await getValidAuthToken());
+  } catch (error) {
+    if (!(error instanceof AgentFactoryApiError) || error.status !== 401) throw error;
+    response = await fetchWithToken(path, options, await refreshAccessToken());
+  }
+  if (response.status === 401) {
+    response = await fetchWithToken(path, options, await refreshAccessToken());
+  }
   if (!response.ok) {
-    if (response.status === 401) expireSession();
     const payload = await response.clone().json().catch(() => null) as { message?: unknown } | null;
     const responseCode = typeof payload?.message === "string" && payload.message.startsWith("error.")
       ? payload.message
@@ -111,10 +150,51 @@ async function authenticatedFetch(path: string, options: RequestInit = {}): Prom
   return response;
 }
 
+async function fetchWithToken(path: string, options: RequestInit, token: string): Promise<Response> {
+  const tenantId = await resolveTenant(token);
+  return fetch(`${API_BASE_URL}${path}`, {
+    ...options,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "X-Tenant-Id": tenantId,
+      ...(options.headers ?? {})
+    },
+    cache: "no-store"
+  });
+}
+
 function expireSession(): never {
   clearSession();
   window.location.replace(`/auth/login?redirect=${encodeURIComponent(window.location.pathname)}`);
   throw new AgentFactoryApiError(401, "error.sessionExpired");
+}
+
+async function getValidAuthToken(): Promise<string> {
+  const token = getAuthToken();
+  if (!token) throw new AgentFactoryApiError(401, "error.sessionExpired");
+  if (!isAuthTokenExpired(token, 45)) return token;
+  return refreshAccessToken();
+}
+
+async function refreshAccessToken(): Promise<string> {
+  if (!activeRefreshRequest) {
+    activeRefreshRequest = doRefreshAccessToken().finally(() => {
+      activeRefreshRequest = null;
+    });
+  }
+  return activeRefreshRequest;
+}
+
+async function doRefreshAccessToken(): Promise<string> {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) expireSession();
+  try {
+    const tokens = await refreshSession(refreshToken);
+    storeSessionTokens(tokens);
+    return tokens.accessToken;
+  } catch {
+    expireSession();
+  }
 }
 
 export function fetchRepository() {
@@ -177,12 +257,36 @@ export function createAgent(input: { name: string; description: string; instruct
   });
 }
 
+export function updateAgent(id: string, input: { name: string; description: string; instructions: string; knowledgeBaseIds: string[] }) {
+  return apiFetch<AgentDefinition>(`/api/agent-factory/agents/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+}
+
 export async function deleteAgent(id: string): Promise<void> {
   await authenticatedFetch(`/api/agent-factory/agents/${id}`, { method: "DELETE" });
 }
 
 export function publishAgent(id: string) {
   return apiFetch<AgentDefinition>(`/api/agent-factory/agents/${id}/publish`, { method: "POST" });
+}
+
+export function createAgentIndexingJobs(id: string) {
+  return apiFetch<CreateIndexingJobsResponse>(`/api/agent-factory/agents/${id}/indexing-jobs`, { method: "POST" });
+}
+
+export function fetchAgentIndexingJobs(id: string) {
+  return apiFetch<AgentIndexingJob[]>(`/api/agent-factory/agents/${id}/indexing-jobs/latest`);
+}
+
+export function testAgent(id: string, question: string) {
+  return apiFetch<AgentTestResponse>(`/api/agent-factory/agents/${id}/test`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question })
+  });
 }
 
 export function uploadDocument(file: File) {
@@ -201,12 +305,7 @@ export async function deleteDocument(document: StoredDocument): Promise<void> {
 }
 
 export async function downloadDocument(document: StoredDocument): Promise<void> {
-  const token = getAuthToken();
-  if (!token) throw new AgentFactoryApiError(401, "error.sessionExpired");
-  const tenantId = await resolveTenant(token);
-  const response = await fetch(`${API_BASE_URL}/api/agent-factory/documents/${document.driveFileId}/download`, {
-    headers: { Authorization: `Bearer ${token}`, "X-Tenant-Id": tenantId }
-  });
+  const response = await authenticatedFetch(`/api/agent-factory/documents/${document.driveFileId}/download`);
   if (!response.ok) throw new AgentFactoryApiError(response.status, "error.downloadFailed");
   const blob = await response.blob();
   const url = URL.createObjectURL(blob);

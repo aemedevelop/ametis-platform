@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { exchangeAuthorizationCode } from "@/lib/auth-client";
 import { consumeState } from "@/lib/oidc-pkce";
+import { storeSessionTokens } from "@/lib/session";
 import { useT } from "@/components/IntlProviderClient";
 
 export default function CallbackPage() {
@@ -37,10 +38,7 @@ function CallbackContent() {
           redirectUri: `${appUrl}/auth/callback`,
           codeVerifier: stored.codeVerifier
         });
-        window.localStorage.setItem("core_access_token", tokens.accessToken);
-        if (tokens.refreshToken) window.localStorage.setItem("core_refresh_token", tokens.refreshToken);
-        window.sessionStorage.removeItem("core_access_token");
-        window.sessionStorage.removeItem("core_refresh_token");
+        storeSessionTokens(tokens);
         router.replace(stored.redirectTarget || "/");
       } catch {
         setMessageKey("auth.failed");

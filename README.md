@@ -166,7 +166,7 @@ AGENT_FACTORY_AMETIS_AI_RAG_BASE_URL=http://...
 Cuando está configurada, al publicar un agente se llama al RAG service por cada base asociada:
 
 ```text
-POST {AGENT_FACTORY_AMETIS_AI_RAG_BASE_URL}/tenants/{namespace}/agents/{agentId}/knowledge-bases/{knowledgeBaseId}/ingest
+POST {AGENT_FACTORY_AMETIS_AI_RAG_BASE_URL}/agents/sync
 ```
 
 Contrato actual:
