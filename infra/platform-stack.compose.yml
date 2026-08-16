@@ -6,12 +6,10 @@ services:
     image: ametis/agent-factory-app:0.1.0
     container_name: ametis-agent-factory-app
     depends_on:
-      postgres:
-        condition: service_healthy
       keycloak:
         condition: service_started
     environment:
-      SPRING_DATASOURCE_URL: ${AGENT_FACTORY_DB_URL:-jdbc:postgresql://postgres:5432/agent_factory_db}
+      SPRING_DATASOURCE_URL: ${AGENT_FACTORY_DB_URL:-jdbc:postgresql://13.140.179.140:5432/agent_factory_db}
       SPRING_DATASOURCE_USERNAME: ${AGENT_FACTORY_DB_USER:-agent_factory_user}
       SPRING_DATASOURCE_PASSWORD: ${AGENT_FACTORY_DB_PASSWORD:-agent_factory_pass}
       SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${AGENT_FACTORY_JWT_ISSUER:-http://localhost:8081/realms/ametis}
@@ -32,28 +30,6 @@ services:
     ports:
       - "8083:8083"
 
-  newsletter-app:
-    build:
-      context: ../apps/newsletter-app
-      dockerfile: Dockerfile
-    image: ametis/newsletter-app:0.1.0
-    container_name: ametis-newsletter-app
-    environment:
-      SPRING_DATASOURCE_URL: ${NEWSLETTER_DB_URL:-jdbc:postgresql://postgres:5432/newsletter_db}
-      SPRING_DATASOURCE_USERNAME: ${NEWSLETTER_DB_USER:-postgres}
-      SPRING_DATASOURCE_PASSWORD: ${NEWSLETTER_DB_PASSWORD:-postgres}
-      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${NEWSLETTER_JWT_ISSUER:-http://localhost:8081/realms/ametis}
-      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: ${NEWSLETTER_JWT_JWK_SET_URI:-http://keycloak:8080/realms/ametis/protocol/openid-connect/certs}
-      NEWSLETTER_CORE_BASE_URL: ${NEWSLETTER_CORE_BASE_URL:-http://kong:8000}
-      NEWSLETTER_CORE_AUTH_PATH: ${NEWSLETTER_CORE_AUTH_PATH:-/v1/authorization/check}
-      NEWSLETTER_CORE_PRODUCT_ACCESS_PATH_TEMPLATE: ${NEWSLETTER_CORE_PRODUCT_ACCESS_PATH_TEMPLATE:-/v1/tenants/{tenantId}/products/{productCode}/access/me}
-      NEWSLETTER_CORE_TENANTS_PATH: ${NEWSLETTER_CORE_TENANTS_PATH:-/v1/tenants}
-      NEWSLETTER_PRODUCT_CODE: ${NEWSLETTER_PRODUCT_CODE:-newsletter}
-      NEWSLETTER_N8N_BASE_URL: ${NEWSLETTER_N8N_BASE_URL:-http://n8n:5678}
-      NEWSLETTER_N8N_GENERATE_PATH: ${NEWSLETTER_N8N_GENERATE_PATH:-/webhook/newsletter-generate}
-    ports:
-      - "8082:8082"
-
   hub-web:
     build:
       context: ../frontend/web-app
@@ -73,36 +49,13 @@ services:
       NEXT_PUBLIC_CHAT_API_URL: ${CHAT_API_URL:-/api/rag-chat}
       NEXT_PUBLIC_CHAT_TENANT_ID: ${CHAT_TENANT_ID:-aeme}
       RAG_CHAT_API_URL: ${RAG_CHAT_API_URL:-http://host.docker.internal:8000/tenants/aeme/agents/support_agent/knowledge-bases/landing/query}
-      NEXT_PUBLIC_NEWSLETTER_WEB_URL: ${NEWSLETTER_WEB_URL:-http://localhost:3100}
       NEXT_PUBLIC_AGENT_FACTORY_WEB_URL: ${AGENT_FACTORY_WEB_URL:-http://localhost:3200}
-      NEXT_PUBLIC_ALLOWED_REDIRECT_ORIGINS: ${ALLOWED_REDIRECT_ORIGINS:-http://localhost:3000,http://localhost:3100,http://localhost:3200}
+      NEXT_PUBLIC_ALLOWED_REDIRECT_ORIGINS: ${ALLOWED_REDIRECT_ORIGINS:-http://localhost:3000,http://localhost:3200}
       NEXT_PUBLIC_APP_URL: ${HUB_WEB_URL:-http://localhost:3000}
       NEXT_PUBLIC_KEYCLOAK_AUTH_URL: ${KEYCLOAK_AUTH_URL:-http://localhost:8081/realms/ametis/protocol/openid-connect/auth}
       NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: ${HUB_KEYCLOAK_CLIENT_ID:-ametis-hub-web}
     ports:
       - "${HUB_WEB_PORT:-3000}:3000"
-
-  newsletter-web:
-    build:
-      context: ../frontend/newsletter-app
-      dockerfile: Dockerfile
-      args:
-        NEXT_PUBLIC_NEWSLETTER_API_BASE_URL: ${NEWSLETTER_API_BASE_URL:-http://localhost:8082}
-        NEXT_PUBLIC_NEWSLETTER_WEB_URL: ${NEWSLETTER_WEB_URL:-http://localhost:3100}
-        NEXT_PUBLIC_API_BASE_URL: ${HUB_API_BASE_URL:-http://localhost:8000}
-        NEXT_PUBLIC_KEYCLOAK_AUTH_URL: ${KEYCLOAK_AUTH_URL:-http://localhost:8081/realms/ametis/protocol/openid-connect/auth}
-        NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: ${NEWSLETTER_KEYCLOAK_CLIENT_ID:-newsletter-web}
-    image: ametis/newsletter-web:0.1.0
-    container_name: ametis-newsletter-web
-    environment:
-      NEXT_PUBLIC_NEWSLETTER_API_BASE_URL: ${NEWSLETTER_API_BASE_URL:-http://localhost:8082}
-      NEXT_PUBLIC_HUB_URL: ${HUB_WEB_URL:-http://localhost:3000}
-      NEXT_PUBLIC_NEWSLETTER_WEB_URL: ${NEWSLETTER_WEB_URL:-http://localhost:3100}
-      NEXT_PUBLIC_API_BASE_URL: ${HUB_API_BASE_URL:-http://localhost:8000}
-      NEXT_PUBLIC_KEYCLOAK_AUTH_URL: ${KEYCLOAK_AUTH_URL:-http://localhost:8081/realms/ametis/protocol/openid-connect/auth}
-      NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: ${NEWSLETTER_KEYCLOAK_CLIENT_ID:-newsletter-web}
-    ports:
-      - "3100:3100"
 
   agent-factory-web:
     build:

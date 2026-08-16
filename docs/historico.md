@@ -216,6 +216,33 @@ Verificación:
 - Agent Factory conecta a `agent_factory_db` remoto y Flyway valida versión `5`.
 - Core API abre conexión JDBC contra `core_db` remoto.
 
+## 2026-08-16 - Desactivación temporal de Newsletter en la versión activa
+
+### Decisión
+
+Se decidió retirar `newsletter-app` y `newsletter-web` del stack activo de `ametis-platform` para esta versión, sin borrar el código ni el historial del producto.
+
+La razón es funcional y de enfoque: esta rama/versión está centrada en `Agent Factory`, `Core API`, Keycloak y la plataforma de gestión documental y agentes, y no se va a desplegar la funcionalidad de newsletter en este ciclo.
+
+### Estado archivado
+
+Se conserva el producto en el repositorio y en la documentación, pero queda fuera del despliegue activo. Esto incluye:
+
+- `apps/newsletter-app`
+- `frontend/newsletter-app`
+- la composición de `newsletter` en infra
+- referencias de entorno y rutas de integración previas
+
+### Regla de recuperación
+
+Si en el futuro se desea retomar la funcionalidad, se puede volver a reactivar el stack de newsletter con la misma base de código, la misma configuración y la misma separación de responsabilidades que existía antes de esta desactivación.
+
+### Registro de mantenimiento
+
+- Se eliminó del stack activo la dependencia a `newsletter_db`.
+- Se eliminó la dependencia a `postgres` local para `agent-factory` y se dejó el uso del PostgreSQL externo del VPS.
+- Se dejó la decisión documentada para que el producto pueda recuperarse sin perder contexto ni trabajo previo.
+
 ## 2026-08-14 - Agent Factory / Sincronización con AMETIS AI
 
 ### Publicación de agentes
