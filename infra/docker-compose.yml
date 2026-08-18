@@ -101,9 +101,9 @@ services:
       KONG_ADMIN_ERROR_LOG: /dev/stderr
       KONG_ADMIN_LISTEN: 0.0.0.0:8001
     ports:
-      - "${KONG_PROXY_PORT:-8000}:8000"
+      - "${KONG_PROXY_PORT:-8090}:8000"
       - "${KONG_PROXY_TLS_PORT:-8443}:8443"
-      - "${KONG_ADMIN_PORT:-8001}:8001"
+      - "${KONG_ADMIN_PORT:-8091}:8001"
       - "${KONG_ADMIN_TLS_PORT:-8444}:8444"
     volumes:
       - ./kong/kong.yml:/usr/local/kong/declarative/kong.yml:ro
