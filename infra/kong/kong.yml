@@ -3,7 +3,7 @@ _transform: true
 
 services:
   - name: core-api
-    url: http://core-api:8080
+    url: http://ametis-core-api:8080
     routes:
       - name: core-api-v1
         paths:
@@ -21,7 +21,7 @@ services:
           - OPTIONS
 
   - name: agent-factory-app
-    url: http://agent-factory-app:8083
+    url: http://ametis-agent-factory-app:8083
     routes:
       - name: agent-factory-api
         paths:

@@ -284,6 +284,157 @@ Para VPS, sustituir `localhost` por la IP o dominio publico en `.env`.
 Dentro de Docker deben mantenerse URLs internas como `http://kong:8000`,
 `http://keycloak:8080` y `http://ametis_rag_service:8000`.
 
+## Despliegue VPS - Plataforma AMETIS completa
+
+Esta receta asume dos repositorios en el VPS:
+
+```text
+/opt/ametis-ai
+/opt/ametis-platform
+```
+
+### 1. Red compartida
+
+La red `ametis_internal` debe crearse una sola vez por entorno:
+
+```bash
+docker network inspect ametis_internal >/dev/null 2>&1 || docker network create ametis_internal
+```
+
+Los compose la declaran como `external: true` para que `ametis-ai` y `ametis-platform` puedan verse aunque se levanten desde proyectos distintos. No la borres mientras haya contenedores de AMETIS usandola.
+
+### 2. Variables de entorno
+
+En `ametis-platform`, crear el archivo real a partir de la plantilla:
+
+```bash
+cd /opt/ametis-platform
+cp .env.example .env
+```
+
+Editar `.env` y sustituir:
+
+- `<vps-host>` por la IP o dominio publico del VPS;
+- `<postgres-host>` por el host real de PostgreSQL;
+- passwords y secretos reales;
+- credenciales OAuth de Google si Agent Factory usa Drive.
+
+No subir `.env` a Git.
+
+Valores importantes:
+
+```env
+KONG_PROXY_PORT=8440
+KONG_ADMIN_PORT=8441
+HUB_WEB_PORT=3010
+AGENT_FACTORY_WEB_PORT=3200
+AGENT_FACTORY_CORE_BASE_URL=http://kong:8000
+AGENT_FACTORY_AMETIS_AI_RAG_BASE_URL=http://ametis_rag_service:8000
+```
+
+Regla practica:
+
+```text
+Navegador / exterior VPS -> http://<vps-host>:8440
+Contenedores Docker      -> http://kong:8000
+Agent Factory -> RAG     -> http://ametis_rag_service:8000
+```
+
+### 3. Levantar AMETIS AI / RAG
+
+Primero levantar el RAG service en `ametis-ai`:
+
+```bash
+cd /opt/ametis-ai/docker/compose/rag
+cp .env.vps.example .env.vps
+cp .env.secrets.example .env.secrets
+```
+
+Completar `.env.vps` y `.env.secrets`, y arrancar:
+
+```bash
+docker compose -f docker-compose.vps.yml up -d --build
+```
+
+Comprobar:
+
+```bash
+curl http://127.0.0.1:8000/health
+docker network inspect ametis_internal
+```
+
+En la red debe aparecer `ametis_rag_service`.
+
+### 4. Levantar AMETIS Platform
+
+Despues levantar Platform:
+
+```bash
+cd /opt/ametis-platform
+docker compose --env-file .env -f ./infra/docker-compose.yml -f ./infra/platform-stack.compose.yml up -d --build
+```
+
+Comprobar:
+
+```bash
+curl http://127.0.0.1:8440/v1/health
+curl http://127.0.0.1:8440/api/agent-factory/health
+docker network inspect ametis_internal
+```
+
+En la red deben aparecer, como minimo:
+
+- `ametis-kong`;
+- `ametis-core-api`;
+- `ametis-agent-factory-app`;
+- `ametis-agent-factory-web`;
+- `ametis_rag_service`.
+
+### 5. URLs de prueba
+
+Desde navegador:
+
+```text
+http://<vps-host>:3010
+http://<vps-host>:3200
+http://<vps-host>:8440/v1/health
+http://<vps-host>:8081
+```
+
+### 6. Keycloak y Google OAuth
+
+En Keycloak, registrar redirect URIs y web origins publicos para los clientes:
+
+```text
+http://<vps-host>:3010/auth/callback
+http://<vps-host>:3200/auth/callback
+```
+
+```text
+http://<vps-host>:3010
+http://<vps-host>:3200
+```
+
+En Google Cloud, si se usa Drive OAuth, registrar tambien el callback publico configurado en:
+
+```env
+AGENT_FACTORY_GOOGLE_OAUTH_REDIRECT_URI=
+```
+
+### 7. Reinicio controlado
+
+Para aplicar cambios de compose o imagenes:
+
+```bash
+cd /opt/ametis-ai/docker/compose/rag
+docker compose -f docker-compose.vps.yml up -d --build
+
+cd /opt/ametis-platform
+docker compose --env-file .env -f ./infra/docker-compose.yml -f ./infra/platform-stack.compose.yml up -d --build
+```
+
+No es necesario recrear `ametis_internal` en cada reinicio.
+
 ## Históricos
 
 Los cambios relevantes deben quedar registrados en:

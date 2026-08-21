@@ -6,6 +6,10 @@
 
 El despliegue en VPS mezclaba puertos internos de Docker con puertos publicados en el host. Kong se habia intentado mover a `8440/8441`, pero la configuracion hacia que el contenedor escuchara en puertos distintos a los publicados.
 
+### Documentacion
+
+Se añadio en `README.md` una receta completa para levantar AMETIS en VPS, incluyendo red externa `ametis_internal`, orden de arranque, archivos `.env`, comprobaciones, URLs de prueba y configuracion de redirects en Keycloak/Google OAuth.
+
 ### Ajuste
 
 - Kong mantiene sus puertos internos estables: proxy HTTP `8000`, admin `8001` y proxy TLS `8443`.
@@ -15,6 +19,7 @@ El despliegue en VPS mezclaba puertos internos de Docker con puertos publicados 
 - Platform se conecta a la red externa compartida `ametis_internal`.
 - Agent Factory puede llamar al RAG por `http://ametis_rag_service:8000`.
 - Se restauraron reglas de `.gitignore` para evitar commitear `.env` y `.env.*`.
+- Kong enruta a `ametis-core-api` y `ametis-agent-factory-app`, usando nombres de contenedor estables en la red compartida.
 
 ### Pendiente operativo
 
