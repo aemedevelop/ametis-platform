@@ -61,7 +61,10 @@ services:
       - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
       - ./keycloak/themes:/opt/keycloak/themes:ro
     networks:
-      - ametis_internal
+      ametis_internal:
+        aliases:
+          - keycloak
+          - ametis-keycloak
 
   core-api:
     build:
@@ -89,7 +92,10 @@ services:
     ports:
       - "${CORE_API_PORT:-8090}:8080"
     networks:
-      - ametis_internal
+      ametis_internal:
+        aliases:
+          - core-api
+          - ametis-core-api
 
   kong:
     image: kong:3.7
@@ -105,6 +111,7 @@ services:
       KONG_ADMIN_ERROR_LOG: /dev/stderr
       KONG_ADMIN_LISTEN: 0.0.0.0:8001
       KONG_PROXY_LISTEN: 0.0.0.0:8000, 0.0.0.0:8443 ssl http2
+      KONG_DNS_RESOLVER: 127.0.0.11
     ports:
       - "${KONG_PROXY_PORT:-8440}:8000"
       - "${KONG_PROXY_TLS_PORT:-8443}:8443"
@@ -112,7 +119,10 @@ services:
     volumes:
       - ./kong/kong.yml:/usr/local/kong/declarative/kong.yml:ro
     networks:
-      - ametis_internal
+      ametis_internal:
+        aliases:
+          - kong
+          - ametis-kong
 
 # Volúmenes comentados: usando postgres del VPS
 # volumes:

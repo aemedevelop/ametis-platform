@@ -20,6 +20,7 @@ Se añadio en `README.md` una receta completa para levantar AMETIS en VPS, inclu
 - Agent Factory puede llamar al RAG por `http://ametis_rag_service:8000`.
 - Se restauraron reglas de `.gitignore` para evitar commitear `.env` y `.env.*`.
 - Kong enruta a `ametis-core-api` y `ametis-agent-factory-app`, usando nombres de contenedor estables en la red compartida.
+- Kong usa explicitamente el resolver DNS interno de Docker `127.0.0.11` y los servicios declaran aliases de red estables.
 
 ### Pendiente operativo
 

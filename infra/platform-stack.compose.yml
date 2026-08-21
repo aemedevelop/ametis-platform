@@ -31,7 +31,10 @@ services:
     ports:
       - "${AGENT_FACTORY_API_PORT:-8083}:8083"
     networks:
-      - ametis_internal
+      ametis_internal:
+        aliases:
+          - agent-factory-app
+          - ametis-agent-factory-app
 
   hub-web:
     build:
@@ -60,7 +63,10 @@ services:
     ports:
       - "${HUB_WEB_PORT:-3000}:3000"
     networks:
-      - ametis_internal
+      ametis_internal:
+        aliases:
+          - hub-web
+          - ametis-hub-web
 
   agent-factory-web:
     build:
@@ -78,7 +84,10 @@ services:
     ports:
       - "${AGENT_FACTORY_WEB_PORT:-3200}:3200"
     networks:
-      - ametis_internal
+      ametis_internal:
+        aliases:
+          - agent-factory-web
+          - ametis-agent-factory-web
 
 networks:
   ametis_internal:
