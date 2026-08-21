@@ -14,7 +14,7 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${AGENT_FACTORY_DB_PASSWORD:-agent_factory_pass}
       SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${AGENT_FACTORY_JWT_ISSUER:-http://localhost:8081/realms/ametis}
       SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: ${AGENT_FACTORY_JWT_JWK_SET_URI:-http://keycloak:8080/realms/ametis/protocol/openid-connect/certs}
-      AGENT_FACTORY_CORE_BASE_URL: ${AGENT_FACTORY_CORE_BASE_URL:-http://kong:8440}
+      AGENT_FACTORY_CORE_BASE_URL: ${AGENT_FACTORY_CORE_BASE_URL:-http://kong:8000}
       AGENT_FACTORY_GOOGLE_AUTH_MODE: ${AGENT_FACTORY_GOOGLE_AUTH_MODE:-workspace-oauth}
       AGENT_FACTORY_GOOGLE_CREDENTIALS_FILE: /run/secrets/google-drive-service-account.json
       AGENT_FACTORY_GOOGLE_OAUTH_CLIENT_ID: ${AGENT_FACTORY_GOOGLE_OAUTH_CLIENT_ID:-}
@@ -25,10 +25,13 @@ services:
       AGENT_FACTORY_GOOGLE_TOKEN_ENCRYPTION_KEY: ${AGENT_FACTORY_GOOGLE_TOKEN_ENCRYPTION_KEY:-}
       AGENT_FACTORY_GOOGLE_ROOT_FOLDER_ID: ${AGENT_FACTORY_GOOGLE_ROOT_FOLDER_ID:-}
       AGENT_FACTORY_AMETIS_AI_RAG_BASE_URL: ${AGENT_FACTORY_AMETIS_AI_RAG_BASE_URL:-}
+      AGENT_FACTORY_CORS_ALLOWED_ORIGIN_PATTERNS: ${AGENT_FACTORY_CORS_ALLOWED_ORIGIN_PATTERNS:-http://localhost:*,http://127.0.0.1:*,https://localhost:*,https://127.0.0.1:*}
     volumes:
       - ${AGENT_FACTORY_GOOGLE_CREDENTIALS_HOST_FILE:-../../ametis-ai/docker/compose/rag/secrets/google-drive-service-account.json}:/run/secrets/google-drive-service-account.json:ro
     ports:
-      - "8083:8083"
+      - "${AGENT_FACTORY_API_PORT:-8083}:8083"
+    networks:
+      - ametis_internal
 
   hub-web:
     build:
@@ -48,7 +51,7 @@ services:
       NEXT_PUBLIC_API_BASE_URL: ${HUB_API_BASE_URL:-http://localhost:8000}
       NEXT_PUBLIC_CHAT_API_URL: ${CHAT_API_URL:-/api/rag-chat}
       NEXT_PUBLIC_CHAT_TENANT_ID: ${CHAT_TENANT_ID:-aeme}
-      RAG_CHAT_API_URL: ${RAG_CHAT_API_URL:-http://host.docker.internal:8000/tenants/aeme/agents/support_agent/knowledge-bases/landing/query}
+      RAG_CHAT_API_URL: ${RAG_CHAT_API_URL:-http://ametis_rag_service:8000/tenants/aeme/agents/support_agent/knowledge-bases/landing/query}
       NEXT_PUBLIC_AGENT_FACTORY_WEB_URL: ${AGENT_FACTORY_WEB_URL:-http://localhost:3200}
       NEXT_PUBLIC_ALLOWED_REDIRECT_ORIGINS: ${ALLOWED_REDIRECT_ORIGINS:-http://localhost:3000,http://localhost:3200}
       NEXT_PUBLIC_APP_URL: ${HUB_WEB_URL:-http://localhost:3000}
@@ -56,6 +59,8 @@ services:
       NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: ${HUB_KEYCLOAK_CLIENT_ID:-ametis-hub-web}
     ports:
       - "${HUB_WEB_PORT:-3000}:3000"
+    networks:
+      - ametis_internal
 
   agent-factory-web:
     build:
@@ -71,4 +76,10 @@ services:
     image: ametis/agent-factory-web:0.1.0
     container_name: ametis-agent-factory-web
     ports:
-      - "3200:3200"
+      - "${AGENT_FACTORY_WEB_PORT:-3200}:3200"
+    networks:
+      - ametis_internal
+
+networks:
+  ametis_internal:
+    external: true

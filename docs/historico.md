@@ -1,5 +1,27 @@
 # Histórico de cambios - AMETIS Platform
 
+## 2026-08-21 - Preparacion de despliegue VPS y puertos Kong
+
+### Problema
+
+El despliegue en VPS mezclaba puertos internos de Docker con puertos publicados en el host. Kong se habia intentado mover a `8440/8441`, pero la configuracion hacia que el contenedor escuchara en puertos distintos a los publicados.
+
+### Ajuste
+
+- Kong mantiene sus puertos internos estables: proxy HTTP `8000`, admin `8001` y proxy TLS `8443`.
+- El VPS publica `KONG_PROXY_PORT=8440` hacia `8000` y `KONG_ADMIN_PORT=8441` hacia `8001`.
+- Los servicios internos usan `http://kong:8000`.
+- Las URLs publicas de navegador usan `http://<vps-host>:8440`.
+- Platform se conecta a la red externa compartida `ametis_internal`.
+- Agent Factory puede llamar al RAG por `http://ametis_rag_service:8000`.
+- Se restauraron reglas de `.gitignore` para evitar commitear `.env` y `.env.*`.
+
+### Pendiente operativo
+
+- Crear la red en el VPS antes de levantar stacks: `docker network create ametis_internal`.
+- Sustituir `<vps-host>` por la IP o dominio real en `.env`.
+- Registrar en Keycloak los redirect URIs publicos del VPS para `ametis-hub-web` y `agent-factory-web`.
+
 Este documento registra los cambios relevantes realizados sobre `ametis-platform`.
 
 > Regla de trabajo: cada ajuste funcional, arquitectónico o de infraestructura debe añadir una entrada nueva en este histórico antes de cerrar la tarea.

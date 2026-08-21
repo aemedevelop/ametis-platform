@@ -266,18 +266,23 @@ Levantar infraestructura base:
 Levantar Agent Factory con stack de plataforma:
 
 ```powershell
+docker network create ametis_internal
 docker compose --env-file .env -f ./infra/docker-compose.yml -f ./infra/platform-stack.compose.yml up -d --build agent-factory-app agent-factory-web kong
 ```
 
 Endpoints útiles:
 
-- Kong proxy: `http://localhost:8000`
-- Kong admin: `http://localhost:8001`
+- Kong proxy: `http://localhost:8440`
+- Kong admin: `http://localhost:8441`
 - Keycloak: `http://localhost:8081`
 - PostgreSQL: `localhost:5432`
 - Kafka: `localhost:9092`
-- Agent Factory API: `http://localhost:8010/api/agent-factory`
+- Agent Factory API por Kong: `http://localhost:8440/api/agent-factory`
 - Agent Factory Web: `http://localhost:3200`
+
+Para VPS, sustituir `localhost` por la IP o dominio publico en `.env`.
+Dentro de Docker deben mantenerse URLs internas como `http://kong:8000`,
+`http://keycloak:8080` y `http://ametis_rag_service:8000`.
 
 ## Históricos
 

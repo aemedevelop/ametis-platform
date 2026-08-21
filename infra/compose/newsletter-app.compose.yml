@@ -10,7 +10,7 @@ services:
       SPRING_DATASOURCE_USERNAME: ${NEWSLETTER_DB_USER:-postgres}
       SPRING_DATASOURCE_PASSWORD: ${NEWSLETTER_DB_PASSWORD:-postgres}
       SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: ${NEWSLETTER_JWT_ISSUER:-http://keycloak:8080/realms/ametis}
-      NEWSLETTER_CORE_BASE_URL: ${NEWSLETTER_CORE_BASE_URL:-http://kong:8440}
+      NEWSLETTER_CORE_BASE_URL: ${NEWSLETTER_CORE_BASE_URL:-http://kong:8000}
       NEWSLETTER_CORE_AUTH_PATH: ${NEWSLETTER_CORE_AUTH_PATH:-/v1/authorization/check}
       NEWSLETTER_CORE_PRODUCT_ACCESS_PATH_TEMPLATE: ${NEWSLETTER_CORE_PRODUCT_ACCESS_PATH_TEMPLATE:-/v1/tenants/{tenantId}/products/{productCode}/access/me}
       NEWSLETTER_CORE_TENANTS_PATH: ${NEWSLETTER_CORE_TENANTS_PATH:-/v1/tenants}
@@ -19,3 +19,9 @@ services:
       NEWSLETTER_N8N_GENERATE_PATH: ${NEWSLETTER_N8N_GENERATE_PATH:-/webhook/newsletter-generate}
     ports:
       - "8082:8082"
+    networks:
+      - ametis_internal
+
+networks:
+  ametis_internal:
+    external: true

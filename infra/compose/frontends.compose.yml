@@ -17,7 +17,7 @@ services:
       NEXT_PUBLIC_API_BASE_URL: ${HUB_API_BASE_URL:-http://localhost:8000}
       NEXT_PUBLIC_CHAT_API_URL: ${CHAT_API_URL:-/api/rag-chat}
       NEXT_PUBLIC_CHAT_TENANT_ID: ${CHAT_TENANT_ID:-aeme}
-      RAG_CHAT_API_URL: ${RAG_CHAT_API_URL:-http://host.docker.internal:8000/tenants/aeme/agents/support_agent/knowledge-bases/landing/query}
+      RAG_CHAT_API_URL: ${RAG_CHAT_API_URL:-http://ametis_rag_service:8000/tenants/aeme/agents/support_agent/knowledge-bases/landing/query}
       NEXT_PUBLIC_NEWSLETTER_WEB_URL: ${NEWSLETTER_WEB_URL:-http://localhost:3100}
       NEXT_PUBLIC_AGENT_FACTORY_WEB_URL: ${AGENT_FACTORY_WEB_URL:-http://localhost:3200}
       NEXT_PUBLIC_ALLOWED_REDIRECT_ORIGINS: ${ALLOWED_REDIRECT_ORIGINS:-http://localhost:3000,http://localhost:3100,http://localhost:3200}
@@ -25,7 +25,9 @@ services:
       NEXT_PUBLIC_KEYCLOAK_AUTH_URL: ${KEYCLOAK_AUTH_URL:-http://localhost:8081/realms/ametis/protocol/openid-connect/auth}
       NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: ${HUB_KEYCLOAK_CLIENT_ID:-ametis-hub-web}
     ports:
-      - "3000:3000"
+      - "${HUB_WEB_PORT:-3000}:3000"
+    networks:
+      - ametis_internal
 
   newsletter-web:
     build:
@@ -47,7 +49,9 @@ services:
       NEXT_PUBLIC_KEYCLOAK_AUTH_URL: ${KEYCLOAK_AUTH_URL:-http://localhost:8081/realms/ametis/protocol/openid-connect/auth}
       NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: ${NEWSLETTER_KEYCLOAK_CLIENT_ID:-newsletter-web}
     ports:
-      - "3100:3100"
+      - "${NEWSLETTER_WEB_PORT:-3100}:3100"
+    networks:
+      - ametis_internal
 
   agent-factory-web:
     build:
@@ -63,4 +67,10 @@ services:
     image: ametis/agent-factory-web:0.1.0
     container_name: ametis-agent-factory-web
     ports:
-      - "3200:3200"
+      - "${AGENT_FACTORY_WEB_PORT:-3200}:3200"
+    networks:
+      - ametis_internal
+
+networks:
+  ametis_internal:
+    external: true
