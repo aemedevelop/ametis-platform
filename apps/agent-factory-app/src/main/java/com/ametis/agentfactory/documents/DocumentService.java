@@ -122,6 +122,11 @@ public class DocumentService {
           .sorted((left, right) -> right.modifiedAt().compareTo(left.modifiedAt()))
           .toList();
     } catch (IOException exception) {
+      LOGGER.error(
+          "Google Drive listing failed for tenant {} and folder {}",
+          tenantId,
+          binding.getDocumentsFolderId(),
+          exception);
       throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Google Drive listing failed", exception);
     }
   }
