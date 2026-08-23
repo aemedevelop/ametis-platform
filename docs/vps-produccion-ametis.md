@@ -265,6 +265,10 @@ aeme-doc--6d293a5d/
     documento.pdf
 ```
 
+En produccion, `AGENT_FACTORY_GOOGLE_ROOT_FOLDER_ID` de `ametis-platform/.env.vps` y `GOOGLE_DRIVE_ROOT_FOLDER_ID` de `ametis-ai/docker/compose/rag/.env.vps` deben apuntar a la misma carpeta raiz productiva.
+
+No reutilizar esa carpeta raiz en local/PRE. Si local y produccion comparten el mismo ID de Drive, ambos entornos escriben sobre los mismos workspaces documentales y cualquier cambio de namespace o documentos desde un lado afecta al otro.
+
 La service account debe tener permisos de lectura sobre la carpeta raiz y sus subcarpetas. Si no, apareceran errores de Google Drive o `403`.
 
 ## 9. Keycloak

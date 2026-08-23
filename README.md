@@ -272,6 +272,13 @@ Copy-Item .env.local.example .env.local
 docker compose --env-file .env.local -f ./infra/docker-compose.yml -f ./infra/platform-stack.compose.yml up -d --build agent-factory-app agent-factory-web kong
 ```
 
+Si Agent Factory usa Google Drive en local, crea una carpeta raiz exclusiva para local/PRE y configura su ID en:
+
+- `ametis-platform/.env.local`: `AGENT_FACTORY_GOOGLE_ROOT_FOLDER_ID`
+- `ametis-ai/docker/compose/rag/.env.local`: `GOOGLE_DRIVE_ROOT_FOLDER_ID`
+
+Ambos valores deben ser iguales dentro del mismo entorno para que Platform suba documentos y RAG los indexe. No uses aqui la carpeta raiz de produccion: si local y VPS comparten el mismo ID, renombrar o modificar el namespace desde un lado cambiara la misma carpeta real de Drive en el otro.
+
 Endpoints útiles:
 
 - Kong proxy: `http://localhost:8440`
@@ -319,6 +326,7 @@ Editar `.env.vps` y sustituir:
 - placeholders por valores reales;
 - passwords y secretos reales;
 - credenciales OAuth de Google si Agent Factory usa Drive.
+- `AGENT_FACTORY_GOOGLE_ROOT_FOLDER_ID` con la carpeta raiz exclusiva de produccion.
 
 No subir `.env.vps` a Git.
 
