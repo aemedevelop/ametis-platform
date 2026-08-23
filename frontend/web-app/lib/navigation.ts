@@ -4,6 +4,8 @@ export type ToolNavItem = {
   shortLabelKey: string;
   descriptionKey: string;
   verticalId: string;
+  disabled?: boolean;
+  statusKey?: string;
 };
 
 export type HeaderNavItem = {
@@ -38,17 +40,21 @@ export const TOOL_NAV_ITEMS: ToolNavItem[] = [
     titleKey: "tools.core.title",
     shortLabelKey: "tools.core.short",
     descriptionKey: "tools.core.description",
-    verticalId: "platform-core"
+    verticalId: "platform-core",
+    disabled: true,
+    statusKey: "tools.status.soon"
   },
   {
     href: "/tools/newsletter",
     titleKey: "tools.newsletter.title",
     shortLabelKey: "tools.newsletter.short",
     descriptionKey: "tools.newsletter.description",
-    verticalId: "enterprise-copilot"
+    verticalId: "enterprise-copilot",
+    disabled: true,
+    statusKey: "tools.status.soon"
   },
   {
-    href: "/tools/agent-factory",
+    href: "https://ametis.agent-factory.aemetech.com",
     titleKey: "tools.agentFactory.title",
     shortLabelKey: "tools.agentFactory.short",
     descriptionKey: "tools.agentFactory.description",
@@ -59,25 +65,37 @@ export const TOOL_NAV_ITEMS: ToolNavItem[] = [
     titleKey: "tools.pricing.title",
     shortLabelKey: "tools.pricing.short",
     descriptionKey: "tools.pricing.description",
-    verticalId: "commercial-intelligence"
+    verticalId: "commercial-intelligence",
+    disabled: true,
+    statusKey: "tools.status.soon"
   },
   {
     href: "/tools/market",
     titleKey: "tools.market.title",
     shortLabelKey: "tools.market.short",
     descriptionKey: "tools.market.description",
-    verticalId: "mercantile-intelligence"
+    verticalId: "mercantile-intelligence",
+    disabled: true,
+    statusKey: "tools.status.soon"
   },
   {
     href: "/tools/simulator",
     titleKey: "tools.simulator.title",
     shortLabelKey: "tools.simulator.short",
     descriptionKey: "tools.simulator.description",
-    verticalId: "financial-intelligence"
+    verticalId: "financial-intelligence",
+    disabled: true,
+    statusKey: "tools.status.soon"
   }
 ];
 
 export const SOLUTION_VERTICALS: SolutionVertical[] = [
+  {
+    id: "enterprise-copilot",
+    titleKey: "vertical.enterpriseCopilot.title",
+    descriptionKey: "vertical.enterpriseCopilot.description",
+    toolHrefs: ["https://ametis.agent-factory.aemetech.com"]
+  },
   {
     id: "mercantile-intelligence",
     titleKey: "vertical.mercantileIntelligence.title",
@@ -95,12 +113,6 @@ export const SOLUTION_VERTICALS: SolutionVertical[] = [
     titleKey: "vertical.commercialIntelligence.title",
     descriptionKey: "vertical.commercialIntelligence.description",
     toolHrefs: ["/tools/pricing"]
-  },
-  {
-    id: "enterprise-copilot",
-    titleKey: "vertical.enterpriseCopilot.title",
-    descriptionKey: "vertical.enterpriseCopilot.description",
-    toolHrefs: ["/tools/newsletter", "/tools/agent-factory"]
   }
 ];
 

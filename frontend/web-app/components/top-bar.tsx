@@ -163,16 +163,33 @@ export function TopBar() {
                               <ul className="mt-1 space-y-1 border-l border-brand-300/30 pl-2">
                                 {tools.map((tool) => (
                                   <li key={tool.href}>
-                                    <Link
-                                      href={tool.href}
-                                      onClick={() => {
-                                        setSolutionsMenuOpen(false);
-                                        setOpenDesktopVerticalId(null);
-                                      }}
-                                      className="block rounded-md px-2 py-1.5 text-xs text-[var(--text)] hover:bg-brand-400/15 hover:text-cyanAccent"
-                                    >
-                                      {t(tool.titleKey)}
-                                    </Link>
+                                    {tool.disabled ? (
+                                      <button
+                                        type="button"
+                                        disabled
+                                        className="block w-full cursor-not-allowed rounded-md px-2 py-1.5 text-left text-xs text-[var(--text-muted)] opacity-60"
+                                      >
+                                        <span>{t(tool.titleKey)}</span>
+                                        {tool.statusKey ? (
+                                          <span className="ml-2 text-[10px] uppercase tracking-[0.08em] text-[var(--text-muted)]">
+                                            {t(tool.statusKey)}
+                                          </span>
+                                        ) : null}
+                                      </button>
+                                    ) : (
+                                      <Link
+                                        href={tool.href}
+                                        onClick={() => {
+                                          setSolutionsMenuOpen(false);
+                                          setOpenDesktopVerticalId(null);
+                                        }}
+                                        className="block rounded-md px-2 py-1.5 text-xs text-[var(--text)] hover:bg-brand-400/15 hover:text-cyanAccent"
+                                        target={tool.href.startsWith("http") ? "_blank" : undefined}
+                                        rel={tool.href.startsWith("http") ? "noreferrer" : undefined}
+                                      >
+                                        {t(tool.titleKey)}
+                                      </Link>
+                                    )}
                                   </li>
                                 ))}
                               </ul>
@@ -307,14 +324,30 @@ export function TopBar() {
                       </summary>
                       <div className="mt-1 grid grid-cols-1 gap-1 border-l border-brand-300/30 pl-2">
                         {tools.map((tool) => (
-                          <Link
-                            key={tool.href}
-                            href={tool.href}
-                            onClick={closeMobileMenu}
-                            className="rounded-md px-2 py-2 text-xs hover:bg-brand-400/15"
-                          >
-                            {t(tool.titleKey)}
-                          </Link>
+                          tool.disabled ? (
+                            <button
+                              key={tool.href}
+                              type="button"
+                              disabled
+                              className="cursor-not-allowed rounded-md px-2 py-2 text-left text-xs text-[var(--text-muted)] opacity-60"
+                            >
+                              <span>{t(tool.titleKey)}</span>
+                              {tool.statusKey ? (
+                                <span className="ml-2 text-[10px] uppercase tracking-[0.08em]">{t(tool.statusKey)}</span>
+                              ) : null}
+                            </button>
+                          ) : (
+                            <Link
+                              key={tool.href}
+                              href={tool.href}
+                              onClick={closeMobileMenu}
+                              className="rounded-md px-2 py-2 text-xs hover:bg-brand-400/15"
+                              target={tool.href.startsWith("http") ? "_blank" : undefined}
+                              rel={tool.href.startsWith("http") ? "noreferrer" : undefined}
+                            >
+                              {t(tool.titleKey)}
+                            </Link>
+                          )
                         ))}
                       </div>
                     </details>

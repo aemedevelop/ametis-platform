@@ -593,3 +593,85 @@ curl http://127.0.0.1:6333/collections
 - Nginx Proxy Manager debe terminar TLS y reenviar por HTTP al VPS AMETIS.
 - CORS debe limitarse a los dominios publicos de frontends.
 - La seguridad para clientes externos directos hacia `ametis-ai` queda pendiente; por ahora Platform gestiona y canales externos consumiran AMETIS AI cuando se defina esa capa.
+
+## 19. Landing publica `am-landing-react`
+
+La landing publica se despliega como un proyecto separado, pero forma parte del entorno completo de AMETIS porque su web chat consume el RAG/agent-services.
+
+Regla de entorno:
+
+```text
+Local      -> RAG local
+Produccion -> RAG/agent-services publico por HTTPS
+```
+
+El navegador no debe llamar directamente al RAG. Debe llamar a la propia landing:
+
+```text
+Browser -> https://<dominio-landing>/api/rag-chat
+```
+
+El contenedor de la landing reenvia server-side hacia:
+
+```env
+RAG_CHAT_API_URL=https://api-rag.aemetech.com/tenants/aeme/agents/support_agent/knowledge-bases/landing/query
+```
+
+### Variables en VPS
+
+Archivo real en el VPS de la landing o variables equivalentes en Portainer:
+
+```env
+APP_PORT=3000
+RAG_CHAT_API_URL=https://api-rag.aemetech.com/tenants/aeme/agents/support_agent/knowledge-bases/landing/query
+```
+
+No usar en produccion:
+
+```env
+VITE_RAG_API_URL=https://api-rag.aemetech.com
+```
+
+`VITE_RAG_API_URL` hace que el navegador llame directo al RAG. El patron aprobado para produccion es `/api/rag-chat` con proxy server-side.
+
+### Despliegue
+
+```bash
+cd /opt/am-landing-react
+docker compose down
+docker compose up -d --build
+```
+
+El stack debe fallar si no existe `RAG_CHAT_API_URL`; esto es intencional para evitar que arranque con una configuracion incorrecta.
+
+### Comprobaciones
+
+Desde el VPS de la landing:
+
+```bash
+curl -i http://127.0.0.1:3000/api/rag-chat \
+  -H "Content-Type: application/json" \
+  -d '{"question":"que es aeme?"}'
+```
+
+Comprobar que el endpoint publico RAG responde desde ese VPS:
+
+```bash
+curl -i https://api-rag.aemetech.com/tenants/aeme/agents/support_agent/knowledge-bases/landing/query \
+  -H "Content-Type: application/json" \
+  -d '{"question":"que es aeme?"}'
+```
+
+Si esta segunda llamada falla, el problema esta en DNS, firewall, Nginx Proxy Manager o en el servicio RAG publico; no en la landing.
+
+### Cambios tecnicos aplicados
+
+- Runtime Docker cambiado a `nginx:1.27-alpine`.
+- Nginx sirve la SPA y proxy `/api/rag-chat`.
+- Nginx usa `resolver 127.0.0.11` para resolver dominios desde Docker.
+- Nginx usa `proxy_ssl_server_name on` para upstream HTTPS.
+- El entorno local usa `.env.local` con RAG local:
+
+```env
+RAG_CHAT_API_URL=http://127.0.0.1:8000/tenants/aeme/agents/support_agent/knowledge-bases/landing/query
+```

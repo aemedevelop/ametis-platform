@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ToolShell } from "@/components/tool-shell";
 
 export default function AgentFactoryToolPage() {
-  const externalUrl = process.env.NEXT_PUBLIC_AGENT_FACTORY_WEB_URL ?? "http://localhost:3200";
+  const externalUrl = process.env.NEXT_PUBLIC_AGENT_FACTORY_WEB_URL ?? "https://ametis.agent-factory.aemetech.com";
 
   useEffect(() => {
     window.location.href = externalUrl;

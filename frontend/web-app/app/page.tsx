@@ -143,13 +143,27 @@ export default function LandingPage() {
 
                   <div className="mt-4 flex flex-wrap gap-2">
                     {tools.map((tool) => (
-                      <Link
-                        key={tool.href}
-                        href={tool.href}
-                        className="rounded-lg bg-brand-500 px-3 py-2 text-xs font-semibold text-white transition hover:-translate-y-[1px] hover:bg-brand-400"
-                      >
-                        {t(tool.titleKey)}
-                      </Link>
+                      tool.disabled ? (
+                        <button
+                          key={tool.href}
+                          type="button"
+                          disabled
+                          className="cursor-not-allowed rounded-lg border border-brand-300/25 px-3 py-2 text-xs font-semibold text-slate-400 opacity-70"
+                        >
+                          {t(tool.titleKey)}
+                          {tool.statusKey ? <span className="ml-2 text-[10px] uppercase tracking-[0.08em]">{t(tool.statusKey)}</span> : null}
+                        </button>
+                      ) : (
+                        <Link
+                          key={tool.href}
+                          href={tool.href}
+                          className="rounded-lg bg-brand-500 px-3 py-2 text-xs font-semibold text-white transition hover:-translate-y-[1px] hover:bg-brand-400"
+                          target={tool.href.startsWith("http") ? "_blank" : undefined}
+                          rel={tool.href.startsWith("http") ? "noreferrer" : undefined}
+                        >
+                          {t(tool.titleKey)}
+                        </Link>
+                      )
                     ))}
                   </div>
 

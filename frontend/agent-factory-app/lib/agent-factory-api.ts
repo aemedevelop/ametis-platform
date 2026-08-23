@@ -96,6 +96,24 @@ export type AgentTestResponse = {
   suggestions: string[];
 };
 
+export type DeploymentChannelType = "WEB_CHAT" | "API" | "INTERNAL_TEST";
+
+export type DeploymentStatus = "ACTIVE" | "INACTIVE";
+
+export type AgentDeployment = {
+  id: string;
+  agentId: string;
+  agentName: string;
+  name: string;
+  channelType: DeploymentChannelType;
+  deploymentSlug: string;
+  status: DeploymentStatus;
+  publicUrl: string | null;
+  hasApiKey: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export class AgentFactoryApiError extends Error {
   constructor(
     public status: number,
@@ -287,6 +305,46 @@ export function testAgent(id: string, question: string) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ question })
   });
+}
+
+export function fetchDeployments() {
+  return apiFetch<AgentDeployment[]>("/api/agent-factory/deployments");
+}
+
+export function createDeployment(input: {
+  agentId: string;
+  name: string;
+  channelType: DeploymentChannelType;
+  deploymentSlug: string;
+  status?: DeploymentStatus;
+  publicUrl?: string;
+  apiKey?: string;
+}) {
+  return apiFetch<AgentDeployment>("/api/agent-factory/deployments", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+}
+
+export function updateDeployment(id: string, input: {
+  agentId: string;
+  name: string;
+  channelType: DeploymentChannelType;
+  deploymentSlug: string;
+  status: DeploymentStatus;
+  publicUrl?: string;
+  apiKey?: string;
+}) {
+  return apiFetch<AgentDeployment>(`/api/agent-factory/deployments/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+}
+
+export async function deleteDeployment(id: string): Promise<void> {
+  await authenticatedFetch(`/api/agent-factory/deployments/${id}`, { method: "DELETE" });
 }
 
 export function uploadDocument(file: File) {

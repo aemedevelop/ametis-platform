@@ -66,6 +66,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const isDocumentsActive = pathname === "/";
   const isKnowledgeBasesActive = pathname.startsWith("/knowledge-bases");
   const isAgentsActive = pathname.startsWith("/agents");
+  const isDeploymentsActive = pathname.startsWith("/deployments");
 
   return (
     <main className={`app-layout${sidebarCollapsed ? " sidebar-collapsed" : ""}`}>
@@ -92,7 +93,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Link className={`nav-item ${isDocumentsActive ? "active" : ""}`} href="/">{t("navigation.documents")}</Link>
           <Link className={`nav-item ${isKnowledgeBasesActive ? "active" : ""}`} href="/knowledge-bases">{t("navigation.knowledgeBases")}</Link>
           <Link className={`nav-item ${isAgentsActive ? "active" : ""}`} href="/agents">{t("navigation.agents")}</Link>
-          <span className="nav-item disabled">{t("navigation.deployments")} <em>{t("navigation.comingSoon")}</em></span>
+          <Link className={`nav-item ${isDeploymentsActive ? "active" : ""}`} href="/deployments">{t("navigation.deployments")}</Link>
         </nav>
       </aside>
       <section className="content-shell">

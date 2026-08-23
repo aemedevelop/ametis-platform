@@ -1,5 +1,59 @@
 # Histórico de cambios - AMETIS Platform
 
+## 2026-08-23 - Hub orientado a Decision Intelligence
+
+### Contexto
+
+Se ajusto la vista publica de `ametis.hub` para posicionar la plataforma como capa de **Decision Intelligence**, centrada en convertir datos, conocimiento documental e IA en decisiones empresariales accionables.
+
+### Ajuste
+
+- Se actualizo el copy principal del Hub en castellano e ingles hacia Decision Intelligence.
+- En el menu de soluciones, **Copiloto Empresarial** pasa a mostrarse como primera linea.
+- Dentro de Copiloto Empresarial queda activa solo la opcion **Fabrica de agentes**.
+- **Fabrica de agentes** apunta al dominio real `https://ametis.agent-factory.aemetech.com`.
+- El resto de verticales y subopciones se mantienen visibles como opciones no disponibles/proximamente, sin navegacion.
+
+## 2026-08-23 - Landing AMETIS / Web chat local y produccion
+
+### Contexto
+
+El web chat del proyecto `am-landing-react` no conectaba correctamente con el servicio RAG/agent-services, mientras que el chat del home de `ametis-platform` si respondia. La diferencia era que la landing intentaba llamar al RAG directamente desde el navegador usando variables `VITE_*`, lo que mezclaba configuracion local y produccion y exponia la integracion a CORS.
+
+### Ajuste
+
+- Se adopto el mismo patron funcional del home de `ametis-platform`: el navegador llama a `/api/rag-chat` y un proxy server-side reenvia la consulta al RAG.
+- En local, `am-landing-react` usa `.env.local` con:
+
+```env
+RAG_CHAT_API_URL=http://127.0.0.1:8000/tenants/aeme/agents/support_agent/knowledge-bases/landing/query
+```
+
+- En produccion/VPS, `am-landing-react` debe usar `.env` o variables de Portainer con:
+
+```env
+APP_PORT=3000
+RAG_CHAT_API_URL=https://api-rag.aemetech.com/tenants/aeme/agents/support_agent/knowledge-bases/landing/query
+```
+
+- Se cambio el runtime Docker de la landing a Nginx y se agrego proxy interno para `/api/rag-chat`.
+- Se elimino `VITE_RAG_API_URL` como configuracion recomendada de produccion.
+- Se agrego soporte Nginx para resolver upstream HTTPS dentro de Docker (`resolver 127.0.0.11`) y SNI (`proxy_ssl_server_name on`).
+- Se documento el detalle completo en `am-landing-react/CHANGELOG.md` y `am-landing-react/README-DOCKER.md`.
+
+### Validacion
+
+- `npm.cmd run build` ejecutado correctamente en `am-landing-react`.
+- Prueba local de `POST http://127.0.0.1:8080/api/rag-chat` contra RAG local respondio `200 OK`.
+- `docker compose config` en la landing renderiza correctamente con `RAG_CHAT_API_URL` de produccion.
+- `docker compose config` falla intencionalmente si falta `RAG_CHAT_API_URL`.
+
+### Pendiente operativo
+
+- En el VPS de la landing, crear `.env` real o configurar variables en Portainer.
+- Confirmar que `https://api-rag.aemetech.com` responde por HTTPS desde el VPS de la landing.
+- Reconstruir el stack de la landing con `docker compose up -d --build`.
+
 ## 2026-08-21 - Preparacion de despliegue VPS y puertos Kong
 
 ### Problema
