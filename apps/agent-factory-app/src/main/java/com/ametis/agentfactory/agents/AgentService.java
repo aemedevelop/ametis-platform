@@ -182,6 +182,12 @@ public class AgentService {
     if (links.isEmpty()) {
       throw new ResponseStatusException(HttpStatus.CONFLICT, "error.agentTestRequiresKnowledgeBase");
     }
+    List<AgentIndexingJobResponse> jobs = ragClient.latestIndexingJobs(binding.getRepositoryNamespace(), agentId);
+    boolean hasIndexedChunks = jobs.stream()
+        .anyMatch(job -> "COMPLETED".equals(job.status()) && job.chunks() > 0);
+    if (!hasIndexedChunks) {
+      throw new ResponseStatusException(HttpStatus.CONFLICT, "error.agentTestRequiresIndexedKnowledge");
+    }
     AmetisAiQueryResponse response = ragClient.query(
         binding.getRepositoryNamespace(),
         agentId,

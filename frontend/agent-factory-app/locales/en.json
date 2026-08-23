@@ -82,6 +82,7 @@
   "drive.connectDescription": "Authorize AMETIS to create and manage this workspace's documents in your Google Drive.",
   "drive.notConfiguredDescription": "The Google Drive integration has not been configured by the AMETIS administrator yet.",
   "drive.connectAction": "Connect Google Drive",
+  "drive.reconnectAction": "Reconnect Google Drive",
   "drive.connecting": "Opening Google…",
   "drive.connectedTitle": "Google Drive connected.",
   "drive.connectedDescription": "You can now prepare the workspace document repository.",
@@ -247,6 +248,7 @@
   "agents.indexingStatus.pending": "Indexing pending",
   "agents.indexingStatus.processing": "Indexing knowledge",
   "agents.indexingStatus.completed": "Knowledge indexed · {chunks} chunks",
+  "agents.indexingStatus.noChunks": "No indexable content · {documents} documents",
   "agents.indexingStatus.upToDate": "Knowledge up to date · {documents} documents",
   "agents.indexingStatus.failed": "Indexing failed",
   "agents.indexingProgressTitle": "Indexing knowledge",
@@ -267,5 +269,6 @@
   "error.agentTestUnavailable": "The agent test service is not available.",
   "error.agentTestFailed": "The agent could not be tested.",
   "error.agentTestRequiresPublishedAgent": "Publish the agent before testing it.",
-  "error.agentTestRequiresKnowledgeBase": "Attach a knowledge base before testing the agent."
+  "error.agentTestRequiresKnowledgeBase": "Attach a knowledge base before testing the agent.",
+  "error.agentTestRequiresIndexedKnowledge": "Index knowledge with content before testing the agent."
 }

@@ -82,6 +82,7 @@
   "drive.connectDescription": "Autoriza a AMETIS para crear y gestionar la documentación de este workspace en tu Google Drive.",
   "drive.notConfiguredDescription": "La integración de Google Drive todavía no está configurada por el administrador de AMETIS.",
   "drive.connectAction": "Conectar Google Drive",
+  "drive.reconnectAction": "Reconectar Google Drive",
   "drive.connecting": "Abriendo Google…",
   "drive.connectedTitle": "Google Drive conectado.",
   "drive.connectedDescription": "Ya puedes preparar el repositorio documental del workspace.",
@@ -247,6 +248,7 @@
   "agents.indexingStatus.pending": "Indexación pendiente",
   "agents.indexingStatus.processing": "Indexando conocimiento",
   "agents.indexingStatus.completed": "Conocimiento indexado · {chunks} chunks",
+  "agents.indexingStatus.noChunks": "Sin contenido indexable · {documents} documentos",
   "agents.indexingStatus.upToDate": "Conocimiento actualizado · {documents} documentos",
   "agents.indexingStatus.failed": "Indexación fallida",
   "agents.indexingProgressTitle": "Indexando conocimiento",
@@ -267,5 +269,6 @@
   "error.agentTestUnavailable": "El servicio de prueba del agente no está disponible.",
   "error.agentTestFailed": "No se pudo probar el agente.",
   "error.agentTestRequiresPublishedAgent": "Publica el agente antes de probarlo.",
-  "error.agentTestRequiresKnowledgeBase": "Asocia una base de conocimiento antes de probar el agente."
+  "error.agentTestRequiresKnowledgeBase": "Asocia una base de conocimiento antes de probar el agente.",
+  "error.agentTestRequiresIndexedKnowledge": "Indexa conocimiento con contenido antes de probar el agente."
 }

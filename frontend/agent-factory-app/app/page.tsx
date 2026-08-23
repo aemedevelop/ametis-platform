@@ -242,7 +242,14 @@ export default function DocumentsPage() {
           <h2>{t("repository.introTitle")}</h2>
           <p>{t("repository.introDescription")}</p>
         </div>
-        <RepositoryPill connection={driveConnection} t={t} />
+        <div className="repository-status-actions">
+          <RepositoryPill connection={driveConnection} t={t} />
+          {driveConnection?.status === "CONNECTED" ? (
+            <button className="reconnect-drive-button compact" type="button" onClick={connectDrive} disabled={connectingDrive}>
+              {connectingDrive ? t("drive.connecting") : t("drive.reconnectAction")}
+            </button>
+          ) : null}
+        </div>
       </section>
 
       {connectionNotice === "connected" ? <div className="alert success" role="status"><strong>{t("drive.connectedTitle")}</strong><span>{t("drive.connectedDescription")}</span></div> : null}
@@ -314,6 +321,9 @@ export default function DocumentsPage() {
             <div className="repository-detail">
               <span className="detail-label">{t("drive.connectedAccount")}</span>
               <strong className="connection-account">{driveConnection.accountEmail ?? t("common.notAvailable")}</strong>
+              <button className="reconnect-drive-button" type="button" onClick={connectDrive} disabled={connectingDrive}>
+                {connectingDrive ? t("drive.connecting") : t("drive.reconnectAction")}
+              </button>
               <span className="detail-label">{t("repository.namespace")}</span>
               <label className="namespace-editor">
                 <span className="sr-only">{t("repository.namespaceInputLabel")}</span>

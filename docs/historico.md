@@ -23,6 +23,7 @@ Se añadio en `README.md` una receta completa para levantar AMETIS en VPS, inclu
 - Kong usa explicitamente el resolver DNS interno de Docker `127.0.0.11` y los servicios declaran aliases de red estables.
 - `.env.example` queda alineado con los dominios publicos HTTPS de AMETIS: Hub, Agent Factory, API y Auth bajo `aemetech.com`.
 - Se añade log con tenant y carpeta al fallo `Google Drive listing failed` para diagnosticar permisos, tokens o carpetas invalidas en VPS.
+- Agent Factory muestra una accion de reconexion de Google Drive cuando ya existe una cuenta conectada, permitiendo renovar tokens expirados o revocados.
 
 ### Pendiente operativo
 

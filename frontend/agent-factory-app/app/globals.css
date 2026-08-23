@@ -117,6 +117,7 @@ input:disabled { cursor: wait; opacity: .72; }
 .repository-pill.active span { background: #2db481; box-shadow: 0 0 0 4px rgba(45,180,129,.12); }
 .repository-pill.inactive { background: #f1f3f6; color: #778398; }
 .repository-pill.inactive span { background: #9ba6b6; }
+.repository-status-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 10px; }
 
 .setup-card { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 22px; padding: 32px; }
 .setup-icon { display: grid; place-items: center; width: 56px; height: 56px; border-radius: 16px; background: var(--blue-soft); color: var(--blue); font-size: 25px; }
@@ -142,6 +143,11 @@ input:disabled { cursor: wait; opacity: .72; }
 .detail-label { display: block; margin-bottom: 10px; color: #8fa7ca; font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
 .repository-detail code { display: block; overflow-wrap: anywhere; color: #90c6ff; font-size: 14px; }
 .connection-account { display: block; margin: -3px 0 20px; overflow-wrap: anywhere; color: white; font-size: 13px; }
+.reconnect-drive-button { width: 100%; min-height: 36px; margin: -6px 0 20px; padding: 0 10px; border: 1px solid rgba(88,167,255,.42); border-radius: 8px; background: rgba(47,140,255,.16); color: #b9d8ff; font-size: 11px; font-weight: 800; }
+.reconnect-drive-button.compact { width: auto; min-height: 38px; margin: 0; padding: 0 13px; border-color: color-mix(in srgb, var(--blue) 40%, var(--line)); background: color-mix(in srgb, var(--blue-soft) 72%, transparent); color: var(--blue); white-space: nowrap; }
+.reconnect-drive-button:not(:disabled):hover { background: rgba(47,140,255,.24); color: white; }
+.reconnect-drive-button.compact:not(:disabled):hover { background: var(--blue); color: white; }
+.reconnect-drive-button:disabled { cursor: wait; opacity: .58; }
 .repository-detail p { margin-top: 22px; color: #a8bad5; font-size: 13px; line-height: 1.6; }
 .namespace-editor { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 7px; margin-bottom: 8px; }
 .namespace-editor input { min-width: 0; height: 36px; padding: 0 10px; border: 1px solid rgba(143,167,202,.32); border-radius: 8px; background: rgba(255,255,255,.06); color: white; font-size: 13px; font-weight: 700; outline: none; }

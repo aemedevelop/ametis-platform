@@ -451,7 +451,7 @@ function indexingLabel(agent: AgentDefinition, jobs: AgentIndexingJob[] | undefi
       return t("agents.indexingStatus.upToDate", { documents });
     }
     if (documents > 0 && chunks === 0) {
-      return t("agents.indexingStatus.upToDate", { documents });
+      return t("agents.indexingStatus.noChunks", { documents });
     }
     return t("agents.indexingStatus.completed", { chunks });
   }
@@ -474,6 +474,8 @@ function indexedDocumentCount(jobs: AgentIndexingJob[] | undefined): number {
 
 function isKnowledgeUpToDate(agent: AgentDefinition, jobs: AgentIndexingJob[] | undefined): boolean {
   if (agent.status !== "READY" || indexingStatus(agent, jobs) !== "COMPLETED") return false;
+  const chunks = jobs?.reduce((total, job) => total + job.chunks, 0) ?? 0;
+  if (chunks <= 0) return false;
   const referenceDate = new Date(agent.publishedAt ?? agent.updatedAt).getTime();
   if (!Number.isFinite(referenceDate)) return true;
   return jobs?.every((job) => {
