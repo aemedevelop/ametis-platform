@@ -267,7 +267,9 @@ Levantar Agent Factory con stack de plataforma:
 
 ```powershell
 docker network create ametis_internal
-docker compose --env-file .env -f ./infra/docker-compose.yml -f ./infra/platform-stack.compose.yml up -d --build agent-factory-app agent-factory-web kong
+Copy-Item .env.local.example .env.local
+# completar .env.local con credenciales locales o PRE
+docker compose --env-file .env.local -f ./infra/docker-compose.yml -f ./infra/platform-stack.compose.yml up -d --build agent-factory-app agent-factory-web kong
 ```
 
 Endpoints útiles:
@@ -280,9 +282,9 @@ Endpoints útiles:
 - Agent Factory API por Kong: `http://localhost:8440/api/agent-factory`
 - Agent Factory Web: `http://localhost:3200`
 
-Para VPS, sustituir `localhost` por la IP o dominio publico en `.env`.
+Para VPS, usar `.env.vps`; para local, usar `.env.local`.
 Dentro de Docker deben mantenerse URLs internas como `http://kong:8000`,
-`http://keycloak:8080` y `http://ametis_rag_service:8000`.
+`http://keycloak:8080` y `http://rag-service:8000`.
 
 ## Despliegue VPS - Plataforma AMETIS completa
 
@@ -309,17 +311,16 @@ En `ametis-platform`, crear el archivo real a partir de la plantilla:
 
 ```bash
 cd /opt/ametis-platform
-cp .env.example .env
+cp .env.vps.example .env.vps
 ```
 
-Editar `.env` y sustituir:
+Editar `.env.vps` y sustituir:
 
-- `<vps-host>` por la IP o dominio publico del VPS;
-- `<postgres-host>` por el host real de PostgreSQL;
+- placeholders por valores reales;
 - passwords y secretos reales;
 - credenciales OAuth de Google si Agent Factory usa Drive.
 
-No subir `.env` a Git.
+No subir `.env.vps` a Git.
 
 Valores importantes:
 
@@ -329,7 +330,7 @@ KONG_ADMIN_PORT=8441
 HUB_WEB_PORT=3010
 AGENT_FACTORY_WEB_PORT=3200
 AGENT_FACTORY_CORE_BASE_URL=http://kong:8000
-AGENT_FACTORY_AMETIS_AI_RAG_BASE_URL=http://ametis_rag_service:8000
+AGENT_FACTORY_AMETIS_AI_RAG_BASE_URL=http://rag-service:8000
 ```
 
 Regla practica:
@@ -337,7 +338,7 @@ Regla practica:
 ```text
 Navegador / exterior VPS -> http://<vps-host>:8440
 Contenedores Docker      -> http://kong:8000
-Agent Factory -> RAG     -> http://ametis_rag_service:8000
+Agent Factory -> RAG     -> http://rag-service:8000
 ```
 
 ### 3. Levantar AMETIS AI / RAG
@@ -371,7 +372,7 @@ Despues levantar Platform:
 
 ```bash
 cd /opt/ametis-platform
-docker compose --env-file .env -f ./infra/docker-compose.yml -f ./infra/platform-stack.compose.yml up -d --build
+docker compose --env-file .env.vps -f ./infra/docker-compose.yml -f ./infra/platform-stack.compose.yml up -d --build
 ```
 
 Comprobar:
@@ -430,7 +431,7 @@ cd /opt/ametis-ai/docker/compose/rag
 docker compose -f docker-compose.vps.yml up -d --build
 
 cd /opt/ametis-platform
-docker compose --env-file .env -f ./infra/docker-compose.yml -f ./infra/platform-stack.compose.yml up -d --build
+docker compose --env-file .env.vps -f ./infra/docker-compose.yml -f ./infra/platform-stack.compose.yml up -d --build
 ```
 
 No es necesario recrear `ametis_internal` en cada reinicio.
@@ -461,5 +462,5 @@ docker run --rm -v "${PWD}:/app" -w /app/apps/agent-factory-app maven:3.9.9-ecli
 Build local:
 
 ```powershell
-docker compose --env-file .env -f ./infra/docker-compose.yml -f ./infra/platform-stack.compose.yml build agent-factory-app agent-factory-web
+docker compose --env-file .env.local -f ./infra/docker-compose.yml -f ./infra/platform-stack.compose.yml build agent-factory-app agent-factory-web
 ```
