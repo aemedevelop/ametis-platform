@@ -6,7 +6,11 @@ import java.util.List;
 import java.util.UUID;
 
 public record AgentRequest(
-    @NotBlank @Size(max = 120) String name,
-    @Size(max = 1000) String description,
-    @Size(max = 2000) String instructions,
+    @NotBlank @Size(max = 80) String name,
+    @Size(max = 500) String description,
+    @NotBlank @Size(max = 500) String persona,
+    @NotBlank @Size(max = 300) String targetAudience,
+    @NotBlank @Size(max = 80) String tone,
+    @NotBlank @Size(max = 32) String responseLanguage,
+    @Size(max = 900) String instructions,
     List<UUID> knowledgeBaseIds) {}

@@ -18,13 +18,13 @@ public class AgentDefinition {
   @Column(nullable = false)
   private UUID tenantId;
 
-  @Column(nullable = false, length = 120)
+  @Column(nullable = false, length = 80)
   private String name;
 
-  @Column(length = 1000)
+  @Column(length = 500)
   private String description;
 
-  @Column(length = 2000)
+  @Column(length = 900)
   private String instructions;
 
   @Enumerated(EnumType.STRING)
@@ -44,7 +44,11 @@ public class AgentDefinition {
   protected AgentDefinition() {}
 
   public static AgentDefinition create(
-      UUID tenantId, String name, String description, String instructions, UUID createdBy) {
+      UUID tenantId,
+      String name,
+      String description,
+      String instructions,
+      UUID createdBy) {
     AgentDefinition agent = new AgentDefinition();
     agent.id = UUID.randomUUID();
     agent.tenantId = tenantId;
@@ -58,7 +62,10 @@ public class AgentDefinition {
     return agent;
   }
 
-  public void update(String name, String description, String instructions) {
+  public void update(
+      String name,
+      String description,
+      String instructions) {
     this.name = name;
     this.description = description;
     this.instructions = instructions;

@@ -24,6 +24,7 @@ export default function KnowledgeBasesPage() {
   const [selectedDocuments, setSelectedDocuments] = useState<string[]>([]);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [expandedBaseId, setExpandedBaseId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [baseToDelete, setBaseToDelete] = useState<KnowledgeBase | null>(null);
@@ -80,6 +81,7 @@ export default function KnowledgeBasesPage() {
         documentDriveFileIds: selectedDocuments
       });
       setKnowledgeBases((current) => [created, ...current]);
+      setExpandedBaseId(created.id);
       setName("");
       setDescription("");
       setSelectedDocuments([]);
@@ -97,6 +99,7 @@ export default function KnowledgeBasesPage() {
     try {
       await deleteKnowledgeBase(baseToDelete.id);
       setKnowledgeBases((current) => current.filter((item) => item.id !== baseToDelete.id));
+      setExpandedBaseId((current) => current === baseToDelete.id ? null : current);
       setBaseToDelete(null);
     } catch (requestError) {
       setError(requestError);
@@ -109,6 +112,10 @@ export default function KnowledgeBasesPage() {
     setSelectedDocuments((current) => current.includes(driveFileId)
       ? current.filter((item) => item !== driveFileId)
       : [...current, driveFileId]);
+  }
+
+  function toggleBase(baseId: string) {
+    setExpandedBaseId((current) => current === baseId ? null : baseId);
   }
 
   if (loading) {
@@ -178,23 +185,50 @@ export default function KnowledgeBasesPage() {
           </div>
           {knowledgeBases.length ? (
             <div className="knowledge-items">
-              {knowledgeBases.map((base) => (
-                <article className="knowledge-item" key={base.id}>
-                  <div>
-                    <span className="status-badge stored">{t(`knowledge.status.${base.status.toLowerCase()}`)}</span>
-                    <h3>{base.name}</h3>
-                    <p>{base.description || t("knowledge.noDescription")}</p>
-                    <small>{t("knowledge.updatedAt", { date: formatDate(base.updatedAt, locale) })}</small>
-                  </div>
-                  <div className="knowledge-meta">
-                    <strong>{t("knowledge.documentCount", { count: base.documentCount })}</strong>
-                    <span>{base.documentNames.slice(0, 3).join(", ") || t("knowledge.noLinkedDocuments")}</span>
-                    <button className="icon-button danger" type="button" onClick={() => setBaseToDelete(base)} disabled={deletingId === base.id} aria-label={t("knowledge.delete", { name: base.name })} title={t("knowledge.delete", { name: base.name })}>
-                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" /></svg>
-                    </button>
-                  </div>
-                </article>
-              ))}
+              {knowledgeBases.map((base) => {
+                const expanded = expandedBaseId === base.id;
+                return (
+                  <article className={`knowledge-item base-inventory-item ${expanded ? "expanded" : "collapsed"}`} key={base.id}>
+                    <div className="agent-inventory-header">
+                      <button
+                        className="agent-toggle"
+                        type="button"
+                        onClick={() => toggleBase(base.id)}
+                        aria-expanded={expanded}
+                        aria-controls={`base-panel-${base.id}`}
+                      >
+                        <span className="agent-toggle-icon" aria-hidden="true">
+                          <svg viewBox="0 0 24 24"><path d="m8 10 4 4 4-4" /></svg>
+                        </span>
+                        <span className="agent-toggle-copy">
+                          <span className="agent-lifecycle-badge created-unindexed">{t(`knowledge.status.${base.status.toLowerCase()}`)}</span>
+                          <strong>{base.name}</strong>
+                          <small>{base.description || t("knowledge.noDescription")}</small>
+                        </span>
+                      </button>
+                      <div className="agent-collapsed-meta">
+                        <strong>{t("knowledge.documentCount", { count: base.documentCount })}</strong>
+                        <span>{base.documentNames.slice(0, 2).join(", ") || t("knowledge.noLinkedDocuments")}</span>
+                      </div>
+                    </div>
+
+                    {expanded ? (
+                      <div className="base-expanded-panel" id={`base-panel-${base.id}`}>
+                        <div>
+                          <small>{t("knowledge.updatedAt", { date: formatDate(base.updatedAt, locale) })}</small>
+                        </div>
+                        <div className="knowledge-meta">
+                          <strong>{t("knowledge.documentCount", { count: base.documentCount })}</strong>
+                          <span>{base.documentNames.slice(0, 3).join(", ") || t("knowledge.noLinkedDocuments")}</span>
+                          <button className="icon-button danger" type="button" onClick={() => setBaseToDelete(base)} disabled={deletingId === base.id} aria-label={t("knowledge.delete", { name: base.name })} title={t("knowledge.delete", { name: base.name })}>
+                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" /></svg>
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+                  </article>
+                );
+              })}
             </div>
           ) : (
             <div className="empty-state compact"><span aria-hidden="true">0</span><strong>{t("knowledge.emptyTitle")}</strong><p>{t("knowledge.emptyDescription")}</p></div>

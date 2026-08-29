@@ -298,16 +298,16 @@ Si aparece `Parametro no valido: redirect_uri`, revisar que el dominio, protocol
 
 ## 10. Google OAuth de Agent Factory
 
-En Google Cloud, el OAuth Client usado por Agent Factory debe tener como redirect autorizado:
+En Google Cloud, el OAuth Client usado por Agent Factory debe tener como redirect autorizado el dominio publico que enruta `/api/agent-factory` hacia Kong/backend:
 
 ```text
-https://ametis.agent-factory.aemetech.com/api/agent-factory/drive/oauth/callback
+https://ametis.api.aemetech.com/api/agent-factory/drive/oauth/callback
 ```
 
 En `.env.vps` de platform:
 
 ```env
-AGENT_FACTORY_GOOGLE_OAUTH_REDIRECT_URI=https://ametis.agent-factory.aemetech.com/api/agent-factory/drive/oauth/callback
+AGENT_FACTORY_GOOGLE_OAUTH_REDIRECT_URI=https://ametis.api.aemetech.com/api/agent-factory/drive/oauth/callback
 AGENT_FACTORY_GOOGLE_FRONTEND_RETURN_URI=https://ametis.agent-factory.aemetech.com
 ```
 
@@ -385,6 +385,51 @@ docker compose --env-file .env.vps \
   -f ./infra/docker-compose.yml \
   -f ./infra/platform-stack.compose.yml \
   up -d --force-recreate keycloak
+```
+
+## 12.1. Comandos locales desde Windows
+
+Estos comandos se ejecutan desde Windows PowerShell y usan los archivos locales, no los `.env.vps`.
+
+Si cambia RAG local o la logica de prompts:
+
+```powershell
+cd C:\Users\jarce\DATOS\AEME\DEV\ametis-ai\docker\compose\rag
+docker network inspect ametis_internal 2>$null; if ($LASTEXITCODE -ne 0) { docker network create ametis_internal }
+docker compose -f docker-compose.local.yml up -d --build --force-recreate rag-service
+```
+
+Si cambia Agent Factory backend o frontend en local:
+
+```powershell
+cd C:\Users\jarce\DATOS\AEME\DEV\ametis-platform
+docker network inspect ametis_internal 2>$null; if ($LASTEXITCODE -ne 0) { docker network create ametis_internal }
+docker compose --env-file .env.local `
+  -f ./infra/docker-compose.yml `
+  -f ./infra/platform-stack.compose.yml `
+  up -d --build --force-recreate agent-factory-app agent-factory-web
+```
+
+Si cambia Kong en local:
+
+```powershell
+cd C:\Users\jarce\DATOS\AEME\DEV\ametis-platform
+docker compose --env-file .env.local `
+  -f ./infra/docker-compose.yml `
+  -f ./infra/platform-stack.compose.yml `
+  up -d --force-recreate kong
+```
+
+Validaciones locales desde Windows:
+
+```powershell
+docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+curl.exe -i http://localhost:8440/v1/health
+curl.exe -i http://localhost:8440/api/agent-factory/drive/connection
+curl.exe -i http://127.0.0.1:8000/health
+docker logs ametis-agent-factory-app --tail 160
+docker logs ametis-kong --tail 120
+docker logs ametis_rag_service --tail 120
 ```
 
 ## 13. Validaciones basicas

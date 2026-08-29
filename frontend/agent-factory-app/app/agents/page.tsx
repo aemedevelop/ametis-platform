@@ -22,6 +22,15 @@ import {
 
 type Translate = (key: string, vars?: Record<string, string | number>) => string;
 
+const AGENT_FIELD_LIMITS = {
+  name: 80,
+  description: 500,
+  persona: 500,
+  targetAudience: 300,
+  instructions: 900,
+  testQuestion: 500
+} as const;
+
 export default function AgentsPage() {
   const t = useT();
   const { locale } = useLocale();
@@ -31,8 +40,13 @@ export default function AgentsPage() {
   const [selectedBases, setSelectedBases] = useState<string[]>([]);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [persona, setPersona] = useState("");
+  const [targetAudience, setTargetAudience] = useState("");
+  const [tone, setTone] = useState("professional");
+  const [responseLanguage, setResponseLanguage] = useState("auto");
   const [instructions, setInstructions] = useState("");
   const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
+  const [expandedAgentId, setExpandedAgentId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [agentToDelete, setAgentToDelete] = useState<AgentDefinition | null>(null);
@@ -132,15 +146,21 @@ export default function AgentsPage() {
       const payload = {
         name: name.trim(),
         description: description.trim(),
+        persona: persona.trim(),
+        targetAudience: targetAudience.trim(),
+        tone,
+        responseLanguage,
         instructions: instructions.trim(),
         knowledgeBaseIds: selectedBases
       };
       if (editingAgentId) {
         const updated = await updateAgent(editingAgentId, payload);
         setAgents((current) => current.map((agent) => agent.id === editingAgentId ? updated : agent));
+        setExpandedAgentId(updated.id);
       } else {
         const created = await createAgent(payload);
         setAgents((current) => [created, ...current]);
+        setExpandedAgentId(created.id);
       }
       resetForm();
     } catch (requestError) {
@@ -152,8 +172,13 @@ export default function AgentsPage() {
 
   function edit(agent: AgentDefinition) {
     setEditingAgentId(agent.id);
+    setExpandedAgentId(agent.id);
     setName(agent.name);
     setDescription(agent.description ?? "");
+    setPersona(agent.persona ?? "");
+    setTargetAudience(agent.targetAudience ?? "");
+    setTone(agent.tone ?? "professional");
+    setResponseLanguage(agent.responseLanguage ?? "auto");
     setInstructions(agent.instructions ?? "");
     setSelectedBases(agent.knowledgeBaseIds ?? []);
     setError(null);
@@ -163,6 +188,10 @@ export default function AgentsPage() {
     setEditingAgentId(null);
     setName("");
     setDescription("");
+    setPersona("");
+    setTargetAudience("");
+    setTone("professional");
+    setResponseLanguage("auto");
     setInstructions("");
     setSelectedBases([]);
   }
@@ -174,6 +203,7 @@ export default function AgentsPage() {
     try {
       await deleteAgent(agentToDelete.id);
       setAgents((current) => current.filter((item) => item.id !== agentToDelete.id));
+      setExpandedAgentId((current) => current === agentToDelete.id ? null : current);
       setAgentToDelete(null);
     } catch (requestError) {
       setError(requestError);
@@ -184,6 +214,7 @@ export default function AgentsPage() {
 
   async function publish(agent: AgentDefinition) {
     setPublishingId(agent.id);
+    setExpandedAgentId(agent.id);
     setError(null);
     try {
       const published = await publishAgent(agent.id);
@@ -198,6 +229,7 @@ export default function AgentsPage() {
 
   async function indexKnowledge(agent: AgentDefinition) {
     setIndexingId(agent.id);
+    setExpandedAgentId(agent.id);
     setError(null);
     try {
       const response = await createAgentIndexingJobs(agent.id);
@@ -214,6 +246,7 @@ export default function AgentsPage() {
     const question = (testQuestions[agent.id] ?? "").trim();
     if (!question) return;
     setTestingAgentId(agent.id);
+    setExpandedAgentId(agent.id);
     setError(null);
     try {
       const response = await testAgent(agent.id, question);
@@ -230,6 +263,10 @@ export default function AgentsPage() {
     setSelectedBases((current) => current.includes(id)
       ? current.filter((item) => item !== id)
       : [...current, id]);
+  }
+
+  function toggleAgent(agentId: string) {
+    setExpandedAgentId((current) => current === agentId ? null : agentId);
   }
 
   if (loading) {
@@ -261,21 +298,64 @@ export default function AgentsPage() {
               {t("agents.nameLabel")}
               <span className="field-help" tabIndex={0} aria-label={t("agents.namePlaceholder")} title={t("agents.namePlaceholder")}>?</span>
             </span>
-            <input value={name} onChange={(event) => setName(event.target.value)} placeholder={t("agents.namePlaceholder")} />
+            <input value={name} onChange={(event) => setName(event.target.value)} placeholder={t("agents.namePlaceholder")} maxLength={AGENT_FIELD_LIMITS.name} />
+            <FieldLimit value={name} max={AGENT_FIELD_LIMITS.name} />
           </label>
           <label className="form-field">
             <span className="field-label">
               {t("agents.descriptionLabel")}
               <span className="field-help" tabIndex={0} aria-label={t("agents.descriptionPlaceholder")} title={t("agents.descriptionPlaceholder")}>?</span>
             </span>
-            <textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder={t("agents.descriptionPlaceholder")} />
+            <textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder={t("agents.descriptionPlaceholder")} maxLength={AGENT_FIELD_LIMITS.description} />
+            <FieldLimit value={description} max={AGENT_FIELD_LIMITS.description} />
           </label>
+          <label className="form-field">
+            <span className="field-label">
+              {t("agents.personaLabel")}
+              <span className="field-help" tabIndex={0} aria-label={t("agents.personaHelp")} title={t("agents.personaHelp")}>?</span>
+            </span>
+            <textarea value={persona} onChange={(event) => setPersona(event.target.value)} placeholder={t("agents.personaPlaceholder")} maxLength={AGENT_FIELD_LIMITS.persona} />
+            <FieldLimit value={persona} max={AGENT_FIELD_LIMITS.persona} />
+          </label>
+          <label className="form-field">
+            <span className="field-label">
+              {t("agents.targetAudienceLabel")}
+              <span className="field-help" tabIndex={0} aria-label={t("agents.targetAudienceHelp")} title={t("agents.targetAudienceHelp")}>?</span>
+            </span>
+            <input value={targetAudience} onChange={(event) => setTargetAudience(event.target.value)} placeholder={t("agents.targetAudiencePlaceholder")} maxLength={AGENT_FIELD_LIMITS.targetAudience} />
+            <FieldLimit value={targetAudience} max={AGENT_FIELD_LIMITS.targetAudience} />
+          </label>
+          <div className="form-split">
+            <label className="form-field">
+              <span className="field-label">
+                {t("agents.toneLabel")}
+                <span className="field-help" tabIndex={0} aria-label={t("agents.toneHelp")} title={t("agents.toneHelp")}>?</span>
+              </span>
+              <select value={tone} onChange={(event) => setTone(event.target.value)}>
+                {["professional", "friendly", "technical", "concise"].map((option) => (
+                  <option key={option} value={option}>{t(`agents.tone.${option}`)}</option>
+                ))}
+              </select>
+            </label>
+            <label className="form-field">
+              <span className="field-label">
+                {t("agents.responseLanguageLabel")}
+                <span className="field-help" tabIndex={0} aria-label={t("agents.responseLanguageHelp")} title={t("agents.responseLanguageHelp")}>?</span>
+              </span>
+              <select value={responseLanguage} onChange={(event) => setResponseLanguage(event.target.value)}>
+                {["auto", "es", "en"].map((option) => (
+                  <option key={option} value={option}>{t(`agents.responseLanguage.${option}`)}</option>
+                ))}
+              </select>
+            </label>
+          </div>
           <label className="form-field">
             <span className="field-label">
               {t("agents.instructionsLabel")}
               <span className="field-help" tabIndex={0} aria-label={t("agents.instructionsPlaceholder")} title={t("agents.instructionsPlaceholder")}>?</span>
             </span>
-            <textarea value={instructions} onChange={(event) => setInstructions(event.target.value)} placeholder={t("agents.instructionsPlaceholder")} />
+            <textarea value={instructions} onChange={(event) => setInstructions(event.target.value)} placeholder={t("agents.instructionsPlaceholder")} maxLength={AGENT_FIELD_LIMITS.instructions} />
+            <FieldLimit value={instructions} max={AGENT_FIELD_LIMITS.instructions} />
           </label>
           <div className="document-picker">
             <div>
@@ -297,7 +377,7 @@ export default function AgentsPage() {
             {editingAgentId ? (
               <button className="secondary-button" type="button" onClick={resetForm} disabled={saving}>{t("common.cancel")}</button>
             ) : null}
-            <button className="primary-button" type="submit" disabled={saving || !name.trim()}>
+            <button className="primary-button" type="submit" disabled={saving || !name.trim() || !persona.trim() || !targetAudience.trim()}>
               {saving ? t(editingAgentId ? "agents.updating" : "agents.creating") : t(editingAgentId ? "agents.updateAction" : "agents.createAction")}
             </button>
           </div>
@@ -315,92 +395,128 @@ export default function AgentsPage() {
           </div>
           {agents.length ? (
             <div className="knowledge-items">
-              {agents.map((agent) => (
-                <article className={`knowledge-item ${isAgentReadyToTest(agent, indexingJobsByAgent[agent.id]) ? "ready-to-test" : ""}`} key={agent.id}>
-                  <div>
-                    <span className="status-badge stored">{t(`agents.status.${agent.status.toLowerCase()}`)}</span>
-                    <h3>{agent.name}</h3>
-                    <p>{agent.description || t("agents.noDescription")}</p>
-                    <small>{t(agent.publishedAt ? "agents.publishedAt" : "agents.updatedAt", { date: formatDate(agent.publishedAt ?? agent.updatedAt, locale) })}</small>
-                    {isAgentIndexing(agent, indexingJobsByAgent[agent.id]) ? (
-                      <div className="agent-indexing-progress" role="status" aria-live="polite">
-                        <span className="spinner small" aria-hidden="true" />
+              {agents.map((agent) => {
+                const expanded = expandedAgentId === agent.id;
+                return (
+                  <article className={`knowledge-item agent-inventory-item ${expanded ? "expanded" : "collapsed"} ${isAgentReadyToTest(agent, indexingJobsByAgent[agent.id]) ? "ready-to-test" : ""}`} key={agent.id}>
+                    <div className="agent-inventory-header">
+                      <button
+                        className="agent-toggle"
+                        type="button"
+                        onClick={() => toggleAgent(agent.id)}
+                        aria-expanded={expanded}
+                        aria-controls={`agent-panel-${agent.id}`}
+                      >
+                        <span className="agent-toggle-icon" aria-hidden="true">
+                          <svg viewBox="0 0 24 24"><path d="m8 10 4 4 4-4" /></svg>
+                        </span>
+                        <span className="agent-toggle-copy">
+                          <span className={`agent-lifecycle-badge ${agentLifecycleState(agent, indexingJobsByAgent[agent.id])}`}>
+                            {agentLifecycleLabel(agent, indexingJobsByAgent[agent.id], t)}
+                          </span>
+                          <strong>{agent.name}</strong>
+                          <small>{agent.description || t("agents.noDescription")}</small>
+                        </span>
+                      </button>
+                      <div className="agent-collapsed-meta">
+                        <strong>{t("agents.knowledgeBaseCount", { count: agent.knowledgeBaseCount })}</strong>
+                        <span>{agent.knowledgeBaseNames.slice(0, 2).join(", ") || t("agents.noLinkedBases")}</span>
+                      </div>
+                    </div>
+
+                    {expanded ? (
+                      <div className="agent-expanded-panel" id={`agent-panel-${agent.id}`}>
                         <div>
-                          <strong>{t("agents.indexingProgressTitle")}</strong>
-                          <span>{t("agents.indexingProgressDescription")}</span>
+                          <div className="agent-context-profile">
+                            <span>{t("agents.personaSummary", { value: agent.persona || t("common.notAvailable") })}</span>
+                            <span>{t("agents.audienceSummary", { value: agent.targetAudience || t("common.notAvailable") })}</span>
+                            <span>{t("agents.toneSummary", { value: t(`agents.tone.${agent.tone || "professional"}`) })}</span>
+                            <span>{t("agents.languageSummary", { value: t(`agents.responseLanguage.${agent.responseLanguage || "auto"}`) })}</span>
+                          </div>
+                          <small>{t(agent.publishedAt ? "agents.publishedAt" : "agents.updatedAt", { date: formatDate(agent.publishedAt ?? agent.updatedAt, locale) })}</small>
+                          {isAgentIndexing(agent, indexingJobsByAgent[agent.id]) ? (
+                            <div className="agent-indexing-progress" role="status" aria-live="polite">
+                              <span className="spinner small" aria-hidden="true" />
+                              <div>
+                                <strong>{t("agents.indexingProgressTitle")}</strong>
+                                <span>{t("agents.indexingProgressDescription")}</span>
+                              </div>
+                            </div>
+                          ) : null}
+                          {isAgentReadyToTest(agent, indexingJobsByAgent[agent.id]) ? (
+                            <div className="agent-readiness">
+                              <strong>{t("agents.readyTitle")}</strong>
+                              <span>{t("agents.readyDescription", { documents: indexedDocumentCount(indexingJobsByAgent[agent.id]) })}</span>
+                            </div>
+                          ) : null}
                         </div>
-                      </div>
-                    ) : null}
-                    {isAgentReadyToTest(agent, indexingJobsByAgent[agent.id]) ? (
-                      <div className="agent-readiness">
-                        <strong>{t("agents.readyTitle")}</strong>
-                        <span>{t("agents.readyDescription", { documents: indexedDocumentCount(indexingJobsByAgent[agent.id]) })}</span>
-                      </div>
-                    ) : null}
-                  </div>
-                  <div className="knowledge-meta">
-                    <strong>{t("agents.knowledgeBaseCount", { count: agent.knowledgeBaseCount })}</strong>
-                    <span>{agent.knowledgeBaseNames.slice(0, 3).join(", ") || t("agents.noLinkedBases")}</span>
-                    {agent.status === "READY" ? (
-                      <small className={`indexing-status ${indexingStatus(agent, indexingJobsByAgent[agent.id]).toLowerCase()}`}>
-                        {indexingLabel(agent, indexingJobsByAgent[agent.id], t)}
-                      </small>
-                    ) : null}
-                    <div className="item-actions">
-                      {agent.status === "DRAFT" ? (
-                        <button className="small-action" type="button" onClick={() => publish(agent)} disabled={publishingId === agent.id || agent.knowledgeBaseCount === 0}>
-                          {publishingId === agent.id ? t("agents.publishing") : t("agents.publish")}
-                        </button>
-                      ) : null}
-                      {agent.status === "READY" ? (
-                        <button
-                          className={`small-action ${isKnowledgeUpToDate(agent, indexingJobsByAgent[agent.id]) ? "success-action" : ""}`}
-                          type="button"
-                          onClick={() => indexKnowledge(agent)}
-                          disabled={indexingId === agent.id || agent.knowledgeBaseCount === 0 || isKnowledgeUpToDate(agent, indexingJobsByAgent[agent.id])}
-                          title={isKnowledgeUpToDate(agent, indexingJobsByAgent[agent.id]) ? t("agents.indexKnowledgeDisabled") : t("agents.indexKnowledge")}
-                        >
-                          {indexingId === agent.id
-                            ? t("agents.indexingQueued")
-                            : isKnowledgeUpToDate(agent, indexingJobsByAgent[agent.id])
-                              ? t("agents.indexKnowledgeDone")
-                              : t("agents.indexKnowledge")}
-                        </button>
-                      ) : null}
-                      <button className="icon-button" type="button" onClick={() => edit(agent)} disabled={saving && editingAgentId === agent.id} aria-label={t("agents.edit", { name: agent.name })} title={t("agents.edit", { name: agent.name })}>
-                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4l11-11a2.8 2.8 0 0 0-4-4L4 16v4Z" /><path d="M13.5 6.5l4 4" /></svg>
-                      </button>
-                      <button className="icon-button danger" type="button" onClick={() => setAgentToDelete(agent)} disabled={deletingId === agent.id} aria-label={t("agents.delete", { name: agent.name })} title={t("agents.delete", { name: agent.name })}>
-                        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" /></svg>
-                      </button>
-                    </div>
-                  </div>
-                  {isAgentReadyToTest(agent, indexingJobsByAgent[agent.id]) ? (
-                    <div className="agent-test-panel">
-                      <div>
-                        <strong>{t("agents.testTitle")}</strong>
-                        <span>{t("agents.testDescription")}</span>
-                      </div>
-                      <form className="agent-test-input" onSubmit={(event) => { event.preventDefault(); test(agent); }}>
-                        <input
-                          value={testQuestions[agent.id] ?? ""}
-                          onChange={(event) => setTestQuestions((current) => ({ ...current, [agent.id]: event.target.value }))}
-                          placeholder={t("agents.testPlaceholder")}
-                        />
-                        <button className="small-action" type="submit" disabled={testingAgentId === agent.id || !(testQuestions[agent.id] ?? "").trim()}>
-                          {testingAgentId === agent.id ? t("agents.testing") : t("agents.testAction")}
-                        </button>
-                      </form>
-                      {testResponses[agent.id] ? (
-                        <div className="agent-test-answer">
-                          <span>{t("agents.testAnswerLabel")}</span>
-                          <p>{testResponses[agent.id].answer}</p>
+                        <div className="knowledge-meta">
+                          <strong>{t("agents.knowledgeBaseCount", { count: agent.knowledgeBaseCount })}</strong>
+                          <span>{agent.knowledgeBaseNames.slice(0, 3).join(", ") || t("agents.noLinkedBases")}</span>
+                          {agent.status === "READY" ? (
+                            <small className={`indexing-status ${indexingStatus(agent, indexingJobsByAgent[agent.id]).toLowerCase()}`}>
+                              {indexingLabel(agent, indexingJobsByAgent[agent.id], t)}
+                            </small>
+                          ) : null}
+                          <div className="item-actions">
+                            {agent.status === "DRAFT" ? (
+                              <button className="small-action" type="button" onClick={() => publish(agent)} disabled={publishingId === agent.id || agent.knowledgeBaseCount === 0}>
+                                {publishingId === agent.id ? t("agents.publishing") : t("agents.publish")}
+                              </button>
+                            ) : null}
+                            {agent.status === "READY" ? (
+                              <button
+                                className={`small-action ${isKnowledgeUpToDate(agent, indexingJobsByAgent[agent.id]) ? "success-action" : ""}`}
+                                type="button"
+                                onClick={() => indexKnowledge(agent)}
+                                disabled={indexingId === agent.id || agent.knowledgeBaseCount === 0 || isKnowledgeUpToDate(agent, indexingJobsByAgent[agent.id])}
+                                title={isKnowledgeUpToDate(agent, indexingJobsByAgent[agent.id]) ? t("agents.indexKnowledgeDisabled") : t("agents.indexKnowledge")}
+                              >
+                                {indexingId === agent.id
+                                  ? t("agents.indexingQueued")
+                                  : isKnowledgeUpToDate(agent, indexingJobsByAgent[agent.id])
+                                    ? t("agents.indexKnowledgeDone")
+                                    : t("agents.indexKnowledge")}
+                              </button>
+                            ) : null}
+                            <button className="icon-button" type="button" onClick={() => edit(agent)} disabled={saving && editingAgentId === agent.id} aria-label={t("agents.edit", { name: agent.name })} title={t("agents.edit", { name: agent.name })}>
+                              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4l11-11a2.8 2.8 0 0 0-4-4L4 16v4Z" /><path d="M13.5 6.5l4 4" /></svg>
+                            </button>
+                            <button className="icon-button danger" type="button" onClick={() => setAgentToDelete(agent)} disabled={deletingId === agent.id} aria-label={t("agents.delete", { name: agent.name })} title={t("agents.delete", { name: agent.name })}>
+                              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" /></svg>
+                            </button>
+                          </div>
                         </div>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </article>
-              ))}
+                        {isAgentReadyToTest(agent, indexingJobsByAgent[agent.id]) ? (
+                          <div className="agent-test-panel">
+                            <div>
+                              <strong>{t("agents.testTitle")}</strong>
+                              <span>{t("agents.testDescription")}</span>
+                            </div>
+                            <form className="agent-test-input" onSubmit={(event) => { event.preventDefault(); test(agent); }}>
+                              <input
+                                value={testQuestions[agent.id] ?? ""}
+                                onChange={(event) => setTestQuestions((current) => ({ ...current, [agent.id]: event.target.value }))}
+                                placeholder={t("agents.testPlaceholder")}
+                                maxLength={AGENT_FIELD_LIMITS.testQuestion}
+                              />
+                              <button className="small-action" type="submit" disabled={testingAgentId === agent.id || !(testQuestions[agent.id] ?? "").trim()}>
+                                {testingAgentId === agent.id ? t("agents.testing") : t("agents.testAction")}
+                              </button>
+                            </form>
+                            {testResponses[agent.id] ? (
+                              <div className="agent-test-answer">
+                                <span>{t("agents.testAnswerLabel")}</span>
+                                <p>{testResponses[agent.id].answer}</p>
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </article>
+                );
+              })}
             </div>
           ) : (
             <div className="empty-state compact"><span aria-hidden="true">0</span><strong>{t("agents.emptyTitle")}</strong><p>{t("agents.emptyDescription")}</p></div>
@@ -422,6 +538,10 @@ export default function AgentsPage() {
       ) : null}
     </div>
   );
+}
+
+function FieldLimit({ value, max }: { value: string; max: number }) {
+  return <small className="field-limit">{value.length}/{max}</small>;
 }
 
 function messageOf(error: unknown, t: Translate): string {
@@ -482,4 +602,16 @@ function isKnowledgeUpToDate(agent: AgentDefinition, jobs: AgentIndexingJob[] | 
     const finishedDate = job.finished_at ? new Date(job.finished_at).getTime() : 0;
     return finishedDate >= referenceDate;
   }) ?? false;
+}
+
+function agentLifecycleState(agent: AgentDefinition, jobs: AgentIndexingJob[] | undefined): string {
+  if (isKnowledgeUpToDate(agent, jobs)) return "indexed";
+  if (agent.status === "READY") return "ready-unindexed";
+  return "created-unindexed";
+}
+
+function agentLifecycleLabel(agent: AgentDefinition, jobs: AgentIndexingJob[] | undefined, t: Translate): string {
+  if (isKnowledgeUpToDate(agent, jobs)) return t("agents.lifecycle.readyIndexed");
+  if (agent.status === "READY") return t("agents.lifecycle.readyUnindexed");
+  return t("agents.lifecycle.createdUnindexed");
 }

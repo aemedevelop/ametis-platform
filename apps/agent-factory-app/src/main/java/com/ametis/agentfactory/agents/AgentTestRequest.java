@@ -4,4 +4,4 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 public record AgentTestRequest(
-    @NotBlank @Size(max = 1000) String question) {}
+    @NotBlank @Size(max = 500) String question) {}

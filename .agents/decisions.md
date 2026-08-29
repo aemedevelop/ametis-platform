@@ -37,3 +37,6 @@ Use `http://rag-service:8000` from Java services. Avoid container names with und
 
 Agent Factory migrations may create foreign keys against existing tables. The runtime migration user must have `REFERENCES` on referenced tables, or the migration can fail even if normal CRUD privileges exist.
 
+## Agent Context Profiles
+
+Agent context profile data is stored in a separate `agent_context_profiles` table instead of adding columns to `agents`. This keeps context engineering metadata modular and avoids ownership problems when Flyway runs under an app user that can create tables but does not own older tables.

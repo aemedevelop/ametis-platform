@@ -1,5 +1,94 @@
 # Histórico de cambios - AMETIS Platform
 
+## 2026-08-29 - Runbooks / Reinicio aislado de servicios Docker
+
+### Contexto
+
+Al levantar `core-api`, `kong` o `agent-factory-app` con `docker compose up`, Compose seguia las dependencias declaradas en los archivos del stack y podia intentar arrancar o recrear servicios que ya estaban levantados, especialmente Keycloak.
+
+### Ajuste
+
+- `.agents/runbooks.md` documenta el uso de `--no-deps` para refrescar un servicio sin tocar sus dependencias.
+- Se agregaron comandos locales desde Windows para reiniciar solo `core-api`, solo `kong` o solo Agent Factory.
+- Se dejo aclarado que `platform-stack.compose.yml` depende del compose base para resolver servicios como `keycloak`; para ejecuciones sueltas se puede usar `infra/compose/agent-factory-app.compose.yml`.
+
+## 2026-08-28 - Agent Factory / Inventario de agentes colapsable
+
+### Contexto
+
+La vista de Agentes mostraba todos los agentes del inventario desplegados, lo que dificultaba revisar la lista a medida que se crean mas agentes.
+
+### Ajuste
+
+- El inventario funciona como acordeon de una sola tarjeta abierta.
+- Al crear, editar, publicar, indexar o probar un agente, ese agente queda desplegado automaticamente.
+- Los demas agentes quedan colapsados, pero el usuario puede desplegar cualquiera manualmente.
+- El badge principal del inventario muestra estado combinado: `Creado · Sin indexar`, `Listo · Sin indexar` o `Listo · Indexado`, evitando el fondo blanco excesivo en tema oscuro.
+
+## 2026-08-29 - Agent Factory / Listados y etiquetas visuales
+
+### Contexto
+
+Los listados de bases de conocimiento y otros modulos compartian etiquetas con fondos demasiado claros en tema oscuro.
+
+### Ajuste
+
+- El listado de bases de conocimiento usa el mismo patron colapsable del inventario de agentes.
+- Al crear una base nueva, queda desplegada automaticamente y las demas permanecen colapsadas.
+- El encabezado de bases cambia de `Inventario` a `Biblioteca de contexto`.
+- Las etiquetas compartidas de estado, repositorio y carga de archivos usan fondos translucidos adaptados al tema.
+
+## 2026-08-28 - Runbooks / Reinicio local desde Windows
+
+### Contexto
+
+Se necesitaba dejar evidencia operativa de los comandos equivalentes a produccion para reiniciar contenedores desde local en Windows.
+
+### Ajuste
+
+- `.agents/runbooks.md` incluye reinicio local de Agent Factory y Kong desde PowerShell.
+- `docs/vps-produccion-ametis.md` incluye la seccion `12.1. Comandos locales desde Windows`, con comandos para RAG, Agent Factory, Kong y validaciones locales.
+
+## 2026-08-28 - Agent Factory / Perfil de contexto del agente
+
+### Contexto
+
+Se inicio la evolucion de la gestion de agentes hacia ingenieria de contexto. Hasta ahora el agente tenia nombre, descripcion, instrucciones y bases de conocimiento; faltaba una ficha operativa mas estructurada para preparar variantes de comportamiento y sincronizar intencion hacia AMETIS AI.
+
+### Ajuste
+
+- Se agrego la tabla `agent_context_profiles` para guardar persona, audiencia objetivo, tono e idioma de respuesta por agente.
+- Se evita alterar directamente la tabla historica `agents`, reduciendo riesgo en VPS cuando Flyway no es owner de tablas existentes.
+- El backend crea, actualiza, lista, borra y sincroniza el perfil junto con el agente.
+- La pantalla de Agentes permite editar la ficha de contexto y muestra un resumen en chips por agente.
+- Se ampliaron los catalogos i18n `es` y `en`.
+
+### Validacion
+
+- `npm.cmd run typecheck` ejecutado correctamente en `frontend/agent-factory-app`.
+- Tests Maven de `apps/agent-factory-app` ejecutados correctamente via Docker.
+- `npm.cmd run lint` queda bloqueado por una regla preexistente en `frontend/agent-factory-app/components/session-guard.tsx`, no tocada en este ajuste.
+
+## 2026-08-28 - Agent Factory / Perfil de contexto del agente
+
+### Contexto
+
+Se inicio la evolucion de la gestion de agentes hacia ingenieria de contexto. Hasta ahora el agente tenia nombre, descripcion, instrucciones y bases de conocimiento; faltaba una ficha operativa mas estructurada para preparar variantes de comportamiento y sincronizar intencion hacia AMETIS AI.
+
+### Ajuste
+
+- Se agrego la tabla `agent_context_profiles` para guardar persona, audiencia objetivo, tono e idioma de respuesta por agente.
+- Se evita alterar directamente la tabla historica `agents`, reduciendo riesgo en VPS cuando Flyway no es owner de tablas existentes.
+- El backend crea, actualiza, lista, borra y sincroniza el perfil junto con el agente.
+- La pantalla de Agentes permite editar la ficha de contexto y muestra un resumen en chips por agente.
+- Se ampliaron los catalogos i18n `es` y `en`.
+
+### Validacion
+
+- `npm.cmd run typecheck` ejecutado correctamente en `frontend/agent-factory-app`.
+- Tests Maven de `apps/agent-factory-app` ejecutados correctamente via Docker.
+- `npm.cmd run lint` queda bloqueado por una regla preexistente en `frontend/agent-factory-app/components/session-guard.tsx`, no tocada en este ajuste.
+
 ## 2026-08-23 - Hub orientado a Decision Intelligence
 
 ### Contexto

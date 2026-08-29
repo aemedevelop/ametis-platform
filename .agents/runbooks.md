@@ -7,11 +7,58 @@ docker network create ametis_internal
 docker compose --env-file .env.local -f ./infra/docker-compose.yml -f ./infra/platform-stack.compose.yml up -d --build agent-factory-app agent-factory-web kong
 ```
 
+Restart only Agent Factory after local backend/frontend changes from Windows PowerShell:
+
+```powershell
+cd C:\Users\jarce\DATOS\AEME\DEV\ametis-platform
+docker compose --env-file .env.local `
+  -f ./infra/docker-compose.yml `
+  -f ./infra/platform-stack.compose.yml `
+  up -d --build --force-recreate --no-deps agent-factory-app agent-factory-web
+```
+
+Restart only Kong after local route/config changes from Windows PowerShell:
+
+```powershell
+cd C:\Users\jarce\DATOS\AEME\DEV\ametis-platform
+docker compose --env-file .env.local `
+  -f ./infra/docker-compose.yml `
+  -f ./infra/platform-stack.compose.yml `
+  up -d --force-recreate --no-deps kong
+```
+
+Restart only Core API after local backend changes from Windows PowerShell:
+
+```powershell
+cd C:\Users\jarce\DATOS\AEME\DEV\ametis-platform
+docker compose --env-file .env.local `
+  -f ./infra/docker-compose.yml `
+  up -d --build --force-recreate --no-deps core-api
+```
+
+When a service already belongs to the running platform stack, use `--no-deps` to avoid recreating dependencies such as Keycloak or Core API. Without `--no-deps`, Compose follows `depends_on`:
+
+- `core-api` depends on `keycloak`.
+- `kong` depends on `core-api`.
+- `agent-factory-app` depends on `keycloak` in `platform-stack.compose.yml`.
+
+For a truly standalone Agent Factory backend run, use its module compose file instead of `platform-stack.compose.yml`:
+
+```powershell
+cd C:\Users\jarce\DATOS\AEME\DEV\ametis-platform
+docker compose --env-file .env.local `
+  -f ./infra/compose/agent-factory-app.compose.yml `
+  up -d --build --force-recreate agent-factory-app
+```
+
 Useful checks:
 
 ```powershell
+docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 curl.exe -i http://localhost:8440/api/agent-factory/drive/connection
 curl.exe -i http://localhost:8440/v1/health
+docker logs ametis-agent-factory-app --tail 160
+docker logs ametis-kong --tail 120
 ```
 
 ## VPS Platform Start
@@ -90,4 +137,3 @@ GRANT SELECT, INSERT, UPDATE, DELETE, REFERENCES ON ALL TABLES IN SCHEMA agent_f
 ALTER DEFAULT PRIVILEGES FOR ROLE ametis IN SCHEMA agent_factory
 GRANT SELECT, INSERT, UPDATE, DELETE, REFERENCES ON TABLES TO agent_factory_user;
 ```
-

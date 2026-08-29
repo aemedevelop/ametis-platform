@@ -6,6 +6,14 @@ Last updated: 2026-08-28
 
 - Current local branch during setup: `develop`.
 
+## Current Agent Management Increment
+
+- Agent Factory now stores a context profile per agent in `agent_context_profiles`.
+- The profile includes persona, target audience, tone, and response language.
+- The profile is stored separately from `agents` to avoid `ALTER TABLE agents` ownership issues during VPS Flyway migrations.
+- Agent responses and AMETIS AI sync payloads include the profile fields.
+- The Agents inventory behaves as a single-open accordion: newly created, edited, published, indexed, or tested agents open automatically; the rest stay collapsed until the user expands one.
+
 ## Recent Production Incident: Drive Reconnect Reported As CORS
 
 Symptom:
@@ -43,4 +51,3 @@ Those edits align the production Drive OAuth callback with the public API domain
 - `curl -i http://127.0.0.1:8083/actuator/health` should return `200` when Agent Factory backend is healthy.
 - `curl -i http://127.0.0.1:8083/api/agent-factory/drive/connection` should return `401` without a token.
 - `curl -i -X OPTIONS http://127.0.0.1:8440/api/agent-factory/drive/connection/authorize ...` should return `200` with CORS headers for `https://ametis.agent-factory.aemetech.com`.
-

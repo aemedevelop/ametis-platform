@@ -56,6 +56,10 @@ export type AgentDefinition = {
   id: string;
   name: string;
   description: string | null;
+  persona: string | null;
+  targetAudience: string | null;
+  tone: string | null;
+  responseLanguage: string | null;
   instructions: string | null;
   status: "DRAFT" | "READY";
   knowledgeBaseCount: number;
@@ -267,7 +271,18 @@ export function fetchAgents() {
   return apiFetch<AgentDefinition[]>("/api/agent-factory/agents");
 }
 
-export function createAgent(input: { name: string; description: string; instructions: string; knowledgeBaseIds: string[] }) {
+export type AgentInput = {
+  name: string;
+  description: string;
+  persona: string;
+  targetAudience: string;
+  tone: string;
+  responseLanguage: string;
+  instructions: string;
+  knowledgeBaseIds: string[];
+};
+
+export function createAgent(input: AgentInput) {
   return apiFetch<AgentDefinition>("/api/agent-factory/agents", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -275,7 +290,7 @@ export function createAgent(input: { name: string; description: string; instruct
   });
 }
 
-export function updateAgent(id: string, input: { name: string; description: string; instructions: string; knowledgeBaseIds: string[] }) {
+export function updateAgent(id: string, input: AgentInput) {
   return apiFetch<AgentDefinition>(`/api/agent-factory/agents/${id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },

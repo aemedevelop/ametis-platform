@@ -20,6 +20,7 @@ import org.springframework.web.server.ResponseStatusException;
 public class AgentService {
   private final RepositoryProvisioningService provisioningService;
   private final AgentRepository agentRepository;
+  private final AgentContextProfileRepository contextProfileRepository;
   private final AgentKnowledgeBaseRepository agentKnowledgeBaseRepository;
   private final KnowledgeBaseRepository knowledgeBaseRepository;
   private final KnowledgeBaseDocumentRepository knowledgeBaseDocumentRepository;
@@ -28,12 +29,14 @@ public class AgentService {
   public AgentService(
       RepositoryProvisioningService provisioningService,
       AgentRepository agentRepository,
+      AgentContextProfileRepository contextProfileRepository,
       AgentKnowledgeBaseRepository agentKnowledgeBaseRepository,
       KnowledgeBaseRepository knowledgeBaseRepository,
       KnowledgeBaseDocumentRepository knowledgeBaseDocumentRepository,
       AmetisAiRagClient ragClient) {
     this.provisioningService = provisioningService;
     this.agentRepository = agentRepository;
+    this.contextProfileRepository = contextProfileRepository;
     this.agentKnowledgeBaseRepository = agentKnowledgeBaseRepository;
     this.knowledgeBaseRepository = knowledgeBaseRepository;
     this.knowledgeBaseDocumentRepository = knowledgeBaseDocumentRepository;
@@ -47,6 +50,10 @@ public class AgentService {
       return List.of();
     }
     List<UUID> agentIds = agents.stream().map(AgentDefinition::getId).toList();
+    Map<UUID, AgentContextProfile> profilesByAgent = contextProfileRepository
+        .findAllByTenantIdAndAgentIdIn(tenantId, agentIds)
+        .stream()
+        .collect(Collectors.toMap(AgentContextProfile::getAgentId, profile -> profile));
     List<AgentKnowledgeBase> links = agentKnowledgeBaseRepository.findAllByTenantIdAndAgentIdIn(tenantId, agentIds);
     List<UUID> baseIds = links.stream().map(AgentKnowledgeBase::getKnowledgeBaseId).distinct().toList();
     Map<UUID, String> baseNames = baseIds.isEmpty()
@@ -64,6 +71,7 @@ public class AgentService {
     return agents.stream()
         .map(agent -> AgentResponse.from(
             agent,
+            profilesByAgent.get(agent.getId()),
             baseIdsByAgent.getOrDefault(agent.getId(), List.of()),
             namesByAgent.getOrDefault(agent.getId(), List.of())))
         .toList();
@@ -77,12 +85,27 @@ public class AgentService {
       throw new ResponseStatusException(HttpStatus.CONFLICT, "error.agentNameTaken");
     }
     AgentDefinition agent = agentRepository.save(AgentDefinition.create(
-        tenantId, name, cleanText(request.description()), cleanText(request.instructions()), userId));
+        tenantId,
+        name,
+        cleanText(request.description()),
+        cleanText(request.instructions()),
+        userId));
+    AgentContextProfile profile = contextProfileRepository.save(AgentContextProfile.create(
+        tenantId,
+        agent.getId(),
+        cleanText(request.persona()),
+        cleanText(request.targetAudience()),
+        normalizeOption(request.tone(), "professional"),
+        normalizeOption(request.responseLanguage(), "auto")));
     List<KnowledgeBase> bases = resolveKnowledgeBases(tenantId, request.knowledgeBaseIds());
     agentKnowledgeBaseRepository.saveAll(bases.stream()
         .map(base -> AgentKnowledgeBase.link(tenantId, agent.getId(), base.getId()))
         .toList());
-    return AgentResponse.from(agent, bases.stream().map(KnowledgeBase::getId).toList(), bases.stream().map(KnowledgeBase::getName).toList());
+    return AgentResponse.from(
+        agent,
+        profile,
+        bases.stream().map(KnowledgeBase::getId).toList(),
+        bases.stream().map(KnowledgeBase::getName).toList());
   }
 
   @Transactional
@@ -94,7 +117,18 @@ public class AgentService {
     if (agentRepository.existsByTenantIdAndNameIgnoreCaseAndIdNot(tenantId, name, agentId)) {
       throw new ResponseStatusException(HttpStatus.CONFLICT, "error.agentNameTaken");
     }
-    agent.update(name, cleanText(request.description()), cleanText(request.instructions()));
+    agent.update(
+        name,
+        cleanText(request.description()),
+        cleanText(request.instructions()));
+    AgentContextProfile profile = contextProfileRepository.findByAgentIdAndTenantId(agentId, tenantId)
+        .orElseGet(() -> AgentContextProfile.create(tenantId, agentId, null, null, null, null));
+    profile.update(
+        cleanText(request.persona()),
+        cleanText(request.targetAudience()),
+        normalizeOption(request.tone(), "professional"),
+        normalizeOption(request.responseLanguage(), "auto"));
+    contextProfileRepository.save(profile);
     agentKnowledgeBaseRepository.deleteAllByTenantIdAndAgentId(tenantId, agentId);
     agentKnowledgeBaseRepository.flush();
     List<KnowledgeBase> bases = resolveKnowledgeBases(tenantId, request.knowledgeBaseIds());
@@ -103,6 +137,7 @@ public class AgentService {
         .toList());
     return AgentResponse.from(
         agentRepository.save(agent),
+        profile,
         bases.stream().map(KnowledgeBase::getId).toList(),
         bases.stream().map(KnowledgeBase::getName).toList());
   }
@@ -113,6 +148,7 @@ public class AgentService {
     AgentDefinition agent = agentRepository.findByIdAndTenantId(agentId, tenantId)
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "error.agentNotFound"));
     agentKnowledgeBaseRepository.deleteAllByTenantIdAndAgentId(tenantId, agentId);
+    contextProfileRepository.deleteByAgentIdAndTenantId(agentId, tenantId);
     agentRepository.delete(agent);
   }
 
@@ -126,6 +162,7 @@ public class AgentService {
       throw new ResponseStatusException(HttpStatus.CONFLICT, "error.agentPublishRequiresKnowledgeBase");
     }
     List<UUID> baseIds = links.stream().map(AgentKnowledgeBase::getKnowledgeBaseId).distinct().toList();
+    AgentContextProfile profile = contextProfileRepository.findByAgentIdAndTenantId(agentId, tenantId).orElse(null);
     List<KnowledgeBase> bases = knowledgeBaseRepository.findAllByTenantIdAndIdIn(tenantId, baseIds);
     Map<UUID, Long> documentCountByBase = knowledgeBaseDocumentRepository
         .findAllByTenantIdAndKnowledgeBaseIdIn(tenantId, baseIds)
@@ -138,6 +175,10 @@ public class AgentService {
         agent.getId(),
         agent.getName(),
         agent.getDescription(),
+        profile == null ? null : profile.getPersona(),
+        profile == null ? null : profile.getTargetAudience(),
+        profile == null ? null : profile.getTone(),
+        profile == null ? null : profile.getResponseLanguage(),
         agent.getInstructions(),
         agent.getStatus(),
         agent.getPublishedAt() == null ? null : agent.getPublishedAt().toString(),
@@ -150,6 +191,7 @@ public class AgentService {
             .toList()));
     return AgentResponse.from(
         agentRepository.save(agent),
+        profile,
         bases.stream().map(KnowledgeBase::getId).toList(),
         bases.stream().map(KnowledgeBase::getName).toList());
   }
@@ -235,5 +277,10 @@ public class AgentService {
   private String cleanText(String value) {
     String cleaned = value == null ? "" : value.trim();
     return cleaned.isBlank() ? null : cleaned;
+  }
+
+  private String normalizeOption(String value, String defaultValue) {
+    String cleaned = cleanText(value);
+    return cleaned == null ? defaultValue : cleaned.toLowerCase(java.util.Locale.ROOT);
   }
 }
