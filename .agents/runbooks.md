@@ -138,6 +138,30 @@ ALTER DEFAULT PRIVILEGES FOR ROLE ametis IN SCHEMA agent_factory
 GRANT SELECT, INSERT, UPDATE, DELETE, REFERENCES ON TABLES TO agent_factory_user;
 ```
 
+`REFERENCES` is only enough for a migration that adds a **foreign key against**
+an existing table (the V6 case). A migration that does `ALTER TABLE agents ADD
+COLUMN ...` / `ALTER COLUMN ... SET NOT NULL` / `ADD CONSTRAINT` **on** an
+existing table needs full ownership of that table, not just a grant — Postgres
+has no "ALTER TABLE" privilege separate from ownership. This bit V13
+(`must be owner of table agents`, VPS deploy 2026-09-05) because `agents`,
+`knowledge_bases` and `document_assets` were originally created by another
+role. Fix by transferring ownership of the whole schema to the app user (safe,
+covers future migrations on the same tables too):
+
+```sql
+DO $$
+DECLARE r RECORD;
+BEGIN
+  FOR r IN SELECT tablename FROM pg_tables WHERE schemaname = 'agent_factory' LOOP
+    EXECUTE format('ALTER TABLE agent_factory.%I OWNER TO agent_factory_user', r.tablename);
+  END LOOP;
+END $$;
+```
+
+Each Flyway migration runs in its own transaction on Postgres, so a mid-migration
+failure rolls back cleanly — no `flyway repair` needed, just fix the grant and
+restart the container to let it retry.
+
 ## Google Sign-In (Keycloak Identity Provider) — per-environment manual step
 
 Login is SSO-only (`/auth/login` -> Keycloak Authorization Code + PKCE, no password form).
