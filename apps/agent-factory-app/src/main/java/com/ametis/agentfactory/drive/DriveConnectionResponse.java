@@ -15,4 +15,9 @@ public record DriveConnectionResponse(
   public static DriveConnectionResponse disconnected(boolean configured) {
     return new DriveConnectionResponse(configured ? "NOT_CONNECTED" : "NOT_CONFIGURED", null, null);
   }
+
+  /** Almacenamiento gestionado por AEME: el usuario no conecta nada. */
+  public static DriveConnectionResponse managed() {
+    return new DriveConnectionResponse("MANAGED", null, null);
+  }
 }

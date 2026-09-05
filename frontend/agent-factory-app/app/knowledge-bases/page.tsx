@@ -1,16 +1,20 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { ChangeEvent, FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useLocale, useT } from "@/components/IntlProviderClient";
 import {
   AgentFactoryApiError,
   createKnowledgeBase,
   deleteKnowledgeBase,
-  fetchDocuments,
+  deleteKnowledgeBaseDocument,
+  downloadKnowledgeBaseDocument,
+  fetchKnowledgeBaseDocuments,
   fetchKnowledgeBases,
   fetchRepository,
   KnowledgeBase,
-  StoredDocument
+  StoredDocument,
+  updateKnowledgeBase,
+  uploadKnowledgeBaseDocument
 } from "@/lib/agent-factory-api";
 
 type Translate = (key: string, vars?: Record<string, string | number>) => string;
@@ -18,22 +22,20 @@ type Translate = (key: string, vars?: Record<string, string | number>) => string
 export default function KnowledgeBasesPage() {
   const t = useT();
   const { locale } = useLocale();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(true);
-  const [documents, setDocuments] = useState<StoredDocument[]>([]);
   const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([]);
-  const [selectedDocuments, setSelectedDocuments] = useState<string[]>([]);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [expandedBaseId, setExpandedBaseId] = useState<string | null>(null);
+  const [documentsByBase, setDocumentsByBase] = useState<Record<string, StoredDocument[]>>({});
   const [saving, setSaving] = useState(false);
+  const [uploadingBaseId, setUploadingBaseId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [busyFileId, setBusyFileId] = useState<string | null>(null);
   const [baseToDelete, setBaseToDelete] = useState<KnowledgeBase | null>(null);
   const [error, setError] = useState<unknown>(null);
-
-  const storedDocuments = useMemo(
-    () => documents.filter((document) => document.status === "STORED"),
-    [documents]
-  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -41,19 +43,12 @@ export default function KnowledgeBasesPage() {
     try {
       const repository = await fetchRepository();
       if (repository.status !== "ACTIVE") {
-        setDocuments([]);
         setKnowledgeBases([]);
         return;
       }
-      const [currentDocuments, currentKnowledgeBases] = await Promise.all([
-        fetchDocuments(),
-        fetchKnowledgeBases()
-      ]);
-      setDocuments(currentDocuments);
-      setKnowledgeBases(currentKnowledgeBases);
+      setKnowledgeBases(await fetchKnowledgeBases());
     } catch (requestError) {
       if (requestError instanceof AgentFactoryApiError && requestError.status === 404) {
-        setDocuments([]);
         setKnowledgeBases([]);
       } else {
         setError(requestError);
@@ -64,32 +59,52 @@ export default function KnowledgeBasesPage() {
   }, []);
 
   useEffect(() => {
-    const timeout = window.setTimeout(() => {
-      load();
-    }, 0);
+    const timeout = window.setTimeout(load, 0);
     return () => window.clearTimeout(timeout);
   }, [load]);
+
+  const loadDocuments = useCallback(async (baseId: string) => {
+    try {
+      const docs = await fetchKnowledgeBaseDocuments(baseId);
+      setDocumentsByBase((current) => ({ ...current, [baseId]: docs }));
+    } catch (requestError) {
+      setError(requestError);
+    }
+  }, []);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaving(true);
     setError(null);
     try {
-      const created = await createKnowledgeBase({
-        name: name.trim(),
-        description: description.trim(),
-        documentDriveFileIds: selectedDocuments
-      });
-      setKnowledgeBases((current) => [created, ...current]);
-      setExpandedBaseId(created.id);
-      setName("");
-      setDescription("");
-      setSelectedDocuments([]);
+      const payload = { name: name.trim(), description: description.trim() };
+      if (editingId) {
+        const updated = await updateKnowledgeBase(editingId, payload);
+        setKnowledgeBases((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+      } else {
+        const created = await createKnowledgeBase(payload);
+        setKnowledgeBases((current) => [created, ...current]);
+        setExpandedBaseId(created.id);
+      }
+      resetForm();
     } catch (requestError) {
       setError(requestError);
     } finally {
       setSaving(false);
     }
+  }
+
+  function edit(base: KnowledgeBase) {
+    setEditingId(base.id);
+    setName(base.name);
+    setDescription(base.description ?? "");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function resetForm() {
+    setEditingId(null);
+    setName("");
+    setDescription("");
   }
 
   async function remove() {
@@ -99,7 +114,7 @@ export default function KnowledgeBasesPage() {
     try {
       await deleteKnowledgeBase(baseToDelete.id);
       setKnowledgeBases((current) => current.filter((item) => item.id !== baseToDelete.id));
-      setExpandedBaseId((current) => current === baseToDelete.id ? null : current);
+      setExpandedBaseId((current) => (current === baseToDelete.id ? null : current));
       setBaseToDelete(null);
     } catch (requestError) {
       setError(requestError);
@@ -108,14 +123,61 @@ export default function KnowledgeBasesPage() {
     }
   }
 
-  function toggleDocument(driveFileId: string) {
-    setSelectedDocuments((current) => current.includes(driveFileId)
-      ? current.filter((item) => item !== driveFileId)
-      : [...current, driveFileId]);
+  function toggleBase(baseId: string) {
+    setExpandedBaseId((current) => {
+      const next = current === baseId ? null : baseId;
+      if (next && !documentsByBase[next]) loadDocuments(next);
+      return next;
+    });
   }
 
-  function toggleBase(baseId: string) {
-    setExpandedBaseId((current) => current === baseId ? null : baseId);
+  async function onFilePicked(baseId: string, event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setUploadingBaseId(baseId);
+    setError(null);
+    try {
+      await uploadKnowledgeBaseDocument(baseId, file);
+      await loadDocuments(baseId);
+      setKnowledgeBases((current) =>
+        current.map((item) => (item.id === baseId ? { ...item, documentCount: item.documentCount + 1 } : item))
+      );
+    } catch (requestError) {
+      setError(requestError);
+    } finally {
+      setUploadingBaseId(null);
+    }
+  }
+
+  async function removeDocument(baseId: string, document: StoredDocument) {
+    setBusyFileId(document.driveFileId);
+    setError(null);
+    try {
+      await deleteKnowledgeBaseDocument(baseId, document.driveFileId);
+      setDocumentsByBase((current) => ({
+        ...current,
+        [baseId]: (current[baseId] ?? []).filter((item) => item.driveFileId !== document.driveFileId)
+      }));
+      setKnowledgeBases((current) =>
+        current.map((item) => (item.id === baseId ? { ...item, documentCount: Math.max(0, item.documentCount - 1) } : item))
+      );
+    } catch (requestError) {
+      setError(requestError);
+    } finally {
+      setBusyFileId(null);
+    }
+  }
+
+  async function download(baseId: string, document: StoredDocument) {
+    setBusyFileId(document.driveFileId);
+    try {
+      await downloadKnowledgeBaseDocument(baseId, document);
+    } catch (requestError) {
+      setError(requestError);
+    } finally {
+      setBusyFileId(null);
+    }
   }
 
   if (loading) {
@@ -130,7 +192,6 @@ export default function KnowledgeBasesPage() {
           <h2>{t("knowledge.title")}</h2>
           <p>{t("knowledge.description")}</p>
         </div>
-        <span className="phase-badge">{t("knowledge.statusDraft")}</span>
       </section>
 
       {error ? <div className="alert error" role="alert"><strong>{t("operation.failedTitle")}</strong><span>{messageOf(error, t)}</span></div> : null}
@@ -138,40 +199,27 @@ export default function KnowledgeBasesPage() {
       <section className="knowledge-layout">
         <form className="knowledge-form" onSubmit={submit}>
           <div>
-            <span className="eyebrow">{t("knowledge.createEyebrow")}</span>
-            <h2>{t("knowledge.createTitle")}</h2>
+            <span className="eyebrow">{t(editingId ? "knowledge.editEyebrow" : "knowledge.createEyebrow")}</span>
+            <h2>{t(editingId ? "knowledge.editTitle" : "knowledge.createTitle")}</h2>
             <p>{t("knowledge.createDescription")}</p>
           </div>
           <label className="form-field">
             <span>{t("knowledge.nameLabel")}</span>
-            <input value={name} onChange={(event) => setName(event.target.value)} placeholder={t("knowledge.namePlaceholder")} />
+            <input value={name} onChange={(event) => setName(event.target.value)} placeholder={t("knowledge.namePlaceholder")} maxLength={120} />
           </label>
           <label className="form-field">
             <span className="field-label">
               {t("knowledge.descriptionLabel")}
               <span className="field-help" tabIndex={0} aria-label={t("knowledge.descriptionPlaceholder")} title={t("knowledge.descriptionPlaceholder")}>?</span>
             </span>
-            <textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder={t("knowledge.descriptionPlaceholder")} />
+            <textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder={t("knowledge.descriptionPlaceholder")} maxLength={1000} />
           </label>
-          <div className="document-picker">
-            <div>
-              <span>{t("knowledge.documentsLabel")}</span>
-              <small>{t("knowledge.documentsHelp")}</small>
-            </div>
-            {storedDocuments.length ? storedDocuments.map((document) => (
-              <label className="document-option" key={document.driveFileId}>
-                <input
-                  type="checkbox"
-                  checked={selectedDocuments.includes(document.driveFileId)}
-                  onChange={() => toggleDocument(document.driveFileId)}
-                />
-                <span><strong>{document.name}</strong><small>{formatBytes(document.sizeBytes, locale, t)}</small></span>
-              </label>
-            )) : <p className="muted-copy">{t("knowledge.noDocuments")}</p>}
+          <div className="form-actions">
+            {editingId ? <button className="secondary-button" type="button" onClick={resetForm} disabled={saving}>{t("common.cancel")}</button> : null}
+            <button className="primary-button" type="submit" disabled={saving || !name.trim()}>
+              {saving ? t("knowledge.creating") : t(editingId ? "knowledge.updateAction" : "knowledge.createAction")}
+            </button>
           </div>
-          <button className="primary-button" type="submit" disabled={saving || !name.trim()}>
-            {saving ? t("knowledge.creating") : t("knowledge.createAction")}
-          </button>
         </form>
 
         <section className="knowledge-list">
@@ -187,6 +235,7 @@ export default function KnowledgeBasesPage() {
             <div className="knowledge-items">
               {knowledgeBases.map((base) => {
                 const expanded = expandedBaseId === base.id;
+                const docs = documentsByBase[base.id] ?? [];
                 return (
                   <article className={`knowledge-item base-inventory-item ${expanded ? "expanded" : "collapsed"}`} key={base.id}>
                     <div className="agent-inventory-header">
@@ -208,22 +257,51 @@ export default function KnowledgeBasesPage() {
                       </button>
                       <div className="agent-collapsed-meta">
                         <strong>{t("knowledge.documentCount", { count: base.documentCount })}</strong>
-                        <span>{base.documentNames.slice(0, 2).join(", ") || t("knowledge.noLinkedDocuments")}</span>
+                        <span>{t("knowledge.updatedAt", { date: formatDate(base.updatedAt, locale) })}</span>
                       </div>
                     </div>
 
                     {expanded ? (
                       <div className="base-expanded-panel" id={`base-panel-${base.id}`}>
-                        <div>
-                          <small>{t("knowledge.updatedAt", { date: formatDate(base.updatedAt, locale) })}</small>
+                        <div className="base-docs-toolbar">
+                          <strong>{t("knowledge.documentsLabel")}</strong>
+                          <div className="item-actions">
+                            <input
+                              ref={fileInputRef}
+                              type="file"
+                              hidden
+                              id={`kb-file-${base.id}`}
+                              onChange={(event) => onFilePicked(base.id, event)}
+                            />
+                            <label className="small-action" htmlFor={`kb-file-${base.id}`}>
+                              {uploadingBaseId === base.id ? t("knowledge.uploading") : t("knowledge.uploadAction")}
+                            </label>
+                            <button className="icon-button" type="button" onClick={() => edit(base)} aria-label={t("knowledge.edit", { name: base.name })} title={t("knowledge.edit", { name: base.name })}>
+                              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
+                            </button>
+                            <button className="icon-button danger" type="button" onClick={() => setBaseToDelete(base)} disabled={deletingId === base.id} aria-label={t("knowledge.delete", { name: base.name })} title={t("knowledge.delete", { name: base.name })}>
+                              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" /></svg>
+                            </button>
+                          </div>
                         </div>
-                        <div className="knowledge-meta">
-                          <strong>{t("knowledge.documentCount", { count: base.documentCount })}</strong>
-                          <span>{base.documentNames.slice(0, 3).join(", ") || t("knowledge.noLinkedDocuments")}</span>
-                          <button className="icon-button danger" type="button" onClick={() => setBaseToDelete(base)} disabled={deletingId === base.id} aria-label={t("knowledge.delete", { name: base.name })} title={t("knowledge.delete", { name: base.name })}>
-                            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" /></svg>
-                          </button>
-                        </div>
+                        {docs.length ? (
+                          <ul className="base-docs-list">
+                            {docs.map((document) => (
+                              <li key={document.driveFileId}>
+                                <span>
+                                  <strong>{document.name}</strong>
+                                  <small>{formatBytes(document.sizeBytes, locale, t)} · {t(`knowledge.docStatus.${document.status.toLowerCase()}`)}</small>
+                                </span>
+                                <span className="item-actions">
+                                  <button className="link-button" type="button" onClick={() => download(base.id, document)} disabled={busyFileId === document.driveFileId}>{t("knowledge.download")}</button>
+                                  <button className="link-button" type="button" onClick={() => removeDocument(base.id, document)} disabled={busyFileId === document.driveFileId}>{t("knowledge.removeDocument")}</button>
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="muted-copy">{t("knowledge.noDocuments")}</p>
+                        )}
                       </div>
                     ) : null}
                   </article>

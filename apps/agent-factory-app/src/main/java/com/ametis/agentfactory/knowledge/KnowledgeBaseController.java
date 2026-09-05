@@ -1,6 +1,8 @@
 package com.ametis.agentfactory.knowledge;
 
 import com.ametis.agentfactory.access.AccessGuard;
+import com.ametis.agentfactory.businesses.Business;
+import com.ametis.agentfactory.businesses.BusinessService;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
@@ -20,26 +22,33 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping({"/v1", "/api/agent-factory"})
 public class KnowledgeBaseController {
   private final AccessGuard accessGuard;
+  private final BusinessService businessService;
   private final KnowledgeBaseService knowledgeBaseService;
 
-  public KnowledgeBaseController(AccessGuard accessGuard, KnowledgeBaseService knowledgeBaseService) {
+  public KnowledgeBaseController(
+      AccessGuard accessGuard, BusinessService businessService, KnowledgeBaseService knowledgeBaseService) {
     this.accessGuard = accessGuard;
+    this.businessService = businessService;
     this.knowledgeBaseService = knowledgeBaseService;
+  }
+
+  private Business business(JwtAuthenticationToken authentication, String permission) {
+    UUID tenantId = accessGuard.requireAccess(authentication, permission);
+    return businessService.require(tenantId, accessGuard.requireBusinessId());
   }
 
   @GetMapping("/knowledge-bases")
   public List<KnowledgeBaseResponse> list(JwtAuthenticationToken authentication) {
-    UUID tenantId = accessGuard.requireAccess(authentication, AccessGuard.DOCUMENTS_READ);
-    return knowledgeBaseService.list(tenantId);
+    return knowledgeBaseService.list(business(authentication, AccessGuard.DOCUMENTS_READ));
   }
 
   @PostMapping("/knowledge-bases")
   public ResponseEntity<KnowledgeBaseResponse> create(
       @Valid @RequestBody KnowledgeBaseRequest request,
       JwtAuthenticationToken authentication) {
-    UUID tenantId = accessGuard.requireAccess(authentication, AccessGuard.DOCUMENTS_MANAGE);
+    Business business = business(authentication, AccessGuard.DOCUMENTS_MANAGE);
     KnowledgeBaseResponse response = knowledgeBaseService.create(
-        tenantId, accessGuard.currentUserId(authentication), request);
+        business, accessGuard.currentUserId(authentication), request);
     return ResponseEntity.status(HttpStatus.CREATED).body(response);
   }
 
@@ -48,16 +57,14 @@ public class KnowledgeBaseController {
       @PathVariable UUID knowledgeBaseId,
       @Valid @RequestBody KnowledgeBaseRequest request,
       JwtAuthenticationToken authentication) {
-    UUID tenantId = accessGuard.requireAccess(authentication, AccessGuard.DOCUMENTS_MANAGE);
-    return knowledgeBaseService.update(tenantId, knowledgeBaseId, request);
+    return knowledgeBaseService.update(business(authentication, AccessGuard.DOCUMENTS_MANAGE), knowledgeBaseId, request);
   }
 
   @DeleteMapping("/knowledge-bases/{knowledgeBaseId}")
   public ResponseEntity<Void> delete(
       @PathVariable UUID knowledgeBaseId,
       JwtAuthenticationToken authentication) {
-    UUID tenantId = accessGuard.requireAccess(authentication, AccessGuard.DOCUMENTS_MANAGE);
-    knowledgeBaseService.delete(tenantId, knowledgeBaseId);
+    knowledgeBaseService.delete(business(authentication, AccessGuard.DOCUMENTS_MANAGE), knowledgeBaseId);
     return ResponseEntity.noContent().build();
   }
 }

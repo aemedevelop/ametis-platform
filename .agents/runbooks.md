@@ -137,3 +137,28 @@ GRANT SELECT, INSERT, UPDATE, DELETE, REFERENCES ON ALL TABLES IN SCHEMA agent_f
 ALTER DEFAULT PRIVILEGES FOR ROLE ametis IN SCHEMA agent_factory
 GRANT SELECT, INSERT, UPDATE, DELETE, REFERENCES ON TABLES TO agent_factory_user;
 ```
+
+## Google Sign-In (Keycloak Identity Provider) — per-environment manual step
+
+Login is SSO-only (`/auth/login` -> Keycloak Authorization Code + PKCE, no password form).
+Adding "Continuar con Google" needs **no app code** — it is a Keycloak Identity Provider
+(`kc_idp_hint=google` on the authorize URL, wired in `lib/oidc-pkce.ts`). But it is **not
+tracked by Flyway or `realm-export.json` import** (import only runs once, when the realm
+does not yet exist) — it must be configured by hand in **every** Keycloak instance
+(local, VPS PRE, VPS prod all have separate DBs).
+
+1. Google Cloud Console (project `aeme-dev`), new "Google Auth Platform" UI:
+   - **Clientes** (not "Público"/test users — the OAuth app is already published to
+     production) -> Create client -> Web application.
+   - Redirect URIs (same client, both allowed): `http://localhost:8081/realms/ametis/broker/google/endpoint`
+     and `https://ametis.auth.aemetech.com/realms/ametis/broker/google/endpoint`.
+   - Copy the Client ID / Client secret.
+2. Keycloak admin console, realm **ametis** -> **Identity providers -> Add provider ->
+   Google** -> paste Client ID/secret -> Save. Alias must stay `google` (matches the
+   frontend's `kc_idp_hint`). The advanced toggles (Trust Email, Store tokens, Account
+   linking only) are optional — this realm has no required email-verification action, so
+   they don't block anything; save with just the Client ID/secret if the UI hides them.
+   The "Redirect URI" shown in this form is **read-only** — it's what you copy into
+   Google, not something to edit.
+3. Repeat step 2 on every other Keycloak instance (VPS) with the same Google
+   Client ID/secret — each realm DB is separate and needs its own Identity Provider row.

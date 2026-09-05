@@ -51,8 +51,30 @@ public class AmetisAiRagClient {
         .toBodilessEntity();
   }
 
+  /**
+   * Borra en el RAG todos los datos de un negocio: filas sincronizadas y los
+   * vectores de Qdrant con {@code business_id = businessId}. Best-effort: si
+   * falla, los huérfanos quedan aislados por el filtro y se limpian aparte.
+   */
+  public void deleteBusiness(String repositoryNamespace, String businessId) {
+    if (!enabled) {
+      return;
+    }
+    restClient.delete()
+        .uri(uriBuilder -> uriBuilder
+            .path("/businesses/{businessId}")
+            .queryParam("tenant_id", repositoryNamespace)
+            .build(businessId))
+        .retrieve()
+        .onStatus(HttpStatusCode::isError, (request, response) -> {
+          throw new ResponseStatusException(response.getStatusCode(), "error.businessRagDeleteFailed");
+        })
+        .toBodilessEntity();
+  }
+
   public AmetisAiCreateIndexingJobsResponse createIndexingJobs(
       String repositoryNamespace,
+      String businessId,
       UUID agentId,
       UUID requestedBy) {
     if (!enabled) {
@@ -62,6 +84,7 @@ public class AmetisAiRagClient {
         .uri("/agents/{agentId}/indexing-jobs", agentId.toString())
         .body(new AmetisAiIndexingJobRequest(
             repositoryNamespace,
+            businessId,
             requestedBy == null ? null : requestedBy.toString()))
         .retrieve()
         .onStatus(HttpStatusCode::isError, (request, response) -> {
@@ -88,6 +111,7 @@ public class AmetisAiRagClient {
 
   public AmetisAiQueryResponse query(
       String repositoryNamespace,
+      String businessId,
       UUID agentId,
       UUID knowledgeBaseId,
       String question) {
@@ -100,7 +124,7 @@ public class AmetisAiRagClient {
             repositoryNamespace,
             agentId.toString(),
             knowledgeBaseId.toString())
-        .body(new AmetisAiQueryRequest(question))
+        .body(new AmetisAiQueryRequest(question, businessId))
         .retrieve()
         .onStatus(HttpStatusCode::isError, (request, response) -> {
           throw new ResponseStatusException(response.getStatusCode(), "error.agentTestFailed");

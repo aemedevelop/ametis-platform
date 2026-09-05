@@ -1,7 +1,10 @@
 package com.ametis.agentfactory.documents;
 
+import com.ametis.agentfactory.businesses.Business;
+import com.ametis.agentfactory.businesses.BusinessRepositoryStatus;
 import com.ametis.agentfactory.drive.GoogleDriveRepository;
-import com.ametis.agentfactory.knowledge.KnowledgeBaseDocumentRepository;
+import com.ametis.agentfactory.knowledge.KnowledgeBase;
+import com.ametis.agentfactory.knowledge.KnowledgeBaseRepositoryProvisioningService;
 import com.google.api.client.googleapis.json.GoogleJsonResponseException;
 import com.google.api.services.drive.model.File;
 import java.io.IOException;
@@ -24,9 +27,15 @@ import org.springframework.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
+/**
+ * Gestión de documentos, siempre dentro de una base de conocimiento concreta.
+ * Cada base tiene su carpeta de Drive; los documentos de bases distintas nunca
+ * comparten carpeta.
+ */
 @Service
 public class DocumentService {
   private static final Logger LOGGER = LoggerFactory.getLogger(DocumentService.class);
@@ -34,38 +43,41 @@ public class DocumentService {
       Set.of("txt", "pdf", "docx", "xlsx", "csv", "url", "html", "htm");
 
   private final RepositoryProvisioningService provisioningService;
+  private final KnowledgeBaseRepositoryProvisioningService knowledgeBaseProvisioning;
   private final DocumentAssetRepository assetRepository;
-  private final KnowledgeBaseDocumentRepository knowledgeBaseDocumentRepository;
   private final GoogleDriveRepository googleDriveRepository;
   private final long maxFileSizeBytes;
 
   public DocumentService(
       RepositoryProvisioningService provisioningService,
+      KnowledgeBaseRepositoryProvisioningService knowledgeBaseProvisioning,
       DocumentAssetRepository assetRepository,
-      KnowledgeBaseDocumentRepository knowledgeBaseDocumentRepository,
       GoogleDriveRepository googleDriveRepository,
       @Value("${agent-factory.documents.max-file-size-bytes}") long maxFileSizeBytes) {
     this.provisioningService = provisioningService;
+    this.knowledgeBaseProvisioning = knowledgeBaseProvisioning;
     this.assetRepository = assetRepository;
-    this.knowledgeBaseDocumentRepository = knowledgeBaseDocumentRepository;
     this.googleDriveRepository = googleDriveRepository;
     this.maxFileSizeBytes = maxFileSizeBytes;
   }
 
-  public DocumentResponse upload(UUID tenantId, UUID userId, MultipartFile file) {
-    RepositoryBinding binding = requireActiveBinding(tenantId);
+  public DocumentResponse upload(Business business, KnowledgeBase base, UUID userId, MultipartFile file) {
+    KnowledgeBase ready = requireKbRepository(business, base);
+    UUID tenantId = business.getTenantId();
+    RepositoryBinding binding = provisioningService.find(tenantId);
     String originalName = sanitizeName(file.getOriginalFilename());
     validate(originalName, file);
     try {
       byte[] content = file.getBytes();
       String sha256 = sha256(content);
-      Optional<DocumentAsset> existing = assetRepository.findByTenantIdAndSha256(tenantId, sha256);
+      Optional<DocumentAsset> existing = assetRepository.findByKnowledgeBaseIdAndSha256(ready.getId(), sha256);
       if (existing.isPresent() && existing.get().getStatus() == DocumentStatus.STORED) {
-        throw new ResponseStatusException(HttpStatus.CONFLICT, "This document content is already stored");
+        throw new ResponseStatusException(HttpStatus.CONFLICT, "error.documentAlreadyStored");
       }
       String mimeType = file.getContentType() == null ? "application/octet-stream" : file.getContentType();
       DocumentAsset asset = existing.orElseGet(() -> DocumentAsset.uploading(
-          tenantId, binding.getId(), originalName, mimeType, content.length, sha256, userId));
+          tenantId, business.getId(), ready.getId(), binding.getId(),
+          originalName, mimeType, content.length, sha256, userId));
       if (existing.isPresent()) {
         asset.retry(originalName, mimeType, content.length, userId);
       }
@@ -73,12 +85,14 @@ public class DocumentService {
       try {
         File stored = googleDriveRepository.upload(
             tenantId,
-            binding.getDocumentsFolderId(),
+            ready.getDocumentsFolderId(),
             originalName,
             mimeType,
             content,
             Map.of(
                 "workspaceId", tenantId.toString(),
+                "businessId", business.getId().toString(),
+                "knowledgeBaseId", ready.getId().toString(),
                 "documentAssetId", asset.getId().toString(),
                 "sha256", sha256));
         asset.stored(stored.getId());
@@ -92,7 +106,7 @@ public class DocumentService {
     } catch (ResponseStatusException exception) {
       throw exception;
     } catch (Exception exception) {
-      LOGGER.error("Google Drive upload failed for tenant {} and document {}", tenantId, originalName, exception);
+      LOGGER.error("Google Drive upload failed for knowledge base {} and document {}", base.getId(), originalName, exception);
       if (hasGoogleReason(exception, "storageQuotaExceeded")) {
         throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "error.driveStorageQuota", exception);
       }
@@ -100,14 +114,14 @@ public class DocumentService {
     }
   }
 
-  public List<DocumentResponse> list(UUID tenantId) {
-    RepositoryBinding binding = requireActiveBinding(tenantId);
-    List<DocumentAsset> assets = assetRepository.findAllByTenantIdOrderByCreatedAtDesc(tenantId);
+  public List<DocumentResponse> list(Business business, KnowledgeBase base) {
+    KnowledgeBase ready = requireKbRepository(business, base);
+    List<DocumentAsset> assets = assetRepository.findAllByKnowledgeBaseIdOrderByCreatedAtDesc(ready.getId());
     Map<String, DocumentAsset> assetsByDriveId = assets.stream()
         .filter(asset -> asset.getDriveFileId() != null)
         .collect(Collectors.toMap(DocumentAsset::getDriveFileId, Function.identity(), (first, ignored) -> first));
     try {
-      List<File> driveFiles = googleDriveRepository.listDocuments(tenantId, binding.getDocumentsFolderId());
+      List<File> driveFiles = googleDriveRepository.listDocuments(business.getTenantId(), ready.getDocumentsFolderId());
       Set<String> driveFileIds = driveFiles.stream().map(File::getId).collect(Collectors.toSet());
       List<DocumentAsset> externallyDeleted = assets.stream()
           .filter(asset -> asset.getStatus() == DocumentStatus.STORED)
@@ -118,27 +132,27 @@ public class DocumentService {
         assetRepository.saveAll(externallyDeleted);
       }
       return driveFiles.stream()
-          .map(file -> fromDriveFile(file, assetsByDriveId.get(file.getId())))
+          .map(fileEntry -> fromDriveFile(fileEntry, assetsByDriveId.get(fileEntry.getId())))
           .sorted((left, right) -> right.modifiedAt().compareTo(left.modifiedAt()))
           .toList();
     } catch (IOException exception) {
       LOGGER.error(
-          "Google Drive listing failed for tenant {} and folder {}",
-          tenantId,
-          binding.getDocumentsFolderId(),
+          "Google Drive listing failed for knowledge base {} and folder {}",
+          ready.getId(),
+          ready.getDocumentsFolderId(),
           exception);
       throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Google Drive listing failed", exception);
     }
   }
 
-  public DownloadDescriptor download(UUID tenantId, String driveFileId, OutputStream outputStream) {
-    RepositoryBinding binding = requireActiveBinding(tenantId);
+  public DownloadDescriptor download(Business business, KnowledgeBase base, String driveFileId, OutputStream outputStream) {
+    KnowledgeBase ready = requireKbRepository(business, base);
     try {
-      File file = googleDriveRepository.getFile(tenantId, driveFileId);
-      if (file.getParents() == null || !file.getParents().contains(binding.getDocumentsFolderId())) {
+      File file = googleDriveRepository.getFile(business.getTenantId(), driveFileId);
+      if (file.getParents() == null || !file.getParents().contains(ready.getDocumentsFolderId())) {
         throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Document not found");
       }
-      googleDriveRepository.download(tenantId, driveFileId, outputStream);
+      googleDriveRepository.download(business.getTenantId(), driveFileId, outputStream);
       return new DownloadDescriptor(file.getName(), file.getMimeType());
     } catch (ResponseStatusException exception) {
       throw exception;
@@ -147,17 +161,17 @@ public class DocumentService {
     }
   }
 
-  public void delete(UUID tenantId, String driveFileId) {
-    RepositoryBinding binding = requireActiveBinding(tenantId);
+  @Transactional
+  public void delete(Business business, KnowledgeBase base, String driveFileId) {
+    KnowledgeBase ready = requireKbRepository(business, base);
     try {
-      File file = googleDriveRepository.getFile(tenantId, driveFileId);
-      if (file.getParents() == null || !file.getParents().contains(binding.getDocumentsFolderId())) {
+      File file = googleDriveRepository.getFile(business.getTenantId(), driveFileId);
+      if (file.getParents() == null || !file.getParents().contains(ready.getDocumentsFolderId())) {
         throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Document not found");
       }
-      googleDriveRepository.trash(tenantId, driveFileId);
-      assetRepository.findByTenantIdAndDriveFileId(tenantId, driveFileId).ifPresent(asset -> {
+      googleDriveRepository.trash(business.getTenantId(), driveFileId);
+      assetRepository.findByKnowledgeBaseIdAndDriveFileId(ready.getId(), driveFileId).ifPresent(asset -> {
         asset.deleted();
-        knowledgeBaseDocumentRepository.deleteAllByTenantIdAndDocumentAssetId(tenantId, asset.getId());
         assetRepository.save(asset);
       });
     } catch (ResponseStatusException exception) {
@@ -167,12 +181,15 @@ public class DocumentService {
     }
   }
 
-  private RepositoryBinding requireActiveBinding(UUID tenantId) {
-    RepositoryBinding binding = provisioningService.find(tenantId);
-    if (binding.getStatus() != RepositoryStatus.ACTIVE || binding.getDocumentsFolderId() == null) {
-      throw new ResponseStatusException(HttpStatus.CONFLICT, "Document repository is not active");
+  private KnowledgeBase requireKbRepository(Business business, KnowledgeBase base) {
+    KnowledgeBase ready = base.getRepositoryStatus() == BusinessRepositoryStatus.ACTIVE
+        && base.getDocumentsFolderId() != null
+        ? base
+        : knowledgeBaseProvisioning.ensureProvisioned(business, base);
+    if (ready.getRepositoryStatus() != BusinessRepositoryStatus.ACTIVE || ready.getDocumentsFolderId() == null) {
+      throw new ResponseStatusException(HttpStatus.CONFLICT, "error.repositoryNotActive");
     }
-    return binding;
+    return ready;
   }
 
   private void validate(String name, MultipartFile file) {

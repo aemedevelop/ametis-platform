@@ -58,6 +58,25 @@ public class GoogleDriveRepository {
     return new ProvisionedFolders(resolvedNamespace, workspaceFolder.getId(), documentsFolder.getId());
   }
 
+  /**
+   * Crea (o encuentra) una subcarpeta {@code name} dentro de {@code parentId} y
+   * devuelve su id. Se usa para la jerarquía negocio / base de conocimiento.
+   */
+  public String provisionFolder(
+      UUID tenantId, String parentId, String name, Map<String, String> appProperties)
+      throws IOException {
+    Drive drive = driveClientFactory.create(tenantId);
+    return findFolderByName(drive, parentId, name)
+        .orElseGet(() -> {
+          try {
+            return createFolder(drive, name, parentId, appProperties);
+          } catch (IOException exception) {
+            throw new DriveOperationException(exception);
+          }
+        })
+        .getId();
+  }
+
   public File upload(
       UUID tenantId, String folderId, String name, String mimeType, byte[] content, Map<String, String> appProperties)
       throws IOException {

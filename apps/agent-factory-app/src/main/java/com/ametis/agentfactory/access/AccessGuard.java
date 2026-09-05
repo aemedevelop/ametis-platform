@@ -1,5 +1,6 @@
 package com.ametis.agentfactory.access;
 
+import com.ametis.agentfactory.businesses.BusinessContextHolder;
 import com.ametis.agentfactory.tenant.TenantContextHolder;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
@@ -43,6 +44,11 @@ public class AccessGuard {
         .filter(tenant -> tenant.id().equals(tenantId))
         .findFirst()
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "Tenant membership not found"));
+  }
+
+  /** Negocio activo de la petición (cabecera X-Business-Id). Su pertenencia al tenant la valida BusinessService. */
+  public UUID requireBusinessId() {
+    return BusinessContextHolder.requireBusinessId();
   }
 
   public UUID currentUserId(JwtAuthenticationToken authentication) {

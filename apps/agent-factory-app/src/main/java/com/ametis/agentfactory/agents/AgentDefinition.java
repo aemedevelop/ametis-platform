@@ -18,6 +18,9 @@ public class AgentDefinition {
   @Column(nullable = false)
   private UUID tenantId;
 
+  @Column(nullable = false, updatable = false)
+  private UUID businessId;
+
   @Column(nullable = false, length = 80)
   private String name;
 
@@ -45,6 +48,7 @@ public class AgentDefinition {
 
   public static AgentDefinition create(
       UUID tenantId,
+      UUID businessId,
       String name,
       String description,
       String instructions,
@@ -52,6 +56,7 @@ public class AgentDefinition {
     AgentDefinition agent = new AgentDefinition();
     agent.id = UUID.randomUUID();
     agent.tenantId = tenantId;
+    agent.businessId = businessId;
     agent.name = name;
     agent.description = description;
     agent.instructions = instructions;
@@ -82,6 +87,7 @@ public class AgentDefinition {
 
   public UUID getId() { return id; }
   public UUID getTenantId() { return tenantId; }
+  public UUID getBusinessId() { return businessId; }
   public String getName() { return name; }
   public String getDescription() { return description; }
   public String getInstructions() { return instructions; }

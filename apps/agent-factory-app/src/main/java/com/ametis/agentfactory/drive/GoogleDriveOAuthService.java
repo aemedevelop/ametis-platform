@@ -57,13 +57,34 @@ public class GoogleDriveOAuthService {
   }
 
   public DriveConnectionResponse status(UUID tenantId) {
+    if (managedMode()) {
+      return DriveConnectionResponse.managed();
+    }
     return connectionRepository.findByTenantId(tenantId)
         .map(DriveConnectionResponse::connected)
         .orElseGet(() -> DriveConnectionResponse.disconnected(configured()));
   }
 
+  /**
+   * En modos de credenciales compartidas de AEME (oauth-user / service-account) no
+   * hay conexión por tenant: el almacenamiento lo gestiona la plataforma.
+   */
+  private boolean managedMode() {
+    String mode = properties.authMode() == null ? "" : properties.authMode().trim().toLowerCase(java.util.Locale.ROOT);
+    return switch (mode) {
+      case "oauth-user" -> present(properties.oauthClientId())
+          && present(properties.oauthClientSecret())
+          && present(properties.oauthRefreshToken());
+      case "service-account" -> present(properties.credentialsFile());
+      default -> false;
+    };
+  }
+
   @Transactional
   public DriveAuthorizationResponse authorize(UUID tenantId, UUID userId) {
+    if (managedMode()) {
+      throw new ResponseStatusException(HttpStatus.CONFLICT, "error.driveManaged");
+    }
     requireConfigured();
     String state = randomUrlToken(32);
     String verifier = randomUrlToken(64);

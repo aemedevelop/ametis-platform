@@ -39,4 +39,30 @@ Agent Factory migrations may create foreign keys against existing tables. The ru
 
 ## Agent Context Profiles
 
-Agent context profile data is stored in a separate `agent_context_profiles` table instead of adding columns to `agents`. This keeps context engineering metadata modular and avoids ownership problems when Flyway runs under an app user that can create tables but does not own older tables.
+Agent context profile data is stored in a separate `agent_context_profiles` table instead of adding columns to `agents`. This keeps context engineering metadata modular and avoids ownership problems when Flyway runs under an app user that can create tables but does not own older tables. The profile (persona, target audience, tone, response language) travels in the agent sync payload and is injected into the RAG prompt by `prompt_builder.build_rag_prompt`.
+
+## Business Layer (variant A: agency / multi-client)
+
+- Chosen model: one tenant = a consultant/agency workspace; a **Business** = an end client. Strong isolation between businesses of the same tenant.
+- `businesses` lives in Agent Factory, NOT Core. Promote to Core only if per-business RBAC is ever needed.
+- RAG namespace stays **per tenant** (Qdrant collection = tenant). `business_id` is a **mandatory hard filter** on retrieval and on every chunk payload — not just metadata. This was an explicit high-priority requirement.
+- Knowledge bases and Drive folders partition by business; the "Negocio principal" backfill was normalized in V15 to also get its own subfolder.
+- A document belongs to exactly one knowledge base (V15 dropped the `knowledge_base_documents` m2m). Document management moved out of the dashboard into the knowledge-base view (`/knowledge-bases/{id}/documents`).
+
+## Deployment identifier and channels
+
+- Public identifier is an opaque 32-hex token (`public_id`), no prefix, immutable except explicit regeneration. It is the isolation key of the channel; everything downstream is scoped by the deployment row's `tenant_id` / `agent.business_id`.
+- MVP serves only `WEB_CHAT`, gated by `allowed_origins`. Consumption security beyond origin (api key, rate limit) is stored but not enforced yet.
+- The embed widget bundle (`ametis-widget.js`) does not exist yet; the snippet is a placeholder.
+
+## Google Drive: AEME-controlled
+
+- Documents live in an AEME-controlled Drive, never the client's. To kill the 7-day token expiry: publish the OAuth app to production (no code change). Longer term: `service-account` auth mode + a Shared Drive so files are org-owned and quota-free.
+
+## Document storage: moving to MinIO (Drive kept, switchable)
+
+- **Decision (2026-09-04):** new document storage goes to MinIO (object storage, bucket per tenant). The Drive code is **kept, not deleted**, and the backend becomes switchable by config (`AGENT_FACTORY_STORAGE_PROVIDER`, global for now; per-tenant + admin UI later). A client that specifically wants Drive can still get it.
+- **Why:** Drive's service account has no storage quota (upload fails with "file is in My Drive → use a Shared Drive"), plus OAuth connect friction, 7-day token expiry, app verification, eventually-consistent listing, and a folder-provisioning state machine. MinIO removes all of it. The RAG already has `DOCUMENT_SOURCE=minio` + a MinIO loader.
+- **Locked sub-decisions:** bucket per tenant; rename storage columns to neutral names now; no data migration (re-create); object key `{uuid}__{filename}`; hard delete with mandatory confirmation.
+- **Full spec:** `.agents/proposals/minio-storage-migration.md`.
+- **Status:** paused 2026-09-04 to first ship a release with the existing per-tenant Drive OAuth flow (the owner connects their own Drive, `AGENT_FACTORY_GOOGLE_AUTH_MODE=workspace-oauth`). MinIO comes right after.

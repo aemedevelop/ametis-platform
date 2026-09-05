@@ -4,7 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { exchangeAuthorizationCode } from "@/lib/auth-client";
 import { consumeState } from "@/lib/oidc-pkce";
-import { storeSessionTokens } from "@/lib/session";
+import { setAuthMode, storeSessionTokens } from "@/lib/session";
 import { useT } from "@/components/IntlProviderClient";
 
 export default function CallbackPage() {
@@ -39,6 +39,7 @@ function CallbackContent() {
           codeVerifier: stored.codeVerifier
         });
         storeSessionTokens(tokens);
+        setAuthMode("sso");
         router.replace(stored.redirectTarget || "/");
       } catch {
         setMessageKey("auth.failed");

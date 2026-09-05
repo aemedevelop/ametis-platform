@@ -1,26 +1,29 @@
 package com.ametis.agentfactory.knowledge;
 
+import com.ametis.agentfactory.businesses.BusinessRepositoryStatus;
 import java.time.OffsetDateTime;
-import java.util.List;
 import java.util.UUID;
 
 public record KnowledgeBaseResponse(
     UUID id,
+    UUID businessId,
     String name,
     String description,
     KnowledgeBaseStatus status,
-    int documentCount,
-    List<String> documentNames,
+    BusinessRepositoryStatus repositoryStatus,
+    long documentCount,
     OffsetDateTime createdAt,
     OffsetDateTime updatedAt) {
-  static KnowledgeBaseResponse from(KnowledgeBase base, List<String> documentNames) {
+
+  static KnowledgeBaseResponse from(KnowledgeBase base, long documentCount) {
     return new KnowledgeBaseResponse(
         base.getId(),
+        base.getBusinessId(),
         base.getName(),
         base.getDescription(),
         base.getStatus(),
-        documentNames.size(),
-        documentNames,
+        base.getRepositoryStatus(),
+        documentCount,
         base.getCreatedAt(),
         base.getUpdatedAt());
   }

@@ -1,10 +1,13 @@
 import { refreshSession } from "@/lib/auth-client";
 import {
+  clearActiveBusinessId,
   clearSession,
+  getActiveBusinessId,
   getActiveTenantId,
   getAuthToken,
   getRefreshToken,
   isAuthTokenExpired,
+  setActiveBusinessId,
   setActiveTenantId,
   storeSessionTokens
 } from "@/lib/session";
@@ -23,7 +26,7 @@ export type RepositoryStatus = {
 };
 
 export type DriveConnection = {
-  status: "CONNECTED" | "NOT_CONNECTED" | "NOT_CONFIGURED";
+  status: "CONNECTED" | "MANAGED" | "NOT_CONNECTED" | "NOT_CONFIGURED";
   accountEmail: string | null;
   connectedAt: string | null;
 };
@@ -41,19 +44,36 @@ export type StoredDocument = {
   webViewLink: string | null;
 };
 
+export type BusinessStatus = "ACTIVE" | "ARCHIVED";
+
+export type BusinessRepositoryStatus = "PENDING" | "ACTIVE" | "ERROR";
+
+export type Business = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  status: BusinessStatus;
+  repositoryStatus: BusinessRepositoryStatus;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type KnowledgeBase = {
   id: string;
+  businessId: string;
   name: string;
   description: string | null;
   status: "DRAFT" | "READY";
+  repositoryStatus: BusinessRepositoryStatus;
   documentCount: number;
-  documentNames: string[];
   createdAt: string;
   updatedAt: string;
 };
 
 export type AgentDefinition = {
   id: string;
+  businessId: string;
   name: string;
   description: string | null;
   persona: string | null;
@@ -112,8 +132,15 @@ export type AgentDeployment = {
   channelType: DeploymentChannelType;
   deploymentSlug: string;
   status: DeploymentStatus;
-  publicUrl: string | null;
+  publicId: string;
+  endpointUrl: string;
+  queryUrl: string;
+  embedSnippet: string | null;
   hasApiKey: boolean;
+  welcomeMessage: string | null;
+  rateLimitPerMinute: number | null;
+  rateLimitPerDay: number | null;
+  allowedOrigins: string[];
   createdAt: string;
   updatedAt: string;
 };
@@ -146,9 +173,35 @@ async function resolveTenant(token: string): Promise<string> {
   return tenants[0].id;
 }
 
+async function resolveBusiness(token: string, tenantId: string): Promise<string> {
+  const existing = getActiveBusinessId();
+  if (existing) return existing;
+  const response = await fetch(`${API_BASE_URL}/api/agent-factory/businesses`, {
+    headers: { Authorization: `Bearer ${token}`, "X-Tenant-Id": tenantId },
+    cache: "no-store"
+  });
+  if (response.status === 401) throw new AgentFactoryApiError(401, "error.sessionExpired");
+  if (!response.ok) throw new AgentFactoryApiError(response.status, "error.operationFailed");
+  const businesses = (await response.json()) as Array<{ id: string }>;
+  if (!businesses[0]) throw new AgentFactoryApiError(404, "error.businessMissing");
+  setActiveBusinessId(businesses[0].id);
+  return businesses[0].id;
+}
+
+function needsBusinessContext(path: string): boolean {
+  return !path.startsWith("/api/agent-factory/businesses") && !path.startsWith("/v1/businesses");
+}
+
 async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await authenticatedFetch(path, options);
   return response.json() as Promise<T>;
+}
+
+function redirectToOnboarding(): never {
+  if (typeof window !== "undefined" && window.location.pathname !== "/onboarding") {
+    window.location.assign("/onboarding");
+  }
+  throw new AgentFactoryApiError(404, "error.onboardingRequired");
 }
 
 async function authenticatedFetch(path: string, options: RequestInit = {}): Promise<Response> {
@@ -156,6 +209,10 @@ async function authenticatedFetch(path: string, options: RequestInit = {}): Prom
   try {
     response = await fetchWithToken(path, options, await getValidAuthToken());
   } catch (error) {
+    if (error instanceof AgentFactoryApiError
+      && (error.code === "error.workspaceMissing" || error.code === "error.businessMissing")) {
+      redirectToOnboarding();
+    }
     if (!(error instanceof AgentFactoryApiError) || error.status !== 401) throw error;
     response = await fetchWithToken(path, options, await refreshAccessToken());
   }
@@ -167,6 +224,12 @@ async function authenticatedFetch(path: string, options: RequestInit = {}): Prom
     const responseCode = typeof payload?.message === "string" && payload.message.startsWith("error.")
       ? payload.message
       : "error.operationFailed";
+    // El negocio activo guardado ya no existe (borrado en otra pestaña / sesión).
+    // Se limpia y se recarga para re-resolver a uno válido.
+    if (responseCode === "error.businessNotFound" && getActiveBusinessId()) {
+      clearActiveBusinessId();
+      if (typeof window !== "undefined") window.location.reload();
+    }
     throw new AgentFactoryApiError(response.status, responseCode, { status: response.status });
   }
   return response;
@@ -174,15 +237,15 @@ async function authenticatedFetch(path: string, options: RequestInit = {}): Prom
 
 async function fetchWithToken(path: string, options: RequestInit, token: string): Promise<Response> {
   const tenantId = await resolveTenant(token);
-  return fetch(`${API_BASE_URL}${path}`, {
-    ...options,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "X-Tenant-Id": tenantId,
-      ...(options.headers ?? {})
-    },
-    cache: "no-store"
-  });
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    "X-Tenant-Id": tenantId,
+    ...(options.headers as Record<string, string> | undefined ?? {})
+  };
+  if (needsBusinessContext(path)) {
+    headers["X-Business-Id"] = await resolveBusiness(token, tenantId);
+  }
+  return fetch(`${API_BASE_URL}${path}`, { ...options, headers, cache: "no-store" });
 }
 
 function expireSession(): never {
@@ -223,6 +286,34 @@ export function fetchRepository() {
   return apiFetch<RepositoryStatus>("/api/agent-factory/repository");
 }
 
+export function fetchBusinesses() {
+  return apiFetch<Business[]>("/api/agent-factory/businesses");
+}
+
+export function createBusiness(input: { name: string; description?: string }) {
+  return apiFetch<Business>("/api/agent-factory/businesses", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+}
+
+export function updateBusiness(id: string, input: { name: string; description?: string; status?: BusinessStatus }) {
+  return apiFetch<Business>(`/api/agent-factory/businesses/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+}
+
+export async function deleteBusiness(id: string, confirmationName: string): Promise<void> {
+  await authenticatedFetch(`/api/agent-factory/businesses/${id}/delete`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ confirmationName })
+  });
+}
+
 export function fetchDriveConnection() {
   return apiFetch<DriveConnection>("/api/agent-factory/drive/connection");
 }
@@ -247,15 +338,11 @@ export function updateRepositoryNamespace(repositoryNamespace: string) {
   });
 }
 
-export function fetchDocuments() {
-  return apiFetch<StoredDocument[]>("/api/agent-factory/documents");
-}
-
 export function fetchKnowledgeBases() {
   return apiFetch<KnowledgeBase[]>("/api/agent-factory/knowledge-bases");
 }
 
-export function createKnowledgeBase(input: { name: string; description: string; documentDriveFileIds: string[] }) {
+export function createKnowledgeBase(input: { name: string; description: string }) {
   return apiFetch<KnowledgeBase>("/api/agent-factory/knowledge-bases", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -263,8 +350,57 @@ export function createKnowledgeBase(input: { name: string; description: string; 
   });
 }
 
+export function updateKnowledgeBase(id: string, input: { name: string; description: string }) {
+  return apiFetch<KnowledgeBase>(`/api/agent-factory/knowledge-bases/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+}
+
 export async function deleteKnowledgeBase(id: string): Promise<void> {
   await authenticatedFetch(`/api/agent-factory/knowledge-bases/${id}`, { method: "DELETE" });
+}
+
+export function fetchKnowledgeBaseDocuments(knowledgeBaseId: string) {
+  return apiFetch<StoredDocument[]>(`/api/agent-factory/knowledge-bases/${knowledgeBaseId}/documents`);
+}
+
+export function uploadKnowledgeBaseDocument(knowledgeBaseId: string, file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  return apiFetch<StoredDocument>(`/api/agent-factory/knowledge-bases/${knowledgeBaseId}/documents`, {
+    method: "POST",
+    body: form
+  }).catch((error: unknown) => {
+    if (error instanceof AgentFactoryApiError && error.status === 415) {
+      throw new AgentFactoryApiError(415, "error.unsupportedFileType", { name: file.name });
+    }
+    throw error;
+  });
+}
+
+export async function deleteKnowledgeBaseDocument(knowledgeBaseId: string, driveFileId: string): Promise<void> {
+  await authenticatedFetch(`/api/agent-factory/knowledge-bases/${knowledgeBaseId}/documents/${driveFileId}`, {
+    method: "DELETE"
+  });
+}
+
+export async function downloadKnowledgeBaseDocument(
+  knowledgeBaseId: string,
+  document: StoredDocument
+): Promise<void> {
+  const response = await authenticatedFetch(
+    `/api/agent-factory/knowledge-bases/${knowledgeBaseId}/documents/${document.driveFileId}/download`
+  );
+  if (!response.ok) throw new AgentFactoryApiError(response.status, "error.downloadFailed");
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const anchor = window.document.createElement("a");
+  anchor.href = url;
+  anchor.download = document.name;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }
 
 export function fetchAgents() {
@@ -332,8 +468,11 @@ export function createDeployment(input: {
   channelType: DeploymentChannelType;
   deploymentSlug: string;
   status?: DeploymentStatus;
-  publicUrl?: string;
   apiKey?: string;
+  welcomeMessage?: string;
+  rateLimitPerMinute?: number;
+  rateLimitPerDay?: number;
+  allowedOrigins?: string[];
 }) {
   return apiFetch<AgentDeployment>("/api/agent-factory/deployments", {
     method: "POST",
@@ -348,8 +487,11 @@ export function updateDeployment(id: string, input: {
   channelType: DeploymentChannelType;
   deploymentSlug: string;
   status: DeploymentStatus;
-  publicUrl?: string;
   apiKey?: string;
+  welcomeMessage?: string;
+  rateLimitPerMinute?: number;
+  rateLimitPerDay?: number;
+  allowedOrigins?: string[];
 }) {
   return apiFetch<AgentDeployment>(`/api/agent-factory/deployments/${id}`, {
     method: "PATCH",
@@ -358,33 +500,11 @@ export function updateDeployment(id: string, input: {
   });
 }
 
+export function regenerateDeploymentPublicId(id: string) {
+  return apiFetch<AgentDeployment>(`/api/agent-factory/deployments/${id}/public-id`, { method: "POST" });
+}
+
 export async function deleteDeployment(id: string): Promise<void> {
   await authenticatedFetch(`/api/agent-factory/deployments/${id}`, { method: "DELETE" });
 }
 
-export function uploadDocument(file: File) {
-  const form = new FormData();
-  form.append("file", file);
-  return apiFetch<StoredDocument>("/api/agent-factory/documents", { method: "POST", body: form }).catch((error: unknown) => {
-    if (error instanceof AgentFactoryApiError && error.status === 415) {
-      throw new AgentFactoryApiError(415, "error.unsupportedFileType", { name: file.name });
-    }
-    throw error;
-  });
-}
-
-export async function deleteDocument(document: StoredDocument): Promise<void> {
-  await authenticatedFetch(`/api/agent-factory/documents/${document.driveFileId}`, { method: "DELETE" });
-}
-
-export async function downloadDocument(document: StoredDocument): Promise<void> {
-  const response = await authenticatedFetch(`/api/agent-factory/documents/${document.driveFileId}/download`);
-  if (!response.ok) throw new AgentFactoryApiError(response.status, "error.downloadFailed");
-  const blob = await response.blob();
-  const url = URL.createObjectURL(blob);
-  const anchor = window.document.createElement("a");
-  anchor.href = url;
-  anchor.download = document.name;
-  anchor.click();
-  URL.revokeObjectURL(url);
-}

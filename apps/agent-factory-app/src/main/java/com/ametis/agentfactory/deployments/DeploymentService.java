@@ -19,10 +19,19 @@ import org.springframework.web.server.ResponseStatusException;
 public class DeploymentService {
   private final AgentDeploymentRepository deploymentRepository;
   private final AgentRepository agentRepository;
+  private final DeploymentEndpoints deploymentEndpoints;
 
-  public DeploymentService(AgentDeploymentRepository deploymentRepository, AgentRepository agentRepository) {
+  public DeploymentService(
+      AgentDeploymentRepository deploymentRepository,
+      AgentRepository agentRepository,
+      DeploymentEndpoints deploymentEndpoints) {
     this.deploymentRepository = deploymentRepository;
     this.agentRepository = agentRepository;
+    this.deploymentEndpoints = deploymentEndpoints;
+  }
+
+  private DeploymentResponse toResponse(AgentDeployment deployment, AgentDefinition agent) {
+    return DeploymentResponse.from(deployment, agent, deploymentEndpoints.describe(deployment));
   }
 
   public List<DeploymentResponse> list(UUID tenantId) {
@@ -35,7 +44,7 @@ public class DeploymentService {
         .filter(agent -> agent.getTenantId().equals(tenantId))
         .collect(Collectors.toMap(AgentDefinition::getId, Function.identity()));
     return deployments.stream()
-        .map(deployment -> DeploymentResponse.from(deployment, agentsById.get(deployment.getAgentId())))
+        .map(deployment -> toResponse(deployment, agentsById.get(deployment.getAgentId())))
         .toList();
   }
 
@@ -53,10 +62,13 @@ public class DeploymentService {
         name,
         request.channelType(),
         slug,
-        cleanOptional(request.publicUrl()),
         cleanOptional(request.apiKey()),
+        cleanOptional(request.welcomeMessage()),
+        request.rateLimitPerMinute(),
+        request.rateLimitPerDay(),
+        DeploymentOrigins.normalize(request.allowedOrigins()),
         userId);
-    return DeploymentResponse.from(deploymentRepository.save(deployment), agent);
+    return toResponse(deploymentRepository.save(deployment), agent);
   }
 
   @Transactional
@@ -74,9 +86,21 @@ public class DeploymentService {
         request.channelType(),
         slug,
         request.status() == null ? DeploymentStatus.ACTIVE : request.status(),
-        cleanOptional(request.publicUrl()),
-        request.apiKey() == null ? deployment.getApiKey() : cleanOptional(request.apiKey()));
-    return DeploymentResponse.from(deploymentRepository.save(deployment), agent);
+        request.apiKey() == null ? deployment.getApiKey() : cleanOptional(request.apiKey()),
+        cleanOptional(request.welcomeMessage()),
+        request.rateLimitPerMinute(),
+        request.rateLimitPerDay(),
+        DeploymentOrigins.normalize(request.allowedOrigins()));
+    return toResponse(deploymentRepository.save(deployment), agent);
+  }
+
+  @Transactional
+  public DeploymentResponse regeneratePublicId(UUID tenantId, UUID deploymentId) {
+    AgentDeployment deployment = deploymentRepository.findByIdAndTenantId(deploymentId, tenantId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "error.deploymentNotFound"));
+    deployment.regeneratePublicId();
+    AgentDefinition agent = agentRepository.findByIdAndTenantId(deployment.getAgentId(), tenantId).orElse(null);
+    return toResponse(deploymentRepository.save(deployment), agent);
   }
 
   public void delete(UUID tenantId, UUID deploymentId) {

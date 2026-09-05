@@ -12,6 +12,7 @@ import {
   DeploymentStatus,
   fetchAgents,
   fetchDeployments,
+  regenerateDeploymentPublicId,
   updateDeployment
 } from "@/lib/agent-factory-api";
 
@@ -23,8 +24,11 @@ type FormState = {
   channelType: DeploymentChannelType;
   deploymentSlug: string;
   status: DeploymentStatus;
-  publicUrl: string;
   apiKey: string;
+  welcomeMessage: string;
+  rateLimitPerMinute: string;
+  rateLimitPerDay: string;
+  allowedOrigins: string;
 };
 
 const emptyForm: FormState = {
@@ -33,8 +37,11 @@ const emptyForm: FormState = {
   channelType: "WEB_CHAT",
   deploymentSlug: "",
   status: "ACTIVE",
-  publicUrl: "",
-  apiKey: ""
+  apiKey: "",
+  welcomeMessage: "",
+  rateLimitPerMinute: "",
+  rateLimitPerDay: "",
+  allowedOrigins: ""
 };
 
 export default function DeploymentsPage() {
@@ -48,7 +55,32 @@ export default function DeploymentsPage() {
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deploymentToDelete, setDeploymentToDelete] = useState<AgentDeployment | null>(null);
+  const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
+
+  async function copyText(text: string, key: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedKey(key);
+      window.setTimeout(() => setCopiedKey((current) => (current === key ? null : current)), 1500);
+    } catch {
+      /* clipboard no disponible: se ignora */
+    }
+  }
+
+  async function regeneratePublicId(deployment: AgentDeployment) {
+    setRegeneratingId(deployment.id);
+    setError(null);
+    try {
+      const updated = await regenerateDeploymentPublicId(deployment.id);
+      setDeployments((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+    } catch (requestError) {
+      setError(requestError);
+    } finally {
+      setRegeneratingId(null);
+    }
+  }
 
   const readyAgents = useMemo(() => agents.filter((agent) => agent.status === "READY"), [agents]);
 
@@ -91,8 +123,11 @@ export default function DeploymentsPage() {
         channelType: form.channelType,
         deploymentSlug: form.deploymentSlug.trim(),
         status: form.status,
-        publicUrl: form.publicUrl.trim(),
-        apiKey: form.apiKey.trim() || undefined
+        apiKey: form.apiKey.trim() || undefined,
+        welcomeMessage: form.welcomeMessage.trim() || undefined,
+        rateLimitPerMinute: parseLimit(form.rateLimitPerMinute),
+        rateLimitPerDay: parseLimit(form.rateLimitPerDay),
+        allowedOrigins: parseOrigins(form.allowedOrigins)
       };
       if (editingId) {
         const updated = await updateDeployment(editingId, payload);
@@ -132,8 +167,11 @@ export default function DeploymentsPage() {
       channelType: deployment.channelType,
       deploymentSlug: deployment.deploymentSlug,
       status: deployment.status,
-      publicUrl: deployment.publicUrl || "",
-      apiKey: ""
+      apiKey: "",
+      welcomeMessage: deployment.welcomeMessage || "",
+      rateLimitPerMinute: deployment.rateLimitPerMinute != null ? String(deployment.rateLimitPerMinute) : "",
+      rateLimitPerDay: deployment.rateLimitPerDay != null ? String(deployment.rateLimitPerDay) : "",
+      allowedOrigins: (deployment.allowedOrigins ?? []).join("\n")
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -205,9 +243,8 @@ export default function DeploymentsPage() {
             </span>
             <select value={form.channelType} onChange={(event) => setField("channelType", event.target.value as DeploymentChannelType)}>
               <option value="WEB_CHAT">{t("deployments.channel.web_chat")}</option>
-              <option value="API">{t("deployments.channel.api")}</option>
-              <option value="INTERNAL_TEST">{t("deployments.channel.internal_test")}</option>
             </select>
+            <small className="field-limit">{t("deployments.channelSoon")}</small>
           </label>
           <label className="form-field">
             <span className="field-label">
@@ -215,20 +252,47 @@ export default function DeploymentsPage() {
               <span className="field-help" tabIndex={0} aria-label={t("deployments.slugHelp")} title={t("deployments.slugHelp")}>?</span>
             </span>
             <input value={form.deploymentSlug} onChange={(event) => setField("deploymentSlug", slugify(event.target.value))} placeholder={t("deployments.slugPlaceholder")} />
+            <small className="field-limit">{t("deployments.slugHint")}</small>
           </label>
+          {form.channelType !== "WEB_CHAT" ? (
+            <label className="form-field">
+              <span className="field-label">
+                {t("deployments.apiKeyLabel")}
+                <span className="field-help" tabIndex={0} aria-label={t("deployments.apiKeyHelp")} title={t("deployments.apiKeyHelp")}>?</span>
+              </span>
+              <input value={form.apiKey} onChange={(event) => setField("apiKey", event.target.value)} placeholder={editingId ? t("deployments.apiKeyEditPlaceholder") : t("deployments.apiKeyPlaceholder")} />
+            </label>
+          ) : null}
           <label className="form-field">
             <span className="field-label">
-              {t("deployments.publicUrlLabel")}
-              <span className="field-help" tabIndex={0} aria-label={t("deployments.publicUrlHelp")} title={t("deployments.publicUrlHelp")}>?</span>
+              {t("deployments.welcomeMessageLabel")}
+              <span className="field-help" tabIndex={0} aria-label={t("deployments.welcomeMessageHelp")} title={t("deployments.welcomeMessageHelp")}>?</span>
             </span>
-            <input value={form.publicUrl} onChange={(event) => setField("publicUrl", event.target.value)} placeholder={t("deployments.publicUrlPlaceholder")} />
+            <textarea value={form.welcomeMessage} onChange={(event) => setField("welcomeMessage", event.target.value)} placeholder={t("deployments.welcomeMessagePlaceholder")} maxLength={500} />
           </label>
+          <div className="form-split">
+            <label className="form-field">
+              <span className="field-label">
+                {t("deployments.rateLimitMinuteLabel")}
+                <span className="field-help" tabIndex={0} aria-label={t("deployments.rateLimitMinuteHelp")} title={t("deployments.rateLimitMinuteHelp")}>?</span>
+              </span>
+              <input type="number" min={1} inputMode="numeric" value={form.rateLimitPerMinute} onChange={(event) => setField("rateLimitPerMinute", event.target.value)} placeholder={t("deployments.rateLimitPlaceholder")} />
+            </label>
+            <label className="form-field">
+              <span className="field-label">
+                {t("deployments.rateLimitDayLabel")}
+                <span className="field-help" tabIndex={0} aria-label={t("deployments.rateLimitDayHelp")} title={t("deployments.rateLimitDayHelp")}>?</span>
+              </span>
+              <input type="number" min={1} inputMode="numeric" value={form.rateLimitPerDay} onChange={(event) => setField("rateLimitPerDay", event.target.value)} placeholder={t("deployments.rateLimitPlaceholder")} />
+            </label>
+          </div>
           <label className="form-field">
             <span className="field-label">
-              {t("deployments.apiKeyLabel")}
-              <span className="field-help" tabIndex={0} aria-label={t("deployments.apiKeyHelp")} title={t("deployments.apiKeyHelp")}>?</span>
+              {t("deployments.allowedOriginsLabel")}
+              <span className="field-help" tabIndex={0} aria-label={t("deployments.allowedOriginsHelp")} title={t("deployments.allowedOriginsHelp")}>?</span>
             </span>
-            <input value={form.apiKey} onChange={(event) => setField("apiKey", event.target.value)} placeholder={editingId ? t("deployments.apiKeyEditPlaceholder") : t("deployments.apiKeyPlaceholder")} />
+            <textarea value={form.allowedOrigins} onChange={(event) => setField("allowedOrigins", event.target.value)} placeholder={t("deployments.allowedOriginsPlaceholder")} rows={3} />
+            <small className="field-limit">{t("deployments.allowedOriginsHint")}</small>
           </label>
           {editingId ? (
             <label className="form-field">
@@ -268,15 +332,42 @@ export default function DeploymentsPage() {
                     <h3>{deployment.name}</h3>
                     <p>{deployment.agentName || t("deployments.agentMissing")}</p>
                     <small>{t("deployments.updatedAt", { date: formatDate(deployment.updatedAt, locale) })}</small>
-                    <div className="deployment-endpoint">
-                      <span>{t("deployments.endpointLabel")}</span>
-                      <code>{deployment.publicUrl || `/${deployment.deploymentSlug}`}</code>
+                    <div className="deployment-endpoints">
+                      <CopyRow
+                        label={t("deployments.queryUrlLabel")}
+                        value={deployment.queryUrl}
+                        copyLabel={t("common.copy")}
+                        copiedLabel={t("common.copied")}
+                        copied={copiedKey === `${deployment.id}:query`}
+                        onCopy={() => copyText(deployment.queryUrl, `${deployment.id}:query`)}
+                      />
+                      {deployment.embedSnippet ? (
+                        <CopyRow
+                          label={t("deployments.embedLabel")}
+                          value={deployment.embedSnippet}
+                          copyLabel={t("common.copy")}
+                          copiedLabel={t("common.copied")}
+                          copied={copiedKey === `${deployment.id}:embed`}
+                          onCopy={() => copyText(deployment.embedSnippet ?? "", `${deployment.id}:embed`)}
+                        />
+                      ) : null}
+                      <button
+                        className="link-button"
+                        type="button"
+                        onClick={() => regeneratePublicId(deployment)}
+                        disabled={regeneratingId === deployment.id}
+                      >
+                        {regeneratingId === deployment.id ? t("deployments.regenerating") : t("deployments.regeneratePublicId")}
+                      </button>
                     </div>
                   </div>
                   <div className="knowledge-meta deployment-meta">
                     <strong>{t(`deployments.channel.${deployment.channelType.toLowerCase()}`)}</strong>
                     <span>{deployment.deploymentSlug}</span>
-                    <span>{deployment.hasApiKey ? t("deployments.apiKeyConfigured") : t("deployments.apiKeyNotConfigured")}</span>
+                    <span>{formatLimits(deployment, t)}</span>
+                    <span>{(deployment.allowedOrigins?.length ?? 0)
+                      ? t("deployments.allowedOriginsValue", { count: deployment.allowedOrigins.length })
+                      : t("deployments.allowedOriginsNone")}</span>
                     <div className="item-actions">
                       <button className="icon-button" type="button" onClick={() => edit(deployment)} aria-label={t("deployments.edit", { name: deployment.name })} title={t("deployments.edit", { name: deployment.name })}>
                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
@@ -316,8 +407,59 @@ function messageOf(error: unknown, t: Translate): string {
   return t("common.unexpectedError");
 }
 
+function CopyRow({
+  label,
+  value,
+  copyLabel,
+  copiedLabel,
+  copied,
+  onCopy
+}: {
+  label: string;
+  value: string;
+  copyLabel: string;
+  copiedLabel: string;
+  copied: boolean;
+  onCopy: () => void;
+}) {
+  return (
+    <div className="copy-row">
+      <span className="copy-row-label">{label}</span>
+      <code className="copy-row-value">{value}</code>
+      <button className="link-button" type="button" onClick={onCopy}>
+        {copied ? copiedLabel : copyLabel}
+      </button>
+    </div>
+  );
+}
+
 function formatDate(value: string, locale: string): string {
   return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+}
+
+function formatLimits(deployment: AgentDeployment, t: Translate): string {
+  const parts: string[] = [];
+  if (deployment.rateLimitPerMinute != null) {
+    parts.push(t("deployments.rateLimitMinuteValue", { count: deployment.rateLimitPerMinute }));
+  }
+  if (deployment.rateLimitPerDay != null) {
+    parts.push(t("deployments.rateLimitDayValue", { count: deployment.rateLimitPerDay }));
+  }
+  return parts.length ? parts.join(" · ") : t("deployments.rateLimitNone");
+}
+
+function parseLimit(value: string): number | undefined {
+  const parsed = Number.parseInt(value.trim(), 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function parseOrigins(value: string): string[] {
+  const seen = new Set<string>();
+  for (const line of value.split(/[\r\n,]+/)) {
+    const origin = line.trim().toLowerCase().replace(/\/+$/, "");
+    if (origin) seen.add(origin);
+  }
+  return [...seen].slice(0, 20);
 }
 
 function slugify(value: string): string {

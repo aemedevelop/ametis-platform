@@ -1,6 +1,8 @@
 package com.ametis.agentfactory.agents;
 
 import com.ametis.agentfactory.access.AccessGuard;
+import com.ametis.agentfactory.businesses.Business;
+import com.ametis.agentfactory.businesses.BusinessService;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
@@ -20,25 +22,31 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping({"/v1", "/api/agent-factory"})
 public class AgentController {
   private final AccessGuard accessGuard;
+  private final BusinessService businessService;
   private final AgentService agentService;
 
-  public AgentController(AccessGuard accessGuard, AgentService agentService) {
+  public AgentController(AccessGuard accessGuard, BusinessService businessService, AgentService agentService) {
     this.accessGuard = accessGuard;
+    this.businessService = businessService;
     this.agentService = agentService;
+  }
+
+  private Business business(JwtAuthenticationToken authentication, String permission) {
+    UUID tenantId = accessGuard.requireAccess(authentication, permission);
+    return businessService.require(tenantId, accessGuard.requireBusinessId());
   }
 
   @GetMapping("/agents")
   public List<AgentResponse> list(JwtAuthenticationToken authentication) {
-    UUID tenantId = accessGuard.requireAccess(authentication, AccessGuard.DOCUMENTS_READ);
-    return agentService.list(tenantId);
+    return agentService.list(business(authentication, AccessGuard.DOCUMENTS_READ));
   }
 
   @PostMapping("/agents")
   public ResponseEntity<AgentResponse> create(
       @Valid @RequestBody AgentRequest request,
       JwtAuthenticationToken authentication) {
-    UUID tenantId = accessGuard.requireAccess(authentication, AccessGuard.DOCUMENTS_MANAGE);
-    AgentResponse response = agentService.create(tenantId, accessGuard.currentUserId(authentication), request);
+    Business business = business(authentication, AccessGuard.DOCUMENTS_MANAGE);
+    AgentResponse response = agentService.create(business, accessGuard.currentUserId(authentication), request);
     return ResponseEntity.status(HttpStatus.CREATED).body(response);
   }
 
@@ -47,16 +55,14 @@ public class AgentController {
       @PathVariable UUID agentId,
       @Valid @RequestBody AgentRequest request,
       JwtAuthenticationToken authentication) {
-    UUID tenantId = accessGuard.requireAccess(authentication, AccessGuard.DOCUMENTS_MANAGE);
-    return agentService.update(tenantId, agentId, request);
+    return agentService.update(business(authentication, AccessGuard.DOCUMENTS_MANAGE), agentId, request);
   }
 
   @DeleteMapping("/agents/{agentId}")
   public ResponseEntity<Void> delete(
       @PathVariable UUID agentId,
       JwtAuthenticationToken authentication) {
-    UUID tenantId = accessGuard.requireAccess(authentication, AccessGuard.DOCUMENTS_MANAGE);
-    agentService.delete(tenantId, agentId);
+    agentService.delete(business(authentication, AccessGuard.DOCUMENTS_MANAGE), agentId);
     return ResponseEntity.noContent().build();
   }
 
@@ -64,24 +70,22 @@ public class AgentController {
   public AgentResponse publish(
       @PathVariable UUID agentId,
       JwtAuthenticationToken authentication) {
-    UUID tenantId = accessGuard.requireAccess(authentication, AccessGuard.DOCUMENTS_MANAGE);
-    return agentService.publish(tenantId, agentId);
+    return agentService.publish(business(authentication, AccessGuard.DOCUMENTS_MANAGE), agentId);
   }
 
   @PostMapping("/agents/{agentId}/indexing-jobs")
   public AmetisAiCreateIndexingJobsResponse requestIndexing(
       @PathVariable UUID agentId,
       JwtAuthenticationToken authentication) {
-    UUID tenantId = accessGuard.requireAccess(authentication, AccessGuard.DOCUMENTS_MANAGE);
-    return agentService.requestIndexing(tenantId, agentId, accessGuard.currentUserId(authentication));
+    return agentService.requestIndexing(
+        business(authentication, AccessGuard.DOCUMENTS_MANAGE), agentId, accessGuard.currentUserId(authentication));
   }
 
   @GetMapping("/agents/{agentId}/indexing-jobs/latest")
   public List<AgentIndexingJobResponse> latestIndexingJobs(
       @PathVariable UUID agentId,
       JwtAuthenticationToken authentication) {
-    UUID tenantId = accessGuard.requireAccess(authentication, AccessGuard.DOCUMENTS_READ);
-    return agentService.latestIndexingJobs(tenantId, agentId);
+    return agentService.latestIndexingJobs(business(authentication, AccessGuard.DOCUMENTS_READ), agentId);
   }
 
   @PostMapping("/agents/{agentId}/test")
@@ -89,7 +93,6 @@ public class AgentController {
       @PathVariable UUID agentId,
       @Valid @RequestBody AgentTestRequest request,
       JwtAuthenticationToken authentication) {
-    UUID tenantId = accessGuard.requireAccess(authentication, AccessGuard.DOCUMENTS_READ);
-    return agentService.testAgent(tenantId, agentId, request);
+    return agentService.testAgent(business(authentication, AccessGuard.DOCUMENTS_READ), agentId, request);
   }
 }

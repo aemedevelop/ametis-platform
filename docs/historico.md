@@ -1,5 +1,170 @@
 # Histórico de cambios - AMETIS Platform
 
+## 2026-09-04 - Login solo SSO; fix de perfil desactualizado en la barra superior
+
+### Fix: "Usuario AMETIS" en vez del nombre real
+
+`components/app-shell.tsx` leía el nombre del usuario del token **solo al montar**
+el componente (`useEffect(..., [])`). Como el login navega dentro de la misma app
+sin recargar, a veces esa lectura ocurría antes de guardar el token nuevo y nunca
+se repetía. Verificado con el flujo SSO completo (PKCE real contra Keycloak): el
+token siempre trae `name`/`given_name`/`family_name` correctos — no era un
+problema de Keycloak. Fix: el efecto ahora depende de `pathname`, se reevalúa en
+cada cambio de ruta.
+
+### Login solo SSO
+
+Se retira el formulario de correo/contraseña de `/auth/login`: la única acción es
+"Acceder con AMETIS" (SSO, Authorization Code + PKCE). Motivo: un solo punto de
+identidad (MFA, recuperación de contraseña, login social se activan en Keycloak
+sin tocar el frontend), la contraseña nunca pasa por `core-api`, y menos código
+que mantener. `/auth/register` se mantiene igual (crea el usuario + aprovisiona
+el workspace) y sigue haciendo un login automático por contraseña una sola vez
+justo después de registrarse, antes de entrar a `/onboarding`. Claves i18n
+`login.emailLabel/passwordLabel/signInAction/signingIn/orDivider` eliminadas por
+no usarse ya.
+
+## 2026-09-04 - Decisión: almacenamiento documental a MinIO (Drive conmutable)
+
+### Contexto
+
+El modo `service-account` de Drive no permite **subir** archivos (la cuenta de
+servicio no tiene cuota; solo crea carpetas). Sumado al OAuth, expiración de
+token a 7 días, verificación de app y listado eventualmente consistente, se
+decide mover el almacenamiento documental a **MinIO** (object storage), con
+**bucket por tenant**.
+
+### Decisión
+
+- MinIO pasa a ser el backend por defecto. El **código de Drive se conserva** y
+  el backend se vuelve conmutable por configuración (`AGENT_FACTORY_STORAGE_PROVIDER`,
+  global ahora; por tenant + UI de admin más adelante).
+- Sub-decisiones cerradas: bucket por tenant · renombrar columnas de storage a
+  nombres neutrales · sin migración de datos (se recrean) · key `{uuid}__{nombre}`
+  · borrado duro con confirmación obligatoria.
+- Especificación completa: `.agents/proposals/minio-storage-migration.md`.
+  Decisión en `.agents/decisions.md`.
+
+### Estado
+
+**Pausado.** Primero se saca una versión con el flujo de Drive por tenant que ya
+funcionaba (`AGENT_FACTORY_GOOGLE_AUTH_MODE=workspace-oauth`, el owner conecta su
+propio Google Drive por OAuth). MinIO se implementa justo después. El código
+`MANAGED` añadido a `GoogleDriveOAuthService` queda inerte en modo
+`workspace-oauth` y se conserva para el trabajo de MinIO.
+
+## 2026-08-30 - Alta autoservicio de cuenta + workspace + onboarding de negocio
+
+### Contexto
+
+El acceso a Agent Factory era solo SSO (redirect a Keycloak) y asumía que el
+tenant/workspace y su "Negocio principal" ya existían (creados a mano o por la
+migración V13). Un usuario nuevo no podía crear su propia cuenta ni su espacio de
+trabajo, y un tenant recién creado se quedaba atascado en `error.businessMissing`.
+
+### Cambios
+
+**Core (`core-api`)**
+- `application.yml`: nueva sección `core.registration` con
+  `default-product-code: ${CORE_REGISTRATION_DEFAULT_PRODUCT_CODE:agent-factory}`
+  (antes el `@Value` caía a `newsletter`, dejando al usuario sin acceso a Agent
+  Factory). El producto `agent-factory`, permisos y `plan_features` ya estaban
+  sembrados en `db/migrations/V4__agent_factory_product.sql`.
+- Sin cambios de código: `POST /v1/auth/register` ya crea usuario en Keycloak +
+  perfil en Core y `RegistrationProvisioningService.provisionInitialWorkspace()`
+  crea el tenant con rol OWNER y concede acceso al producto por defecto.
+- Requiere en Keycloak: cliente `core-api` con **Direct Access Grants** activado
+  (lo usa `POST /v1/auth/login`, grant `password`).
+
+**Frontend `agent-factory-app`**
+- `/auth/login`: formulario email/contraseña como acción principal (`POST
+  /v1/auth/login`), enlace "Crear cuenta", y "Continuar con AMETIS" (SSO) como
+  alternativa secundaria.
+- `/auth/register` (nueva): nombre + email + contraseña → `registerAccount()` →
+  `loginWithPassword()` → `/onboarding`.
+- `/onboarding` (nueva): si el tenant ya tiene negocio redirige al panel; si no,
+  pide el nombre del negocio, lo crea y entra. Se renderiza fuera del AppShell.
+- `lib/session.ts`: `getAuthMode()/setAuthMode()` (`sso` | `password`).
+- `lib/auth-client.ts`: `registerAccount`, `loginWithPassword`; `refreshSession`
+  solo envía `clientId: agent-factory-web` en modo `sso` (las sesiones
+  `password` se emiten para el cliente confidencial de Core y se refrescan sin
+  `clientId`).
+- `lib/agent-factory-api.ts`: `authenticatedFetch` redirige a `/onboarding` ante
+  `error.workspaceMissing` / `error.businessMissing`.
+
+### Decisiones (marcadas por el usuario)
+
+- v1: **un solo workspace por usuario** (sin selector de workspace todavía).
+- Creación del negocio inicial mediante **paso de onboarding guiado**, no
+  automático.
+- Registro con **formulario propio** en la app (patrón estándar: pantalla de
+  acceso con enlace a registro).
+
+### Correcciones posteriores (mismo día)
+
+- `core-api` y `keycloak` estaban caídos: se habían recreado sin `--env-file`, con
+  el placeholder `jdbc:postgresql://vps-postgres-host:...` sin resolver. Se
+  recrearon con `--env-file .env.local` (BD local `ametis-postgres`, datos
+  intactos). **Levantar siempre con `scripts/up-platform.ps1` o el mismo juego de
+  flags**, nunca `docker compose ... up` suelto.
+- `infra/platform-stack.compose.yml`: los build-args `NEXT_PUBLIC_*` de
+  `agent-factory-web` apuntaban a `http://localhost:8000` (rag-service) por
+  defecto; corregidos a `http://localhost:8440` (Kong).
+- Registro daba 401 en el login automático: el formulario pedía "Nombre completo"
+  en un campo; con un solo nombre, `lastName` quedaba vacío → Keycloak marca
+  `VERIFY_PROFILE` → "Account is not fully set up" → *password grant* rechazado.
+  Fix: `AuthService.createIdentityUser` rellena `lastName` con `firstName` si
+  queda vacío; el formulario ahora tiene campos separados **Nombre** / **Apellidos**.
+- Campos obligatorios en `/auth/register`, `/auth/login` y `/onboarding`: marca
+  `*`, `required`/`aria-required`, nota "campos obligatorios", borde `:user-invalid`.
+- **Drive gestionado por AEME (sin conectar nada el usuario nuevo)**:
+  `AGENT_FACTORY_GOOGLE_AUTH_MODE` pasa de `workspace-oauth` a `service-account`
+  en `.env` y `.env.local` (el `oauth-user` refresh-token estaba vacío; el JSON de
+  cuenta de servicio `ametis-rag-drive-document-repo@aeme-dev.iam...` sí existe y
+  tiene `canAddChildren` sobre la carpeta raíz local `AMETIS_LOCAL_DOCS`).
+  `GoogleDriveOAuthService.status()` devuelve `MANAGED` cuando el
+  modo es `oauth-user`/`service-account` con credenciales presentes; `authorize()`
+  responde 409 `error.driveManaged`. El dashboard: si el estado es `MANAGED`
+  oculta "Conectar Drive" y **auto-provisiona el repositorio del tenant** en la
+  carga (`provisionRepository()` sin namespace → el backend lo deriva del slug del
+  tenant); solo queda un botón de reintento si esa provisión falla.
+
+### Pendiente
+
+- Keycloak: verificación de email y recuperación de contraseña.
+- Selector de workspace + "crear workspace" adicional (cuando se necesite
+  multi-workspace por usuario).
+- Cuentas de prueba con `lastName` vacío creadas antes del fix siguen sin poder
+  iniciar sesión (borrar en Keycloak+Core o parchear el apellido).
+
+### Validación
+
+- `agent-factory-web` pasa `npx tsc --noEmit`; JSON de locales válido.
+- Rebuild necesario: `core-api` + `agent-factory-web`.
+
+## 2026-08-30 - Modelo multi-cliente (Negocios), aislamiento fuerte y jerarquía documental
+
+### Contexto
+
+Agent Factory era plano bajo `tenant_id`: no se podía asociar un agente a un negocio y los documentos de todos los negocios de un tenant se mezclaban. Objetivo: modelo de agencia (un tenant = consultor/agencia, un negocio = cliente final) con aislamiento real entre negocios, e incluso entre agentes del mismo negocio.
+
+### Ajuste (una sola sesión larga, sin commitear todavía)
+
+- **Módulo de despliegue completado**: `V8` (mensaje de bienvenida, límites por minuto/día), `V9` (`allowed_origins`), `V10/V11` (`public_id` opaco de 32 hex, sin prefijo, regenerable). Endpoint público `GET|POST /api/agent-factory/public/{publicId}[/query]` (`PublicDeploymentController`), solo canal `WEB_CHAT`, valida cabecera `Origin` contra `allowed_origins`, sin JWT. `DeploymentResponse` devuelve `endpointUrl`/`queryUrl`/`embedSnippet` derivados. `AGENT_FACTORY_PUBLIC_BASE_URL` nuevo. Falta el bundle `ametis-widget.js` y la seguridad de consumo por api key / rate limit.
+- **Perfil de contexto del agente -> RAG**: `publish` sincroniza persona/audiencia/tono/idioma; el RAG los inyecta en el prompt.
+- **Negocios**: `V12` tabla `businesses`; `V13` `business_id` en `agents` y `knowledge_bases` + backfill "Negocio principal". Cabecera `X-Business-Id` (`BusinessContextFilter`), selector en la topbar, página `/businesses`. Unicidad de nombre pasa a `(business_id, name)`.
+- **Documentos por negocio y luego por base de conocimiento**: `V14` (carpeta Drive del negocio + `document_assets.business_id`), `V15` (carpeta Drive por base + `document_assets.knowledge_base_id`, se **elimina** `knowledge_base_documents`). Jerarquía Drive: `{namespace}/{negocio-slug}/{base-slug--8hex}/`. La gestión de documentos se mueve del dashboard a `/knowledge-bases/{id}/documents`. El dashboard queda solo con conexión Drive + repositorio; el campo namespace se rellena con el slug del negocio activo.
+- **Aislamiento fuerte**: `business_id` es filtro `must` obligatorio en el retrieval del RAG y se estampa en cada chunk (contrato platform->RAG en `syncAgent` / `createIndexingJobs` / `query`). Cada job de indexado usa la carpeta de su base.
+- **Opción A** (la plataforma pasa el id de carpeta de Drive al RAG, en vez de que este la busque por nombre): elimina el fallo intermitente "carpeta no encontrada" al indexar.
+- `rag-service` local pasa a usar el Postgres local (`ametis_postgres`) en vez del de la VPS.
+
+### Pendiente
+
+- **Re-indexar todos los agentes** tras desplegar (los chunks viejos no tienen `business_id`).
+- Publicar la app OAuth de Google a producción (quita la caducidad de 7 días del token).
+- Seguridad de consumo del despliegue más allá del origen; bundle del widget.
+- Nada commiteado — hacer commit antes de cualquier reinicio de contexto.
+
 ## 2026-08-29 - Runbooks / Reinicio aislado de servicios Docker
 
 ### Contexto

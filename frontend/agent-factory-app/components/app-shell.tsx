@@ -7,6 +7,7 @@ import { clearSession, getAuthToken } from "@/lib/session";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { useT } from "@/components/IntlProviderClient";
 import { ThemeSwitcher } from "@/components/theme-switcher";
+import { BusinessSwitcher } from "@/components/business-switcher";
 
 type AuthProfile = {
   name: string;
@@ -23,9 +24,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   useEffect(() => {
+    // Se reevalúa en cada cambio de ruta: tras iniciar sesión (contraseña o SSO)
+    // la navegación es del lado del cliente (sin recargar la página), así que el
+    // token recién guardado no se leería si esto solo corriera al montar.
     const timeout = window.setTimeout(() => setProfile(buildProfileFromToken(getAuthToken())), 0);
     return () => window.clearTimeout(timeout);
-  }, []);
+  }, [pathname]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -44,7 +48,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return () => document.removeEventListener("mousedown", closeProfileMenu);
   }, []);
 
-  if (pathname.startsWith("/auth/")) return children;
+  if (pathname.startsWith("/auth/") || pathname === "/onboarding") return children;
 
   function signOut() {
     clearSession();
@@ -64,6 +68,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const hubUrl = process.env.NEXT_PUBLIC_HUB_URL ?? "http://localhost:3000";
   const profileName = profile?.name ?? t("navigation.user");
   const isDocumentsActive = pathname === "/";
+  const isBusinessesActive = pathname.startsWith("/businesses");
   const isKnowledgeBasesActive = pathname.startsWith("/knowledge-bases");
   const isAgentsActive = pathname.startsWith("/agents");
   const isDeploymentsActive = pathname.startsWith("/deployments");
@@ -90,6 +95,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </Link>
         <nav className="side-nav">
           <span className="nav-section">{t("navigation.section.workspace")}</span>
+          <Link className={`nav-item ${isBusinessesActive ? "active" : ""}`} href="/businesses">{t("navigation.businesses")}</Link>
           <Link className={`nav-item ${isDocumentsActive ? "active" : ""}`} href="/">{t("navigation.documents")}</Link>
           <Link className={`nav-item ${isKnowledgeBasesActive ? "active" : ""}`} href="/knowledge-bases">{t("navigation.knowledgeBases")}</Link>
           <Link className={`nav-item ${isAgentsActive ? "active" : ""}`} href="/agents">{t("navigation.agents")}</Link>
@@ -103,7 +109,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <h1>{t("header.title")}</h1>
           </div>
           <div className="topbar-actions">
-            <span className="phase-badge">{t("header.phase")}</span>
+            <BusinessSwitcher />
             <LanguageSwitcher />
             <ThemeSwitcher />
             <details

@@ -51,6 +51,14 @@ public class DeploymentController {
     return deploymentService.update(tenantId, deploymentId, request);
   }
 
+  @PostMapping("/deployments/{deploymentId}/public-id")
+  public DeploymentResponse regeneratePublicId(
+      @PathVariable UUID deploymentId,
+      JwtAuthenticationToken authentication) {
+    UUID tenantId = accessGuard.requireAccess(authentication, AccessGuard.DOCUMENTS_MANAGE);
+    return deploymentService.regeneratePublicId(tenantId, deploymentId);
+  }
+
   @DeleteMapping("/deployments/{deploymentId}")
   public ResponseEntity<Void> delete(
       @PathVariable UUID deploymentId,

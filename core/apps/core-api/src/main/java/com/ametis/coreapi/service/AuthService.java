@@ -252,12 +252,19 @@ public class AuthService {
   }
 
   private String createIdentityUser(String adminAccessToken, AuthRegisterRequest request) {
+    String first = firstName(request.fullName());
+    String last = lastName(request.fullName());
+    // Keycloak exige firstName y lastName no vacios; si no, marca VERIFY_PROFILE y
+    // el direct grant posterior falla con "Account is not fully set up".
+    if (last.isBlank()) {
+      last = first;
+    }
     Map<String, Object> userBody = Map.of(
         "username", request.email(),
         "email", request.email(),
         "enabled", true,
-        "firstName", firstName(request.fullName()),
-        "lastName", lastName(request.fullName()),
+        "firstName", first,
+        "lastName", last,
         "credentials", List.of(Map.of(
             "type", "password",
             "value", request.password(),

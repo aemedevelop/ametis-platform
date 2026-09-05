@@ -1,3 +1,3 @@
 package com.ametis.agentfactory.agents;
 
-public record AmetisAiQueryRequest(String question) {}
+public record AmetisAiQueryRequest(String question, String businessId) {}

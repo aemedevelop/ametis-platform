@@ -6,6 +6,7 @@ import java.util.UUID;
 
 public record AgentResponse(
     UUID id,
+    UUID businessId,
     String name,
     String description,
     String persona,
@@ -31,6 +32,7 @@ public record AgentResponse(
       List<String> knowledgeBaseNames) {
     return new AgentResponse(
         agent.getId(),
+        agent.getBusinessId(),
         agent.getName(),
         agent.getDescription(),
         profile == null ? null : profile.getPersona(),

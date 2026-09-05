@@ -23,6 +23,22 @@ export function storeSessionTokens(tokens: SessionTokens): void {
   if (tokens.refreshToken) storage.setItem("core_refresh_token", tokens.refreshToken);
 }
 
+export type AuthMode = "sso" | "password";
+
+export function getAuthMode(): AuthMode {
+  if (typeof window === "undefined") return "sso";
+  return (window.localStorage.getItem("core_auth_mode")
+    || window.sessionStorage.getItem("core_auth_mode")) === "password"
+    ? "password"
+    : "sso";
+}
+
+export function setAuthMode(mode: AuthMode): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem("core_auth_mode", mode);
+  window.sessionStorage.removeItem("core_auth_mode");
+}
+
 export function isAuthTokenExpired(token: string, clockSkewSeconds = 15): boolean {
   try {
     const encodedPayload = token.split(".")[1];
@@ -46,11 +62,28 @@ export function setActiveTenantId(tenantId: string): void {
   window.sessionStorage.removeItem("active_tenant_id");
 }
 
+export function getActiveBusinessId(): string | null {
+  if (typeof window === "undefined") return null;
+  return window.localStorage.getItem("active_business_id") || window.sessionStorage.getItem("active_business_id");
+}
+
+export function setActiveBusinessId(businessId: string): void {
+  window.localStorage.setItem("active_business_id", businessId);
+  window.sessionStorage.removeItem("active_business_id");
+}
+
+export function clearActiveBusinessId(): void {
+  window.localStorage.removeItem("active_business_id");
+  window.sessionStorage.removeItem("active_business_id");
+}
+
 export function clearSession(): void {
   for (const storage of [window.localStorage, window.sessionStorage]) {
     storage.removeItem("core_access_token");
     storage.removeItem("core_refresh_token");
+    storage.removeItem("core_auth_mode");
     storage.removeItem("active_tenant_id");
+    storage.removeItem("active_business_id");
   }
 }
 

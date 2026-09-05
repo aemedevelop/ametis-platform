@@ -63,5 +63,8 @@ agent-factory:
     max-file-size-bytes: ${AGENT_FACTORY_MAX_FILE_SIZE_BYTES:26214400}
   ametis-ai:
     rag-base-url: ${AGENT_FACTORY_AMETIS_AI_RAG_BASE_URL:}
+  public:
+    base-url: ${AGENT_FACTORY_PUBLIC_BASE_URL:http://localhost:8440/api/agent-factory/public}
+    widget-url: ${AGENT_FACTORY_PUBLIC_WIDGET_URL:${agent-factory.public.base-url}/widget.js}
   cors:
     allowed-origin-patterns: ${AGENT_FACTORY_CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:*,http://127.0.0.1:*,https://localhost:*,https://127.0.0.1:*}

@@ -18,6 +18,12 @@ public class DocumentAsset {
   @Column(nullable = false)
   private UUID tenantId;
 
+  @Column(nullable = false, updatable = false)
+  private UUID businessId;
+
+  @Column(nullable = false, updatable = false)
+  private UUID knowledgeBaseId;
+
   @Column(nullable = false)
   private UUID repositoryBindingId;
 
@@ -51,10 +57,13 @@ public class DocumentAsset {
   protected DocumentAsset() {}
 
   public static DocumentAsset uploading(
-      UUID tenantId, UUID repositoryBindingId, String originalName, String mimeType, long sizeBytes, String sha256, UUID createdBy) {
+      UUID tenantId, UUID businessId, UUID knowledgeBaseId, UUID repositoryBindingId,
+      String originalName, String mimeType, long sizeBytes, String sha256, UUID createdBy) {
     DocumentAsset asset = new DocumentAsset();
     asset.id = UUID.randomUUID();
     asset.tenantId = tenantId;
+    asset.businessId = businessId;
+    asset.knowledgeBaseId = knowledgeBaseId;
     asset.repositoryBindingId = repositoryBindingId;
     asset.originalName = originalName;
     asset.mimeType = mimeType;
@@ -94,6 +103,8 @@ public class DocumentAsset {
 
   public UUID getId() { return id; }
   public UUID getTenantId() { return tenantId; }
+  public UUID getBusinessId() { return businessId; }
+  public UUID getKnowledgeBaseId() { return knowledgeBaseId; }
   public UUID getRepositoryBindingId() { return repositoryBindingId; }
   public String getDriveFileId() { return driveFileId; }
   public String getOriginalName() { return originalName; }

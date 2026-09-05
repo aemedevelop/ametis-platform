@@ -1,92 +1,80 @@
 "use client";
 
-import { DragEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useLocale, useT } from "@/components/IntlProviderClient";
+import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { useT } from "@/components/IntlProviderClient";
 import {
   AgentFactoryApiError,
-  deleteDocument,
-  downloadDocument,
+  Business,
   DriveConnection,
+  fetchBusinesses,
   fetchDriveConnection,
-  fetchDocuments,
   fetchRepository,
   provisionRepository,
   RepositoryStatus,
   startDriveConnection,
-  StoredDocument,
-  updateRepositoryNamespace,
-  uploadDocument
+  updateRepositoryNamespace
 } from "@/lib/agent-factory-api";
-
-type UploadResult = {
-  name: string;
-  state: "uploading" | "stored" | "failed";
-  error?: unknown;
-};
+import { getActiveBusinessId } from "@/lib/session";
 
 type Translate = (key: string, vars?: Record<string, string | number>) => string;
-type DocumentTypeFilter = "all" | "pdf" | "document" | "spreadsheet" | "text" | "web";
-type DocumentSort = "modified-desc" | "modified-asc" | "name-asc";
 
-const SUPPORTED_EXTENSIONS = new Set(["txt", "pdf", "docx", "xlsx", "csv", "url", "html", "htm"]);
-const ACCEPTED_EXTENSIONS = Array.from(SUPPORTED_EXTENSIONS, (extension) => `.${extension}`).join(",");
-
-export default function DocumentsPage() {
-  const inputRef = useRef<HTMLInputElement>(null);
+export default function RepositorySetupPage() {
   const t = useT();
-  const { locale } = useLocale();
   const [repository, setRepository] = useState<RepositoryStatus | null>(null);
   const [driveConnection, setDriveConnection] = useState<DriveConnection | null>(null);
-  const [documents, setDocuments] = useState<StoredDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [provisioning, setProvisioning] = useState(false);
   const [connectingDrive, setConnectingDrive] = useState(false);
   const [connectionNotice, setConnectionNotice] = useState<"connected" | "error" | null>(null);
-  const [dragging, setDragging] = useState(false);
-  const [uploads, setUploads] = useState<UploadResult[]>([]);
-  const [error, setError] = useState<unknown>(null);
-  const [query, setQuery] = useState("");
-  const [typeFilter, setTypeFilter] = useState<DocumentTypeFilter>("all");
-  const [sort, setSort] = useState<DocumentSort>("modified-desc");
-  const [documentToDelete, setDocumentToDelete] = useState<StoredDocument | null>(null);
-  const [deleting, setDeleting] = useState(false);
-  const [refreshingDocuments, setRefreshingDocuments] = useState(false);
   const [namespaceDraft, setNamespaceDraft] = useState("");
   const [savingNamespace, setSavingNamespace] = useState(false);
-
-  const visibleDocuments = useMemo(() => {
-    const normalizedQuery = query.trim().toLocaleLowerCase(locale);
-    return documents
-      .filter((document) => !normalizedQuery || document.name.toLocaleLowerCase(locale).includes(normalizedQuery))
-      .filter((document) => typeFilter === "all" || categoryOf(document) === typeFilter)
-      .toSorted((left, right) => {
-        if (sort === "name-asc") return left.name.localeCompare(right.name, locale);
-        const difference = new Date(left.modifiedAt).getTime() - new Date(right.modifiedAt).getTime();
-        return sort === "modified-asc" ? difference : -difference;
-      });
-  }, [documents, locale, query, sort, typeFilter]);
+  const [activeBusiness, setActiveBusiness] = useState<Business | null>(null);
+  const [error, setError] = useState<unknown>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
+      const businesses = await fetchBusinesses().catch(() => [] as Business[]);
+      const active = businesses.find((item) => item.id === getActiveBusinessId()) ?? businesses[0] ?? null;
+      setActiveBusiness(active);
+
       const connection = await fetchDriveConnection();
       setDriveConnection(connection);
-      if (connection.status !== "CONNECTED") {
+      const driveReady = connection.status === "CONNECTED" || connection.status === "MANAGED";
+      if (!driveReady) {
         setRepository(null);
-        setDocuments([]);
+        setNamespaceDraft(active?.slug ?? "");
         return;
       }
-      const currentRepository = await fetchRepository();
-      setRepository(currentRepository);
-      setNamespaceDraft(currentRepository.repositoryAlias);
-      if (currentRepository.status === "ACTIVE") {
-        setDocuments(await fetchDocuments());
+
+      let currentRepository: RepositoryStatus | null = null;
+      try {
+        currentRepository = await fetchRepository();
+      } catch (repoError) {
+        if (!(repoError instanceof AgentFactoryApiError) || repoError.status !== 404) throw repoError;
       }
+
+      // Almacenamiento gestionado por AEME: se provisiona el repositorio del tenant
+      // automáticamente, sin que el usuario tenga que hacer nada.
+      if (connection.status === "MANAGED" && currentRepository?.status !== "ACTIVE") {
+        try {
+          currentRepository = await provisionRepository();
+        } catch (provisionError) {
+          setError(provisionError);
+        }
+      }
+
+      setRepository(currentRepository);
+      setNamespaceDraft(
+        currentRepository?.status === "ACTIVE"
+          ? currentRepository.repositoryAlias
+          : active?.slug ?? ""
+      );
     } catch (requestError) {
       if (requestError instanceof AgentFactoryApiError && requestError.status === 404) {
         setRepository(null);
-        setDocuments([]);
       } else {
         setError(requestError);
       }
@@ -121,10 +109,11 @@ export default function DocumentsPage() {
     setProvisioning(true);
     setError(null);
     try {
-      const result = await provisionRepository(namespaceDraft.trim());
+      const result = await provisionRepository(
+        driveConnection?.status === "MANAGED" ? undefined : namespaceDraft.trim()
+      );
       setRepository(result);
       setNamespaceDraft(result.repositoryAlias);
-      setDocuments(await fetchDocuments());
     } catch (requestError) {
       setError(requestError);
       await load();
@@ -150,89 +139,13 @@ export default function DocumentsPage() {
     }
   }
 
-  async function uploadFiles(files: File[]) {
-    if (!files.length || repository?.status !== "ACTIVE") return;
-    const unsupportedFiles = files.filter((file) => !SUPPORTED_EXTENSIONS.has(extensionOfFile(file.name)));
-    const supportedFiles = files.filter((file) => SUPPORTED_EXTENSIONS.has(extensionOfFile(file.name)));
-    const rejectedUploads = unsupportedFiles.map((file) => ({
-      name: file.name,
-      state: "failed" as const,
-      error: new AgentFactoryApiError(415, "error.unsupportedFileType", { name: file.name })
-    }));
-
-    setUploads([
-      ...rejectedUploads,
-      ...supportedFiles.map((file) => ({ name: file.name, state: "uploading" as const }))
-    ]);
-    if (unsupportedFiles.length) {
-      setError(rejectedUploads[0].error);
-    } else {
-      setError(null);
-    }
-    if (!supportedFiles.length) return;
-
-    for (const file of supportedFiles) {
-      try {
-        await uploadDocument(file);
-        setUploads((current) => current.map((item) => item.name === file.name ? { ...item, state: "stored" } : item));
-      } catch (requestError) {
-        setUploads((current) => current.map((item) => item.name === file.name
-          ? { ...item, state: "failed", error: requestError }
-          : item));
-      }
-    }
-    try {
-      setDocuments(await fetchDocuments());
-    } catch (requestError) {
-      setError(requestError);
-    }
-  }
-
-  function onDrop(event: DragEvent<HTMLDivElement>) {
-    event.preventDefault();
-    setDragging(false);
-    uploadFiles(Array.from(event.dataTransfer.files));
-  }
-
-  async function download(document: StoredDocument) {
-    try {
-      await downloadDocument(document);
-    } catch (requestError) {
-      setError(requestError);
-    }
-  }
-
-  async function removeDocument() {
-    if (!documentToDelete) return;
-    setDeleting(true);
-    setError(null);
-    try {
-      await deleteDocument(documentToDelete);
-      setDocuments((current) => current.filter((item) => item.driveFileId !== documentToDelete.driveFileId));
-      setDocumentToDelete(null);
-    } catch (requestError) {
-      setError(requestError);
-    } finally {
-      setDeleting(false);
-    }
-  }
-
-  async function refreshDocuments() {
-    if (repository?.status !== "ACTIVE") return;
-    setRefreshingDocuments(true);
-    setError(null);
-    try {
-      setDocuments(await fetchDocuments());
-    } catch (requestError) {
-      setError(requestError);
-    } finally {
-      setRefreshingDocuments(false);
-    }
-  }
-
   if (loading) {
     return <section className="loading-card" role="status"><span className="spinner" aria-hidden="true" />{t("repository.loading")}</section>;
   }
+
+  const repositoryActive = repository?.status === "ACTIVE";
+  const managed = driveConnection?.status === "MANAGED";
+  const driveReady = driveConnection?.status === "CONNECTED" || managed;
 
   return (
     <div className="page-grid">
@@ -249,6 +162,7 @@ export default function DocumentsPage() {
               {connectingDrive ? t("drive.connecting") : t("drive.reconnectAction")}
             </button>
           ) : null}
+          {managed ? <span className="managed-storage-hint">{t("drive.managedByAmetis")}</span> : null}
         </div>
       </section>
 
@@ -256,7 +170,7 @@ export default function DocumentsPage() {
       {connectionNotice === "error" ? <div className="alert error" role="alert"><strong>{t("operation.failedTitle")}</strong><span>{t("error.driveConnectionFailed")}</span></div> : null}
       {error ? <div className="alert error" role="alert"><strong>{t("operation.failedTitle")}</strong><span>{messageOf(error, t)}</span></div> : null}
 
-      {driveConnection?.status !== "CONNECTED" ? (
+      {!driveReady ? (
         <section className="setup-card drive-connect-card">
           <div className="setup-icon google-drive-icon" aria-hidden="true">G</div>
           <div>
@@ -273,227 +187,95 @@ export default function DocumentsPage() {
             {connectingDrive ? t("drive.connecting") : t("drive.connectAction")}
           </button>
         </section>
-      ) : !repository || repository.status !== "ACTIVE" ? (
+      ) : !repositoryActive ? (
         <section className="setup-card">
           <div className="setup-icon" aria-hidden="true">↗</div>
           <div>
             <span className="eyebrow">{t("repository.initialSetup")}</span>
             <h2>{repository?.status === "ERROR" ? t("repository.retryTitle") : t("repository.createTitle")}</h2>
-            <p>{t("repository.createDescription")}</p>
-            <label className="namespace-field">
-              <span>{t("repository.namespaceInputLabel")}</span>
-              <input
-                value={namespaceDraft}
-                onChange={(event) => setNamespaceDraft(event.target.value)}
-                placeholder={t("repository.namespacePlaceholder")}
-              />
-            </label>
+            <p>{t(managed ? "repository.managedPreparingDescription" : "repository.createDescription")}</p>
+            {managed ? null : (
+              <label className="namespace-field">
+                <span>{t("repository.namespaceInputLabel")}</span>
+                <input
+                  value={namespaceDraft}
+                  onChange={(event) => setNamespaceDraft(event.target.value)}
+                  placeholder={t("repository.namespacePlaceholder")}
+                />
+              </label>
+            )}
           </div>
           <button className="primary-button" type="button" onClick={provision} disabled={provisioning}>
             {provisioning ? t("repository.preparing") : repository?.status === "ERROR" ? t("common.retry") : t("repository.prepareAction")}
           </button>
         </section>
       ) : (
-        <>
-          <section className="upload-card">
-            <div
-              className={`drop-zone ${dragging ? "dragging" : ""}`}
-              onDragEnter={(event) => { event.preventDefault(); setDragging(true); }}
-              onDragOver={(event) => event.preventDefault()}
-              onDragLeave={() => setDragging(false)}
-              onDrop={onDrop}
-            >
-              <div className="upload-icon" aria-hidden="true">↑</div>
-              <h2>{t("upload.title")}</h2>
-              <p>{t("upload.description")}</p>
-              <button className="primary-button" type="button" onClick={() => inputRef.current?.click()}>{t("upload.selectAction")}</button>
+        <section className="upload-card">
+          <div className="repository-detail">
+            <span className="detail-label">{t("drive.connectedAccount")}</span>
+            <strong className="connection-account">
+              {managed ? t("drive.managedByAmetis") : driveConnection?.accountEmail ?? t("common.notAvailable")}
+            </strong>
+            <span className="detail-label">{t("repository.workspaceStorageLabel")}</span>
+            <p className="detail-help">{t("repository.workspaceIdentityHelp")}</p>
+            <label className="namespace-editor">
+              <span className="sr-only">{t("repository.namespaceInputLabel")}</span>
               <input
-                ref={inputRef}
-                type="file"
-                accept={ACCEPTED_EXTENSIONS}
-                multiple
-                hidden
-                aria-label={t("upload.selectAction")}
-                onChange={(event) => uploadFiles(Array.from(event.target.files ?? []))}
+                value={namespaceDraft}
+                onChange={(event) => setNamespaceDraft(event.target.value)}
+                onBlur={saveNamespace}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") saveNamespace();
+                  if (event.key === "Escape") setNamespaceDraft(repository.repositoryAlias);
+                }}
+                disabled={savingNamespace}
               />
-              <small>{t("upload.constraints")}</small>
-            </div>
-            <div className="repository-detail">
-              <span className="detail-label">{t("drive.connectedAccount")}</span>
-              <strong className="connection-account">{driveConnection.accountEmail ?? t("common.notAvailable")}</strong>
-              <button className="reconnect-drive-button" type="button" onClick={connectDrive} disabled={connectingDrive}>
-                {connectingDrive ? t("drive.connecting") : t("drive.reconnectAction")}
+              <button
+                type="button"
+                onClick={saveNamespace}
+                disabled={savingNamespace || !namespaceDraft.trim() || namespaceDraft.trim() === repository.repositoryAlias}
+              >
+                {savingNamespace ? t("repository.savingNamespace") : t("repository.saveNamespace")}
               </button>
-              <span className="detail-label">{t("repository.namespace")}</span>
-              <label className="namespace-editor">
-                <span className="sr-only">{t("repository.namespaceInputLabel")}</span>
-                <input
-                  value={namespaceDraft}
-                  onChange={(event) => setNamespaceDraft(event.target.value)}
-                  onBlur={saveNamespace}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") saveNamespace();
-                    if (event.key === "Escape") setNamespaceDraft(repository.repositoryAlias);
-                  }}
-                  disabled={savingNamespace}
-                />
-                <button
-                  type="button"
-                  onClick={saveNamespace}
-                  disabled={savingNamespace || !namespaceDraft.trim() || namespaceDraft.trim() === repository.repositoryAlias}
-                >
-                  {savingNamespace ? t("repository.savingNamespace") : t("repository.saveNamespace")}
-                </button>
-              </label>
-              <div className="namespace-preview">
-                <span>{t("repository.technicalId")}</span>
-                <code>{repository.repositoryTechnicalId}</code>
-              </div>
-              <div className="namespace-preview">
-                <span>{t("repository.driveFolder")}</span>
-                <code>{repository.repositoryNamespace}</code>
-              </div>
-              <p>{t("repository.notIndexed")}</p>
+            </label>
+            <div className="namespace-preview">
+              <span>{t("repository.technicalId")}</span>
+              <code>{repository.repositoryTechnicalId}</code>
             </div>
-          </section>
-
-          {uploads.length ? (
-            <section className="upload-queue" aria-live="polite">
-              <div className="section-heading"><div><span className="eyebrow blue">{t("upload.activity")}</span><h2>{t("upload.latest")}</h2></div></div>
-              {uploads.map((upload, index) => (
-                <div className="queue-item" key={`${upload.name}-${index}`}>
-                  <span className={`file-state ${upload.state}`} aria-hidden="true">{upload.state === "uploading" ? "…" : upload.state === "stored" ? "✓" : "!"}</span>
-                  <div><strong>{upload.name}</strong><small>{upload.error ? messageOf(upload.error, t) : labelForUpload(upload.state, t)}</small></div>
-                </div>
-              ))}
-            </section>
-          ) : null}
-
-          <section className="documents-card">
-            <div className="section-heading">
-              <div><span className="eyebrow blue">{t("documents.library")}</span><h2>{t("documents.title")}</h2><p className="section-description">{t("documents.description")}</p></div>
-              <div className="library-actions">
-                <button className="refresh-button" type="button" onClick={refreshDocuments} disabled={refreshingDocuments}>
-                  <svg className={refreshingDocuments ? "rotating" : ""} viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5" /><path d="M18.4 9A7 7 0 1 0 19 16" /></svg>
-                  {t(refreshingDocuments ? "documents.refreshing" : "documents.refreshAction")}
-                </button>
-                <span className="count-badge">{t(documents.length === 1 ? "documents.count.one" : "documents.count.other", { count: documents.length })}</span>
+            <div className="namespace-preview">
+              <span>{t("repository.driveFolder")}</span>
+              <code>{repository.repositoryNamespace}</code>
+            </div>
+            {activeBusiness ? (
+              <div className="active-business-folder">
+                <span className="detail-label">{t("repository.activeBusinessLabel")}</span>
+                <strong>{activeBusiness.name}</strong>
+                <code>{repository.repositoryNamespace}/{activeBusiness.slug}/</code>
+                <p className="detail-help">{t("repository.activeBusinessHelp")}</p>
               </div>
+            ) : null}
+            <p>{t("repository.nextStep")}</p>
+            <div className="item-actions">
+              <Link className="small-action" href="/businesses">{t("navigation.businesses")}</Link>
+              <Link className="small-action" href="/knowledge-bases">{t("navigation.knowledgeBases")}</Link>
             </div>
-            <div className="document-toolbar">
-              <label className="document-search">
-                <span className="sr-only">{t("documents.search.label")}</span>
-                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m16 16 4 4" /></svg>
-                <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("documents.search.placeholder")} />
-              </label>
-              <label className="document-select">
-                <span>{t("documents.filter.label")}</span>
-                <select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as DocumentTypeFilter)}>
-                  <option value="all">{t("documents.filter.all")}</option>
-                  <option value="pdf">{t("documents.filter.pdf")}</option>
-                  <option value="document">{t("documents.filter.documents")}</option>
-                  <option value="spreadsheet">{t("documents.filter.spreadsheets")}</option>
-                  <option value="text">{t("documents.filter.text")}</option>
-                  <option value="web">{t("documents.filter.web")}</option>
-                </select>
-              </label>
-              <label className="document-select">
-                <span>{t("documents.sort.label")}</span>
-                <select value={sort} onChange={(event) => setSort(event.target.value as DocumentSort)}>
-                  <option value="modified-desc">{t("documents.sort.newest")}</option>
-                  <option value="modified-asc">{t("documents.sort.oldest")}</option>
-                  <option value="name-asc">{t("documents.sort.name")}</option>
-                </select>
-              </label>
-            </div>
-            {documents.length === 0 ? (
-              <div className="empty-state"><span aria-hidden="true">□</span><strong>{t("documents.emptyTitle")}</strong><p>{t("documents.emptyDescription")}</p></div>
-            ) : visibleDocuments.length === 0 ? (
-              <div className="empty-state compact"><span aria-hidden="true">0</span><strong>{t("documents.noResultsTitle")}</strong><p>{t("documents.noResultsDescription")}</p></div>
-            ) : (
-              <div className="table-wrap">
-                <table>
-                  <thead><tr><th>{t("documents.column.document")}</th><th>{t("documents.column.type")}</th><th>{t("documents.column.size")}</th><th>{t("documents.column.modified")}</th><th>{t("documents.column.status")}</th><th><span className="sr-only">{t("documents.column.actions")}</span></th></tr></thead>
-                  <tbody>
-                    {visibleDocuments.map((document) => (
-                      <tr key={document.driveFileId}>
-                        <td><div className="document-name"><span className="file-icon">{extensionOf(document.name, t)}</span><div><strong>{document.name}</strong><small>{document.sha256 ? `${t("documents.hashPrefix")} · ${document.sha256.slice(0, 12)}` : t("documents.existingInDrive")}</small></div></div></td>
-                        <td>{document.mimeType || t("common.notAvailable")}</td>
-                        <td>{formatBytes(document.sizeBytes, locale, t)}</td>
-                        <td>{formatDate(document.modifiedAt, locale)}</td>
-                        <td><span className="status-badge stored">{t("documents.status.stored")}</span></td>
-                        <td>
-                          <div className="document-actions">
-                            {document.webViewLink ? <a className="icon-button" href={document.webViewLink} target="_blank" rel="noreferrer" aria-label={t("documents.open", { name: document.name })} title={t("documents.open", { name: document.name })}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 5h5v5M19 5l-8 8" /><path d="M19 13v6H5V5h6" /></svg></a> : null}
-                            <button className="icon-button" type="button" onClick={() => download(document)} aria-label={t("documents.download", { name: document.name })} title={t("documents.download", { name: document.name })}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5" /><path d="M5 20h14" /></svg></button>
-                            <button className="icon-button danger" type="button" onClick={() => setDocumentToDelete(document)} aria-label={t("documents.delete", { name: document.name })} title={t("documents.delete", { name: document.name })}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" /></svg></button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
-          {documentToDelete ? (
-            <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !deleting) setDocumentToDelete(null); }}>
-              <section className="confirmation-dialog" role="alertdialog" aria-modal="true" aria-labelledby="delete-document-title" aria-describedby="delete-document-description">
-                <span className="confirmation-icon" aria-hidden="true">!</span>
-                <h2 id="delete-document-title">{t("documents.deleteDialog.title")}</h2>
-                <p id="delete-document-description">{t("documents.deleteDialog.description", { name: documentToDelete.name })}</p>
-                <div className="confirmation-actions">
-                  <button className="secondary-button" type="button" onClick={() => setDocumentToDelete(null)} disabled={deleting}>{t("common.cancel")}</button>
-                  <button className="danger-button" type="button" onClick={removeDocument} disabled={deleting}>{deleting ? t("documents.deleting") : t("documents.deleteAction")}</button>
-                </div>
-              </section>
-            </div>
-          ) : null}
-        </>
+          </div>
+        </section>
       )}
     </div>
   );
 }
 
 function RepositoryPill({ connection, t }: { connection: DriveConnection | null; t: Translate }) {
-  const active = connection?.status === "CONNECTED";
-  return <div className={`repository-pill ${active ? "active" : "inactive"}`}><span aria-hidden="true" />{t(active ? "repository.connected" : "repository.pending")}</div>;
+  const ready = connection?.status === "CONNECTED" || connection?.status === "MANAGED";
+  return (
+    <span className={`status-badge ${ready ? "stored" : "inactive"}`}>
+      {ready ? t("repository.connected") : t("repository.pending")}
+    </span>
+  );
 }
 
 function messageOf(error: unknown, t: Translate): string {
   if (error instanceof AgentFactoryApiError) return t(error.code, error.variables);
   return t("common.unexpectedError");
-}
-
-function formatBytes(bytes: number, locale: string, t: Translate): string {
-  if (!bytes) return t("common.notAvailable");
-  const units = ["B", "KB", "MB", "GB"];
-  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-  const value = bytes / Math.pow(1024, index);
-  return `${new Intl.NumberFormat(locale, { maximumFractionDigits: index === 0 ? 0 : 1 }).format(value)} ${units[index]}`;
-}
-
-function formatDate(value: string, locale: string): string {
-  return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
-}
-
-function extensionOfFile(name: string): string {
-  return name.includes(".") ? name.split(".").pop()!.toLowerCase() : "";
-}
-
-function extensionOf(name: string, t: Translate): string {
-  return name.includes(".") ? name.split(".").pop()!.slice(0, 4).toUpperCase() : t("documents.fileFallback");
-}
-
-function categoryOf(document: StoredDocument): Exclude<DocumentTypeFilter, "all"> {
-  const extension = document.name.includes(".") ? document.name.split(".").pop()!.toLowerCase() : "";
-  if (extension === "pdf") return "pdf";
-  if (extension === "docx") return "document";
-  if (extension === "xlsx" || extension === "csv") return "spreadsheet";
-  if (extension === "html" || extension === "htm" || extension === "url") return "web";
-  return "text";
-}
-
-function labelForUpload(state: UploadResult["state"], t: Translate): string {
-  return t(`upload.${state}`);
 }

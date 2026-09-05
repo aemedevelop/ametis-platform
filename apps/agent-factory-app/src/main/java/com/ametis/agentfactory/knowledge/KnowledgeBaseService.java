@@ -1,106 +1,115 @@
 package com.ametis.agentfactory.knowledge;
 
+import com.ametis.agentfactory.businesses.Business;
 import com.ametis.agentfactory.documents.DocumentAsset;
 import com.ametis.agentfactory.documents.DocumentAssetRepository;
 import com.ametis.agentfactory.documents.DocumentStatus;
 import com.ametis.agentfactory.documents.RepositoryBinding;
 import com.ametis.agentfactory.documents.RepositoryProvisioningService;
 import com.ametis.agentfactory.documents.RepositoryStatus;
+import com.ametis.agentfactory.drive.GoogleDriveRepository;
 import jakarta.transaction.Transactional;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class KnowledgeBaseService {
+  private static final Logger LOGGER = LoggerFactory.getLogger(KnowledgeBaseService.class);
+
   private final RepositoryProvisioningService provisioningService;
   private final KnowledgeBaseRepository knowledgeBaseRepository;
-  private final KnowledgeBaseDocumentRepository knowledgeBaseDocumentRepository;
+  private final KnowledgeBaseRepositoryProvisioningService knowledgeBaseProvisioning;
   private final DocumentAssetRepository documentAssetRepository;
+  private final GoogleDriveRepository googleDriveRepository;
 
   public KnowledgeBaseService(
       RepositoryProvisioningService provisioningService,
       KnowledgeBaseRepository knowledgeBaseRepository,
-      KnowledgeBaseDocumentRepository knowledgeBaseDocumentRepository,
-      DocumentAssetRepository documentAssetRepository) {
+      KnowledgeBaseRepositoryProvisioningService knowledgeBaseProvisioning,
+      DocumentAssetRepository documentAssetRepository,
+      GoogleDriveRepository googleDriveRepository) {
     this.provisioningService = provisioningService;
     this.knowledgeBaseRepository = knowledgeBaseRepository;
-    this.knowledgeBaseDocumentRepository = knowledgeBaseDocumentRepository;
+    this.knowledgeBaseProvisioning = knowledgeBaseProvisioning;
     this.documentAssetRepository = documentAssetRepository;
+    this.googleDriveRepository = googleDriveRepository;
   }
 
-  public List<KnowledgeBaseResponse> list(UUID tenantId) {
-    requireActiveRepository(tenantId);
-    List<KnowledgeBase> bases = knowledgeBaseRepository.findAllByTenantIdOrderByUpdatedAtDesc(tenantId);
+  public List<KnowledgeBaseResponse> list(Business business) {
+    requireActiveRepository(business.getTenantId());
+    List<KnowledgeBase> bases = knowledgeBaseRepository.findAllByBusinessIdOrderByUpdatedAtDesc(business.getId());
     if (bases.isEmpty()) {
       return List.of();
     }
     List<UUID> baseIds = bases.stream().map(KnowledgeBase::getId).toList();
-    List<KnowledgeBaseDocument> links = knowledgeBaseDocumentRepository.findAllByTenantIdAndKnowledgeBaseIdIn(tenantId, baseIds);
-    List<UUID> documentIds = links.stream().map(KnowledgeBaseDocument::getDocumentAssetId).distinct().toList();
-    Map<UUID, String> documentNames = documentAssetRepository.findAllByTenantIdAndIdIn(tenantId, documentIds).stream()
-        .filter(document -> document.getStatus() == DocumentStatus.STORED)
-        .collect(Collectors.toMap(DocumentAsset::getId, DocumentAsset::getOriginalName));
-    List<KnowledgeBaseDocument> obsoleteLinks = links.stream()
-        .filter(link -> !documentNames.containsKey(link.getDocumentAssetId()))
-        .toList();
-    if (!obsoleteLinks.isEmpty()) {
-      knowledgeBaseDocumentRepository.deleteAll(obsoleteLinks);
-    }
-    Map<UUID, List<String>> namesByBase = links.stream()
-        .filter(link -> documentNames.containsKey(link.getDocumentAssetId()))
-        .collect(Collectors.groupingBy(
-            KnowledgeBaseDocument::getKnowledgeBaseId,
-            Collectors.mapping(link -> documentNames.get(link.getDocumentAssetId()), Collectors.filtering(name -> name != null, Collectors.toList()))));
+    Map<UUID, Long> storedByBase = documentAssetRepository.findAllByKnowledgeBaseIdIn(baseIds).stream()
+        .filter(asset -> asset.getStatus() == DocumentStatus.STORED)
+        .collect(Collectors.groupingBy(DocumentAsset::getKnowledgeBaseId, Collectors.counting()));
     return bases.stream()
-        .map(base -> KnowledgeBaseResponse.from(base, namesByBase.getOrDefault(base.getId(), List.of())))
+        .map(base -> KnowledgeBaseResponse.from(base, storedByBase.getOrDefault(base.getId(), 0L)))
         .toList();
   }
 
   @Transactional
-  public KnowledgeBaseResponse create(UUID tenantId, UUID userId, KnowledgeBaseRequest request) {
-    requireActiveRepository(tenantId);
+  public KnowledgeBaseResponse create(Business business, UUID userId, KnowledgeBaseRequest request) {
+    requireActiveRepository(business.getTenantId());
     String name = cleanName(request.name());
-    if (knowledgeBaseRepository.existsByTenantIdAndNameIgnoreCase(tenantId, name)) {
+    if (knowledgeBaseRepository.existsByBusinessIdAndNameIgnoreCase(business.getId(), name)) {
       throw new ResponseStatusException(HttpStatus.CONFLICT, "error.knowledgeBaseNameTaken");
     }
-    KnowledgeBase base = knowledgeBaseRepository.save(KnowledgeBase.create(tenantId, name, cleanDescription(request.description()), userId));
-    List<DocumentAsset> documents = resolveDocuments(tenantId, request.documentDriveFileIds());
-    knowledgeBaseDocumentRepository.saveAll(documents.stream()
-        .map(document -> KnowledgeBaseDocument.link(tenantId, base.getId(), document.getId()))
-        .toList());
-    return KnowledgeBaseResponse.from(base, documents.stream().map(DocumentAsset::getOriginalName).toList());
+    KnowledgeBase base = knowledgeBaseRepository.save(
+        KnowledgeBase.create(business.getTenantId(), business.getId(), name, cleanDescription(request.description()), userId));
+    tryProvision(business, base);
+    return KnowledgeBaseResponse.from(base, 0L);
   }
 
   @Transactional
-  public KnowledgeBaseResponse update(UUID tenantId, UUID knowledgeBaseId, KnowledgeBaseRequest request) {
-    requireActiveRepository(tenantId);
-    KnowledgeBase base = knowledgeBaseRepository.findByIdAndTenantId(knowledgeBaseId, tenantId)
-        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "error.knowledgeBaseNotFound"));
+  public KnowledgeBaseResponse update(Business business, UUID knowledgeBaseId, KnowledgeBaseRequest request) {
+    requireActiveRepository(business.getTenantId());
+    KnowledgeBase base = requireBase(business, knowledgeBaseId);
     String name = cleanName(request.name());
-    if (knowledgeBaseRepository.existsByTenantIdAndNameIgnoreCaseAndIdNot(tenantId, name, knowledgeBaseId)) {
+    if (knowledgeBaseRepository.existsByBusinessIdAndNameIgnoreCaseAndIdNot(business.getId(), name, knowledgeBaseId)) {
       throw new ResponseStatusException(HttpStatus.CONFLICT, "error.knowledgeBaseNameTaken");
     }
     base.update(name, cleanDescription(request.description()));
-    knowledgeBaseDocumentRepository.deleteAllByTenantIdAndKnowledgeBaseId(tenantId, knowledgeBaseId);
-    List<DocumentAsset> documents = resolveDocuments(tenantId, request.documentDriveFileIds());
-    knowledgeBaseDocumentRepository.saveAll(documents.stream()
-        .map(document -> KnowledgeBaseDocument.link(tenantId, base.getId(), document.getId()))
-        .toList());
-    return KnowledgeBaseResponse.from(knowledgeBaseRepository.save(base), documents.stream().map(DocumentAsset::getOriginalName).toList());
+    long stored = documentAssetRepository.countByKnowledgeBaseIdAndStatus(knowledgeBaseId, DocumentStatus.STORED);
+    return KnowledgeBaseResponse.from(knowledgeBaseRepository.save(base), stored);
   }
 
   @Transactional
-  public void delete(UUID tenantId, UUID knowledgeBaseId) {
-    requireActiveRepository(tenantId);
-    KnowledgeBase base = knowledgeBaseRepository.findByIdAndTenantId(knowledgeBaseId, tenantId)
-        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "error.knowledgeBaseNotFound"));
-    knowledgeBaseDocumentRepository.deleteAllByTenantIdAndKnowledgeBaseId(tenantId, knowledgeBaseId);
+  public void delete(Business business, UUID knowledgeBaseId) {
+    requireActiveRepository(business.getTenantId());
+    KnowledgeBase base = requireBase(business, knowledgeBaseId);
+    if (base.getDocumentsFolderId() != null) {
+      try {
+        googleDriveRepository.trash(business.getTenantId(), base.getDocumentsFolderId());
+      } catch (Exception exception) {
+        LOGGER.warn("No se pudo enviar a la papelera la carpeta de la base {}", knowledgeBaseId, exception);
+      }
+    }
+    documentAssetRepository.deleteAllByKnowledgeBaseId(knowledgeBaseId);
     knowledgeBaseRepository.delete(base);
+  }
+
+  private void tryProvision(Business business, KnowledgeBase base) {
+    try {
+      knowledgeBaseProvisioning.ensureProvisioned(business, base);
+    } catch (Exception exception) {
+      // Queda PENDING; se reintenta al gestionar sus documentos.
+      LOGGER.warn("No se pudo provisionar la carpeta de la base {} al crearla", base.getId(), exception);
+    }
+  }
+
+  private KnowledgeBase requireBase(Business business, UUID knowledgeBaseId) {
+    return knowledgeBaseRepository.findByIdAndBusinessId(knowledgeBaseId, business.getId())
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "error.knowledgeBaseNotFound"));
   }
 
   private void requireActiveRepository(UUID tenantId) {
@@ -108,21 +117,6 @@ public class KnowledgeBaseService {
     if (binding.getStatus() != RepositoryStatus.ACTIVE) {
       throw new ResponseStatusException(HttpStatus.CONFLICT, "error.repositoryNotActive");
     }
-  }
-
-  private List<DocumentAsset> resolveDocuments(UUID tenantId, List<String> driveFileIds) {
-    List<String> uniqueDriveFileIds = driveFileIds == null ? List.of() : driveFileIds.stream()
-        .filter(id -> id != null && !id.isBlank())
-        .distinct()
-        .toList();
-    if (uniqueDriveFileIds.isEmpty()) {
-      return List.of();
-    }
-    List<DocumentAsset> documents = documentAssetRepository.findAllByTenantIdAndDriveFileIdIn(tenantId, uniqueDriveFileIds);
-    if (documents.size() != uniqueDriveFileIds.size() || documents.stream().anyMatch(document -> document.getStatus() != DocumentStatus.STORED)) {
-      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "error.knowledgeBaseInvalidDocuments");
-    }
-    return documents;
   }
 
   private String cleanName(String name) {

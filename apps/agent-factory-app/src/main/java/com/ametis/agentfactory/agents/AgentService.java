@@ -1,11 +1,12 @@
 package com.ametis.agentfactory.agents;
 
+import com.ametis.agentfactory.businesses.Business;
+import com.ametis.agentfactory.documents.DocumentAssetRepository;
+import com.ametis.agentfactory.documents.DocumentStatus;
 import com.ametis.agentfactory.documents.RepositoryBinding;
 import com.ametis.agentfactory.documents.RepositoryProvisioningService;
 import com.ametis.agentfactory.documents.RepositoryStatus;
 import com.ametis.agentfactory.knowledge.KnowledgeBase;
-import com.ametis.agentfactory.knowledge.KnowledgeBaseDocument;
-import com.ametis.agentfactory.knowledge.KnowledgeBaseDocumentRepository;
 import com.ametis.agentfactory.knowledge.KnowledgeBaseRepository;
 import jakarta.transaction.Transactional;
 import java.util.List;
@@ -23,7 +24,7 @@ public class AgentService {
   private final AgentContextProfileRepository contextProfileRepository;
   private final AgentKnowledgeBaseRepository agentKnowledgeBaseRepository;
   private final KnowledgeBaseRepository knowledgeBaseRepository;
-  private final KnowledgeBaseDocumentRepository knowledgeBaseDocumentRepository;
+  private final DocumentAssetRepository documentAssetRepository;
   private final AmetisAiRagClient ragClient;
 
   public AgentService(
@@ -32,20 +33,21 @@ public class AgentService {
       AgentContextProfileRepository contextProfileRepository,
       AgentKnowledgeBaseRepository agentKnowledgeBaseRepository,
       KnowledgeBaseRepository knowledgeBaseRepository,
-      KnowledgeBaseDocumentRepository knowledgeBaseDocumentRepository,
+      DocumentAssetRepository documentAssetRepository,
       AmetisAiRagClient ragClient) {
     this.provisioningService = provisioningService;
     this.agentRepository = agentRepository;
     this.contextProfileRepository = contextProfileRepository;
     this.agentKnowledgeBaseRepository = agentKnowledgeBaseRepository;
     this.knowledgeBaseRepository = knowledgeBaseRepository;
-    this.knowledgeBaseDocumentRepository = knowledgeBaseDocumentRepository;
+    this.documentAssetRepository = documentAssetRepository;
     this.ragClient = ragClient;
   }
 
-  public List<AgentResponse> list(UUID tenantId) {
+  public List<AgentResponse> list(Business business) {
+    UUID tenantId = business.getTenantId();
     requireActiveRepository(tenantId);
-    List<AgentDefinition> agents = agentRepository.findAllByTenantIdOrderByUpdatedAtDesc(tenantId);
+    List<AgentDefinition> agents = agentRepository.findAllByBusinessIdOrderByUpdatedAtDesc(business.getId());
     if (agents.isEmpty()) {
       return List.of();
     }
@@ -78,14 +80,16 @@ public class AgentService {
   }
 
   @Transactional
-  public AgentResponse create(UUID tenantId, UUID userId, AgentRequest request) {
+  public AgentResponse create(Business business, UUID userId, AgentRequest request) {
+    UUID tenantId = business.getTenantId();
     requireActiveRepository(tenantId);
     String name = cleanName(request.name());
-    if (agentRepository.existsByTenantIdAndNameIgnoreCase(tenantId, name)) {
+    if (agentRepository.existsByBusinessIdAndNameIgnoreCase(business.getId(), name)) {
       throw new ResponseStatusException(HttpStatus.CONFLICT, "error.agentNameTaken");
     }
     AgentDefinition agent = agentRepository.save(AgentDefinition.create(
         tenantId,
+        business.getId(),
         name,
         cleanText(request.description()),
         cleanText(request.instructions()),
@@ -97,7 +101,7 @@ public class AgentService {
         cleanText(request.targetAudience()),
         normalizeOption(request.tone(), "professional"),
         normalizeOption(request.responseLanguage(), "auto")));
-    List<KnowledgeBase> bases = resolveKnowledgeBases(tenantId, request.knowledgeBaseIds());
+    List<KnowledgeBase> bases = resolveKnowledgeBases(business.getId(), request.knowledgeBaseIds());
     agentKnowledgeBaseRepository.saveAll(bases.stream()
         .map(base -> AgentKnowledgeBase.link(tenantId, agent.getId(), base.getId()))
         .toList());
@@ -109,12 +113,12 @@ public class AgentService {
   }
 
   @Transactional
-  public AgentResponse update(UUID tenantId, UUID agentId, AgentRequest request) {
+  public AgentResponse update(Business business, UUID agentId, AgentRequest request) {
+    UUID tenantId = business.getTenantId();
     requireActiveRepository(tenantId);
-    AgentDefinition agent = agentRepository.findByIdAndTenantId(agentId, tenantId)
-        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "error.agentNotFound"));
+    AgentDefinition agent = requireAgent(business, agentId);
     String name = cleanName(request.name());
-    if (agentRepository.existsByTenantIdAndNameIgnoreCaseAndIdNot(tenantId, name, agentId)) {
+    if (agentRepository.existsByBusinessIdAndNameIgnoreCaseAndIdNot(business.getId(), name, agentId)) {
       throw new ResponseStatusException(HttpStatus.CONFLICT, "error.agentNameTaken");
     }
     agent.update(
@@ -131,7 +135,7 @@ public class AgentService {
     contextProfileRepository.save(profile);
     agentKnowledgeBaseRepository.deleteAllByTenantIdAndAgentId(tenantId, agentId);
     agentKnowledgeBaseRepository.flush();
-    List<KnowledgeBase> bases = resolveKnowledgeBases(tenantId, request.knowledgeBaseIds());
+    List<KnowledgeBase> bases = resolveKnowledgeBases(business.getId(), request.knowledgeBaseIds());
     agentKnowledgeBaseRepository.saveAll(bases.stream()
         .map(base -> AgentKnowledgeBase.link(tenantId, agent.getId(), base.getId()))
         .toList());
@@ -143,34 +147,31 @@ public class AgentService {
   }
 
   @Transactional
-  public void delete(UUID tenantId, UUID agentId) {
+  public void delete(Business business, UUID agentId) {
+    UUID tenantId = business.getTenantId();
     requireActiveRepository(tenantId);
-    AgentDefinition agent = agentRepository.findByIdAndTenantId(agentId, tenantId)
-        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "error.agentNotFound"));
+    AgentDefinition agent = requireAgent(business, agentId);
     agentKnowledgeBaseRepository.deleteAllByTenantIdAndAgentId(tenantId, agentId);
     contextProfileRepository.deleteByAgentIdAndTenantId(agentId, tenantId);
     agentRepository.delete(agent);
   }
 
   @Transactional
-  public AgentResponse publish(UUID tenantId, UUID agentId) {
+  public AgentResponse publish(Business business, UUID agentId) {
+    UUID tenantId = business.getTenantId();
     RepositoryBinding binding = requireActiveRepository(tenantId);
-    AgentDefinition agent = agentRepository.findByIdAndTenantId(agentId, tenantId)
-        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "error.agentNotFound"));
+    AgentDefinition agent = requireAgent(business, agentId);
     List<AgentKnowledgeBase> links = agentKnowledgeBaseRepository.findAllByTenantIdAndAgentIdIn(tenantId, List.of(agentId));
     if (links.isEmpty()) {
       throw new ResponseStatusException(HttpStatus.CONFLICT, "error.agentPublishRequiresKnowledgeBase");
     }
     List<UUID> baseIds = links.stream().map(AgentKnowledgeBase::getKnowledgeBaseId).distinct().toList();
     AgentContextProfile profile = contextProfileRepository.findByAgentIdAndTenantId(agentId, tenantId).orElse(null);
-    List<KnowledgeBase> bases = knowledgeBaseRepository.findAllByTenantIdAndIdIn(tenantId, baseIds);
-    Map<UUID, Long> documentCountByBase = knowledgeBaseDocumentRepository
-        .findAllByTenantIdAndKnowledgeBaseIdIn(tenantId, baseIds)
-        .stream()
-        .collect(Collectors.groupingBy(KnowledgeBaseDocument::getKnowledgeBaseId, Collectors.counting()));
+    List<KnowledgeBase> bases = knowledgeBaseRepository.findAllByBusinessIdAndIdIn(business.getId(), baseIds);
     agent.publish();
     ragClient.syncAgent(new AmetisAiAgentSyncPayload(
         binding.getRepositoryNamespace(),
+        business.getId().toString(),
         tenantId,
         agent.getId(),
         agent.getName(),
@@ -187,7 +188,8 @@ public class AgentService {
             .map(base -> new AmetisAiKnowledgeBaseSyncPayload(
                 base.getId(),
                 base.getName(),
-                documentCountByBase.getOrDefault(base.getId(), 0L).intValue()))
+                (int) documentAssetRepository.countByKnowledgeBaseIdAndStatus(base.getId(), DocumentStatus.STORED),
+                base.getDocumentsFolderId()))
             .toList()));
     return AgentResponse.from(
         agentRepository.save(agent),
@@ -196,27 +198,31 @@ public class AgentService {
         bases.stream().map(KnowledgeBase::getName).toList());
   }
 
-  public AmetisAiCreateIndexingJobsResponse requestIndexing(UUID tenantId, UUID agentId, UUID requestedBy) {
-    RepositoryBinding binding = requireActiveRepository(tenantId);
-    AgentDefinition agent = agentRepository.findByIdAndTenantId(agentId, tenantId)
-        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "error.agentNotFound"));
+  public AmetisAiCreateIndexingJobsResponse requestIndexing(Business business, UUID agentId, UUID requestedBy) {
+    RepositoryBinding binding = requireActiveRepository(business.getTenantId());
+    AgentDefinition agent = requireAgent(business, agentId);
     if (agent.getStatus() != AgentStatus.READY) {
       throw new ResponseStatusException(HttpStatus.CONFLICT, "error.agentIndexingRequiresPublishedAgent");
     }
-    return ragClient.createIndexingJobs(binding.getRepositoryNamespace(), agentId, requestedBy);
+    // La carpeta de cada base de conocimiento viaja en el sync del agente; el
+    // RAG la usa por job. Aquí solo se dispara la creación de jobs.
+    return ragClient.createIndexingJobs(
+        binding.getRepositoryNamespace(),
+        business.getId().toString(),
+        agentId,
+        requestedBy);
   }
 
-  public List<AgentIndexingJobResponse> latestIndexingJobs(UUID tenantId, UUID agentId) {
-    RepositoryBinding binding = requireActiveRepository(tenantId);
-    agentRepository.findByIdAndTenantId(agentId, tenantId)
-        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "error.agentNotFound"));
+  public List<AgentIndexingJobResponse> latestIndexingJobs(Business business, UUID agentId) {
+    RepositoryBinding binding = requireActiveRepository(business.getTenantId());
+    requireAgent(business, agentId);
     return ragClient.latestIndexingJobs(binding.getRepositoryNamespace(), agentId);
   }
 
-  public AgentTestResponse testAgent(UUID tenantId, UUID agentId, AgentTestRequest request) {
+  public AgentTestResponse testAgent(Business business, UUID agentId, AgentTestRequest request) {
+    UUID tenantId = business.getTenantId();
     RepositoryBinding binding = requireActiveRepository(tenantId);
-    AgentDefinition agent = agentRepository.findByIdAndTenantId(agentId, tenantId)
-        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "error.agentNotFound"));
+    AgentDefinition agent = requireAgent(business, agentId);
     if (agent.getStatus() != AgentStatus.READY) {
       throw new ResponseStatusException(HttpStatus.CONFLICT, "error.agentTestRequiresPublishedAgent");
     }
@@ -232,6 +238,7 @@ public class AgentService {
     }
     AmetisAiQueryResponse response = ragClient.query(
         binding.getRepositoryNamespace(),
+        business.getId().toString(),
         agentId,
         links.get(0).getKnowledgeBaseId(),
         request.question().trim());
@@ -243,6 +250,11 @@ public class AgentService {
         response.suggestions());
   }
 
+  private AgentDefinition requireAgent(Business business, UUID agentId) {
+    return agentRepository.findByIdAndBusinessId(agentId, business.getId())
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "error.agentNotFound"));
+  }
+
   private RepositoryBinding requireActiveRepository(UUID tenantId) {
     RepositoryBinding binding = provisioningService.find(tenantId);
     if (binding.getStatus() != RepositoryStatus.ACTIVE) {
@@ -251,7 +263,7 @@ public class AgentService {
     return binding;
   }
 
-  private List<KnowledgeBase> resolveKnowledgeBases(UUID tenantId, List<UUID> knowledgeBaseIds) {
+  private List<KnowledgeBase> resolveKnowledgeBases(UUID businessId, List<UUID> knowledgeBaseIds) {
     List<UUID> uniqueIds = knowledgeBaseIds == null ? List.of() : knowledgeBaseIds.stream()
         .filter(id -> id != null)
         .distinct()
@@ -259,7 +271,7 @@ public class AgentService {
     if (uniqueIds.isEmpty()) {
       return List.of();
     }
-    List<KnowledgeBase> bases = knowledgeBaseRepository.findAllByTenantIdAndIdIn(tenantId, uniqueIds);
+    List<KnowledgeBase> bases = knowledgeBaseRepository.findAllByBusinessIdAndIdIn(businessId, uniqueIds);
     if (bases.size() != uniqueIds.size()) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "error.agentInvalidKnowledgeBases");
     }

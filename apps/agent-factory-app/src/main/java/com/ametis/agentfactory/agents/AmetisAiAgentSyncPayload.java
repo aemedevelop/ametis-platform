@@ -5,6 +5,7 @@ import java.util.UUID;
 
 public record AmetisAiAgentSyncPayload(
     String tenantId,
+    String businessId,
     UUID sourceTenantId,
     UUID agentId,
     String name,

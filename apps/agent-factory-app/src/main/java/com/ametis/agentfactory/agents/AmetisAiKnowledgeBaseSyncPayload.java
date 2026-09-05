@@ -5,4 +5,5 @@ import java.util.UUID;
 public record AmetisAiKnowledgeBaseSyncPayload(
     UUID id,
     String name,
-    int documentCount) {}
+    int documentCount,
+    String documentsFolderId) {}
