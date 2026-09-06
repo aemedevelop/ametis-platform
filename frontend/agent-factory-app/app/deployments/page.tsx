@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useLocale, useT } from "@/components/IntlProviderClient";
 import {
   AgentDefinition,
@@ -369,6 +370,11 @@ export default function DeploymentsPage() {
                       ? t("deployments.allowedOriginsValue", { count: deployment.allowedOrigins.length })
                       : t("deployments.allowedOriginsNone")}</span>
                     <div className="item-actions">
+                      {deployment.channelType === "WEB_CHAT" ? (
+                        <Link className="small-action" href={`/deployments/${deployment.id}/appearance`}>
+                          {t("deployments.appearanceAction")}
+                        </Link>
+                      ) : null}
                       <button className="icon-button" type="button" onClick={() => edit(deployment)} aria-label={t("deployments.edit", { name: deployment.name })} title={t("deployments.edit", { name: deployment.name })}>
                         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
                       </button>

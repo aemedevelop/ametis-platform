@@ -22,6 +22,7 @@ public record DeploymentResponse(
     Integer rateLimitPerMinute,
     Integer rateLimitPerDay,
     List<String> allowedOrigins,
+    DeploymentTheme theme,
     OffsetDateTime createdAt,
     OffsetDateTime updatedAt) {
 
@@ -46,6 +47,7 @@ public record DeploymentResponse(
         deployment.getRateLimitPerMinute(),
         deployment.getRateLimitPerDay(),
         DeploymentOrigins.parse(deployment.getAllowedOrigins()),
+        DeploymentTheme.from(deployment),
         deployment.getCreatedAt(),
         deployment.getUpdatedAt());
   }

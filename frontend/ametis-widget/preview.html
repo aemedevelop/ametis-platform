@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Preview — AMETIS Chat Widget (sin backend)</title>
+  <style>
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #eef2f8; color: #1a2233; }
+    .page { max-width: 720px; margin: 0 auto; padding: 60px 24px; }
+    h1 { font-size: 22px; }
+    p { line-height: 1.6; color: #47536b; }
+    .note { background: #fff; border: 1px solid #dbe1ee; border-radius: 10px; padding: 14px 16px; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <h1>Preview del widget de chat</h1>
+    <p>Esta página <strong>simula</strong> las respuestas del backend para que veas
+      el widget completo sin necesidad de un despliegue real: mensaje de bienvenida,
+      puntos de carga animados, respuesta y chips de sugerencias.</p>
+    <p class="note">La burbuja aparece abajo a la derecha. Ábrela, escribe cualquier
+      cosa y pulsa enviar — verás los 3 puntos rebotando y luego una respuesta
+      simulada con sugerencias.</p>
+  </div>
+
+  <script>
+    // --- Mock del backend: intercepta las 2 llamadas del widget ---
+    const realFetch = window.fetch.bind(window);
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    window.fetch = async (url, opts) => {
+      const u = String(url);
+      if (u.endsWith("/query")) {
+        await wait(1400); // deja ver los puntos de carga
+        return new Response(JSON.stringify({
+          question: "(pregunta)",
+          answer: "Claro. El horario de atención es de lunes a viernes de 9:00 a 18:00. " +
+                  "¿Quieres que te ayude con algo más?",
+          responseType: "answer",
+          suggestions: ["¿Cómo contacto con soporte?", "Ver planes y precios", "Agendar una demo"]
+        }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (/\/[a-z0-9]+$/i.test(u)) {
+        await wait(300);
+        return new Response(JSON.stringify({
+          deploymentName: "Web — Landing",
+          agentName: "BETTY",
+          channelType: "WEB_CHAT",
+          welcomeMessage: "Hola 👋 Soy BETTY, la asistente de AEME. ¿En qué puedo ayudarte?",
+          // Cambia estos valores para ver la personalización:
+          theme: {
+            primaryColor: "#1e3a8a",
+            font: null,          // system | humanist | serif | mono
+            position: "bottom-right",
+            title: null,
+            subtitle: null
+          }
+        }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      return realFetch(url, opts);
+    };
+  </script>
+
+  <script
+    src="./dist/ametis-widget.js"
+    data-deployment="9cc0d7ad77f84b9ba9c67482d7832476"
+    data-endpoint="http://localhost:8440/api/agent-factory/public"
+    data-locale="es"
+    async></script>
+</body>
+</html>

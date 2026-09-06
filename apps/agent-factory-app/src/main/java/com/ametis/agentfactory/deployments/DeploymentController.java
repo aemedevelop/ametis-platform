@@ -51,6 +51,15 @@ public class DeploymentController {
     return deploymentService.update(tenantId, deploymentId, request);
   }
 
+  @PatchMapping("/deployments/{deploymentId}/appearance")
+  public DeploymentResponse updateAppearance(
+      @PathVariable UUID deploymentId,
+      @Valid @RequestBody DeploymentTheme theme,
+      JwtAuthenticationToken authentication) {
+    UUID tenantId = accessGuard.requireAccess(authentication, AccessGuard.DOCUMENTS_MANAGE);
+    return deploymentService.updateAppearance(tenantId, deploymentId, theme);
+  }
+
   @PostMapping("/deployments/{deploymentId}/public-id")
   public DeploymentResponse regeneratePublicId(
       @PathVariable UUID deploymentId,

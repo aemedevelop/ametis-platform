@@ -1,20 +1,39 @@
 /**
  * AMETIS Agent Factory — widget de chat embebible.
  *
- * Se carga con una etiqueta <script> que trae dos atributos:
+ * Se carga con una etiqueta <script> que trae:
  *   data-deployment="<publicId>"   identificador opaco del despliegue
  *   data-endpoint="<baseUrl>"      base pública, ej. https://.../api/agent-factory/public
  *   data-locale="es|en"            opcional, por defecto "es"
  *
- * No depende de ninguna librería: todo el marcado y estilos viven dentro de un
- * Shadow DOM aislado para no chocar con el CSS del sitio anfitrión.
+ * La apariencia (color, fuente, avatar, posición, textos de cabecera) la
+ * configura AEME en el despliegue y llega en la respuesta de GET /{publicId}.
+ * Diseño base alineado con el widget de la landing de AEME
+ * (am-landing-react/src/components/AmetisChatWidget). Todo el marcado y los
+ * estilos viven dentro de un Shadow DOM aislado.
  */
+
+type DeploymentTheme = {
+  primaryColor: string | null;
+  font: string | null;
+  position: string | null;
+  title: string | null;
+  subtitle: string | null;
+};
+
+const FONT_STACKS: Record<string, string> = {
+  system: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+  serif: 'Georgia, "Times New Roman", Times, serif',
+  mono: 'ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace',
+  humanist: '"Segoe UI", Tahoma, Geneva, Verdana, sans-serif'
+};
 
 type DeploymentInfo = {
   deploymentName: string;
   agentName: string;
   channelType: string;
   welcomeMessage: string | null;
+  theme: DeploymentTheme | null;
 };
 
 type QueryResponse = {
@@ -24,128 +43,195 @@ type QueryResponse = {
   suggestions: string[];
 };
 
-type Message = { role: "user" | "bot" | "error"; text: string };
-
 type Strings = {
   headerFallback: string;
+  subtitleFallback: string;
   placeholder: string;
-  send: string;
   typing: string;
   errorGeneric: string;
   launcherLabel: string;
+  minimizeLabel: string;
   closeLabel: string;
-  poweredBy: string;
+  sendLabel: string;
 };
 
 const STRINGS: Record<string, Strings> = {
   es: {
     headerFallback: "Asistente",
-    placeholder: "Escribe tu pregunta…",
-    send: "Enviar",
+    subtitleFallback: "En línea",
+    placeholder: "Escribe tu pregunta...",
     typing: "Escribiendo…",
-    errorGeneric: "No se pudo enviar tu mensaje. Inténtalo de nuevo.",
+    errorGeneric: "No se pudo conectar con el servidor. Prueba de nuevo en unos segundos.",
     launcherLabel: "Abrir chat",
+    minimizeLabel: "Minimizar chat",
     closeLabel: "Cerrar chat",
-    poweredBy: "Con tecnología de AMETIS"
+    sendLabel: "Enviar pregunta"
   },
   en: {
     headerFallback: "Assistant",
-    placeholder: "Type your question…",
-    send: "Send",
+    subtitleFallback: "Online",
+    placeholder: "Type your question...",
     typing: "Typing…",
-    errorGeneric: "Could not send your message. Please try again.",
+    errorGeneric: "Couldn't reach the server. Please try again in a few seconds.",
     launcherLabel: "Open chat",
+    minimizeLabel: "Minimize chat",
     closeLabel: "Close chat",
-    poweredBy: "Powered by AMETIS"
+    sendLabel: "Send question"
   }
 };
 
+const DEFAULT_PRIMARY = "#1e3a8a";
+const DEFAULT_GRAD = "linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%)";
+
 const WIDGET_CSS = `
   :host { all: initial; }
-  * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
-  .launcher {
-    position: fixed; right: 20px; bottom: 20px; width: 58px; height: 58px; border-radius: 50%;
-    background: #1558d6; color: #fff; border: none; cursor: pointer;
-    display: grid; place-items: center; box-shadow: 0 10px 24px rgba(21,88,214,.35);
-    z-index: 2147483000; transition: transform .15s ease;
+  * { box-sizing: border-box; font-family: var(--amw-font, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif); }
+
+  .root { position: fixed; right: 1.25rem; bottom: 1.25rem; z-index: 2147483000; display: flex; flex-direction: column; align-items: flex-end; gap: 0.75rem; }
+  .root.left { right: auto; left: 1.25rem; align-items: flex-start; }
+
+  .bubble {
+    display: inline-flex; align-items: center; justify-content: center; overflow: hidden;
+    width: 3.5rem; height: 3.5rem; border: 0; border-radius: 9999px;
+    background: var(--amw-grad, ${DEFAULT_GRAD}); color: #fff; box-shadow: 0 18px 35px rgba(30,58,138,.25);
+    cursor: pointer; transition: transform 160ms ease, box-shadow 160ms ease;
   }
-  .launcher:hover { transform: translateY(-2px); }
-  .launcher svg { width: 26px; height: 26px; }
-  .panel {
-    position: fixed; right: 20px; bottom: 90px; width: 350px; max-width: calc(100vw - 32px);
-    height: 480px; max-height: calc(100vh - 120px); background: #fff; border-radius: 16px;
-    box-shadow: 0 20px 48px rgba(15,23,42,.22); display: flex; flex-direction: column; overflow: hidden;
-    z-index: 2147483000; opacity: 0; pointer-events: none; transform: translateY(12px);
+  .bubble:hover { transform: translateY(-2px) scale(1.02); box-shadow: 0 22px 40px rgba(30,58,138,.3); }
+  .bubble svg { width: 24px; height: 24px; }
+  .bubble img { width: 100%; height: 100%; object-fit: cover; }
+
+  .window {
+    width: min(92vw, 24rem); max-height: min(80vh, 40rem);
+    display: flex; flex-direction: column; overflow: hidden;
+    border-radius: 1rem; border: 1px solid rgba(15,23,42,.08); background: #fff;
+    box-shadow: 0 20px 60px rgba(15,23,42,.18);
+    opacity: 0; pointer-events: none; transform: translateY(12px);
     transition: opacity .18s ease, transform .18s ease;
   }
-  .panel.open { opacity: 1; pointer-events: auto; transform: translateY(0); }
-  .header {
-    background: #0f1b3d; color: #fff; padding: 14px 16px; display: flex; align-items: center;
-    justify-content: space-between; flex-shrink: 0;
+  .window.open { opacity: 1; pointer-events: auto; transform: translateY(0); }
+
+  .header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .9rem 1rem; background: var(--amw-grad, ${DEFAULT_GRAD}); color: #fff; flex-shrink: 0; }
+  .brand { display: flex; align-items: center; gap: .75rem; min-width: 0; }
+  .brand-icon { display: inline-flex; align-items: center; justify-content: center; overflow: hidden; width: 2rem; height: 2rem; border-radius: 9999px; background: rgba(255,255,255,.16); flex-shrink: 0; }
+  .brand-icon svg { width: 18px; height: 18px; }
+  .brand-icon img { width: 100%; height: 100%; object-fit: cover; }
+  .brand-text { min-width: 0; }
+  .brand-text h3 { margin: 0; font-size: .95rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .brand-text p { margin: 0; font-size: .72rem; opacity: .84; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .actions { display: flex; gap: .35rem; flex-shrink: 0; }
+  .action { display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; border: 0; border-radius: 9999px; background: rgba(255,255,255,.16); color: #fff; cursor: pointer; }
+  .action:hover { background: rgba(255,255,255,.28); }
+  .action svg { width: 16px; height: 16px; }
+
+  .messages { display: flex; flex-direction: column; gap: .7rem; padding: 1rem; min-height: 14rem; max-height: 24rem; overflow-y: auto; scroll-behavior: smooth; background: #f8fafc; }
+  .msg { display: flex; }
+  .msg.user { justify-content: flex-end; }
+  .msg.bot, .msg.error { justify-content: flex-start; }
+  .msg-body { max-width: 85%; }
+  .bubble-text {
+    padding: .7rem .85rem; border-radius: 1rem; font-size: .92rem; line-height: 1.45;
+    white-space: pre-wrap; word-break: break-word;
+    background: #fff; color: #111827; border: 1px solid rgba(15,23,42,.08); box-shadow: 0 8px 18px rgba(15,23,42,.05);
   }
-  .header-title { font-size: 14px; font-weight: 700; line-height: 1.3; }
-  .header-sub { font-size: 11px; color: #9fb2e0; margin-top: 2px; }
-  .close-btn {
-    background: transparent; border: none; color: #cdd8f5; cursor: pointer; font-size: 18px;
-    line-height: 1; padding: 4px; border-radius: 6px;
+  .msg.user .bubble-text { background: var(--amw-primary, ${DEFAULT_PRIMARY}); color: #fff; border-color: transparent; }
+  .msg.error .bubble-text { background: #fff0f2; color: #962f40; border-color: #f1ccd2; }
+
+  .suggestions { display: flex; flex-direction: column; gap: .45rem; margin-top: .55rem; }
+  .suggestion {
+    display: block; width: 100%; padding: .7rem .85rem; border: 1px solid rgba(30,58,138,.18);
+    border-radius: .9rem; background: #fff; color: #0f172a; text-align: left; font-size: .86rem;
+    line-height: 1.4; cursor: pointer; box-shadow: 0 6px 14px rgba(15,23,42,.05);
   }
-  .close-btn:hover { background: rgba(255,255,255,.12); }
-  .messages { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; background: #f7f9fc; }
-  .bubble { max-width: 82%; padding: 9px 12px; border-radius: 12px; font-size: 13px; line-height: 1.45; white-space: pre-wrap; }
-  .bubble.bot { align-self: flex-start; background: #fff; color: #1a2233; box-shadow: 0 1px 2px rgba(15,23,42,.08); border-bottom-left-radius: 4px; }
-  .bubble.user { align-self: flex-end; background: #1558d6; color: #fff; border-bottom-right-radius: 4px; }
-  .bubble.error { align-self: flex-start; background: #fff0f2; color: #962f40; border: 1px solid #f1ccd2; }
-  .typing { align-self: flex-start; font-size: 12px; color: #7a89a8; padding: 0 4px; }
-  .composer { display: flex; gap: 8px; padding: 10px; border-top: 1px solid #e7ebf3; background: #fff; flex-shrink: 0; }
-  .composer textarea {
-    flex: 1; resize: none; border: 1px solid #dbe1ee; border-radius: 10px; padding: 9px 11px;
-    font-size: 13px; line-height: 1.4; max-height: 72px; outline: none; color: #1a2233;
+  .suggestion:hover { border-color: rgba(30,58,138,.42); background: #eff6ff; }
+
+  .dots { display: inline-flex; align-items: center; gap: .2rem; }
+  .dots span { display: inline-block; width: .35rem; height: .35rem; border-radius: 9999px; background: currentColor; opacity: .7; animation: amw-bounce 1s infinite ease-in-out; }
+  .dots span:nth-child(2) { animation-delay: .15s; }
+  .dots span:nth-child(3) { animation-delay: .3s; }
+  @keyframes amw-bounce { 0%,80%,100% { transform: translateY(0); opacity: .45; } 40% { transform: translateY(-3px); opacity: 1; } }
+
+  .composer { display: flex; align-items: center; gap: .5rem; padding: .8rem; border-top: 1px solid rgba(15,23,42,.08); background: #fff; flex-shrink: 0; }
+  .composer input {
+    flex: 1; min-width: 0; border: 1px solid rgba(15,23,42,.12); border-radius: 9999px;
+    padding: .72rem .9rem; outline: none; font: inherit; color: #111827; background: #f8fafc;
   }
-  .composer textarea:focus { border-color: #1558d6; }
-  .composer button {
-    border: none; background: #1558d6; color: #fff; border-radius: 10px; padding: 0 14px;
-    font-size: 13px; font-weight: 700; cursor: pointer; flex-shrink: 0;
+  .composer input:focus { border-color: var(--amw-primary, ${DEFAULT_PRIMARY}); box-shadow: 0 0 0 3px rgba(30,58,138,.12); }
+  .send { display: inline-flex; align-items: center; justify-content: center; width: 2.5rem; height: 2.5rem; border: 0; border-radius: 9999px; background: var(--amw-primary, ${DEFAULT_PRIMARY}); color: #fff; cursor: pointer; flex-shrink: 0; }
+  .send:disabled { opacity: .6; cursor: not-allowed; }
+  .send svg { width: 16px; height: 16px; }
+
+  @media (max-width: 640px) {
+    .root, .root.left { right: .75rem; left: .75rem; bottom: .75rem; align-items: stretch; }
+    .window { width: 100%; max-height: calc(100vh - 1.5rem); }
+    .bubble { align-self: flex-end; }
+    .root.left .bubble { align-self: flex-start; }
   }
-  .composer button:disabled { opacity: .5; cursor: default; }
-  .footer-note { text-align: center; font-size: 10px; color: #a6b0c3; padding: 5px 0 8px; background: #fff; flex-shrink: 0; }
 `;
 
-function readConfig(script: HTMLOrSVGScriptElement | null): { publicId: string; endpoint: string; locale: string } | null {
+const ICONS = {
+  message: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>`,
+  send: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>`,
+  minus: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
+  close: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`
+};
+
+type WidgetConfig = { publicId: string; endpoint: string; locale: string; preview: boolean };
+
+function readConfig(script: HTMLOrSVGScriptElement | null): WidgetConfig | null {
   const el = script as HTMLScriptElement | null;
   if (!el) return null;
-  const publicId = el.getAttribute("data-deployment");
-  const endpoint = el.getAttribute("data-endpoint");
-  if (!publicId || !endpoint) return null;
+  const preview = el.getAttribute("data-preview") === "1";
+  const publicId = el.getAttribute("data-deployment") || "preview";
+  const endpoint = el.getAttribute("data-endpoint") || "";
+  if (!preview && (!publicId || !endpoint)) return null;
   const locale = el.getAttribute("data-locale") || "es";
-  return { publicId, endpoint: endpoint.replace(/\/+$/, ""), locale: STRINGS[locale] ? locale : "es" };
+  return { publicId, endpoint: endpoint.replace(/\/+$/, ""), locale: STRINGS[locale] ? locale : "es", preview };
 }
 
-function launcherIcon(): string {
-  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
-  </svg>`;
+type PreviewPayload = {
+  theme: DeploymentTheme | null;
+  welcomeMessage: string | null;
+  agentName: string;
+  deploymentName: string;
+};
+
+/** Aclara un color hex hacia blanco para el extremo del gradiente. */
+function lighten(hex: string, amount: number): string {
+  const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return hex;
+  let h = m[1];
+  if (h.length === 3) h = h.split("").map((c) => c + c).join("");
+  const n = parseInt(h, 16);
+  const mix = (channel: number) => Math.round(channel + (255 - channel) * amount);
+  const r = mix((n >> 16) & 255);
+  const g = mix((n >> 8) & 255);
+  const b = mix(n & 255);
+  return `#${((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1)}`;
 }
 
 class AmetisWidget {
   private readonly publicId: string;
   private readonly endpoint: string;
   private readonly strings: Strings;
+  private readonly preview: boolean;
   private shadow!: ShadowRoot;
-  private panelEl!: HTMLDivElement;
+  private rootEl!: HTMLDivElement;
+  private windowEl!: HTMLDivElement;
   private messagesEl!: HTMLDivElement;
-  private textareaEl!: HTMLTextAreaElement;
+  private inputEl!: HTMLInputElement;
   private sendBtn!: HTMLButtonElement;
-  private headerTitleEl!: HTMLDivElement;
-  private headerSubEl!: HTMLDivElement;
+  private titleEl!: HTMLElement;
+  private subtitleEl!: HTMLElement;
+  private launcherEl!: HTMLButtonElement;
   private open = false;
   private loaded = false;
   private sending = false;
-  private info: DeploymentInfo | null = null;
 
-  constructor(config: { publicId: string; endpoint: string; locale: string }) {
+  constructor(config: WidgetConfig) {
     this.publicId = config.publicId;
     this.endpoint = config.endpoint;
     this.strings = STRINGS[config.locale];
+    this.preview = config.preview;
   }
 
   mount(): void {
@@ -158,57 +244,94 @@ class AmetisWidget {
     style.textContent = WIDGET_CSS;
     this.shadow.appendChild(style);
 
-    const launcher = document.createElement("button");
-    launcher.className = "launcher";
-    launcher.type = "button";
-    launcher.setAttribute("aria-label", this.strings.launcherLabel);
-    launcher.innerHTML = launcherIcon();
-    launcher.addEventListener("click", () => this.toggle());
-    this.shadow.appendChild(launcher);
-
-    const panel = document.createElement("div");
-    panel.className = "panel";
-    panel.setAttribute("role", "dialog");
-    panel.innerHTML = `
-      <div class="header">
-        <div>
-          <div class="header-title" data-title></div>
-          <div class="header-sub" data-sub></div>
+    const root = document.createElement("div");
+    root.className = "root";
+    root.innerHTML = `
+      <div class="window" role="dialog" aria-modal="false">
+        <div class="header">
+          <div class="brand">
+            <span class="brand-icon" data-brand-icon>${ICONS.message}</span>
+            <span class="brand-text">
+              <h3 data-title>${this.strings.headerFallback}</h3>
+              <p data-subtitle>${this.strings.subtitleFallback}</p>
+            </span>
+          </div>
+          <div class="actions">
+            <button class="action" type="button" data-minimize aria-label="${this.strings.minimizeLabel}">${ICONS.minus}</button>
+            <button class="action" type="button" data-close aria-label="${this.strings.closeLabel}">${ICONS.close}</button>
+          </div>
         </div>
-        <button class="close-btn" type="button" aria-label="${this.strings.closeLabel}">&#10005;</button>
+        <div class="messages" data-messages role="log" aria-live="polite"></div>
+        <form class="composer" data-form>
+          <input type="text" data-input placeholder="${this.strings.placeholder}" autocomplete="off" />
+          <button class="send" type="submit" data-send aria-label="${this.strings.sendLabel}">${ICONS.send}</button>
+        </form>
       </div>
-      <div class="messages" data-messages></div>
-      <div class="composer">
-        <textarea rows="1" placeholder="${this.strings.placeholder}" data-input></textarea>
-        <button type="button" data-send>${this.strings.send}</button>
-      </div>
-      <div class="footer-note">${this.strings.poweredBy}</div>
+      <button class="bubble" type="button" data-launcher aria-label="${this.strings.launcherLabel}">${ICONS.message}</button>
     `;
-    this.shadow.appendChild(panel);
-    this.panelEl = panel;
-    this.messagesEl = panel.querySelector("[data-messages]") as HTMLDivElement;
-    this.textareaEl = panel.querySelector("[data-input]") as HTMLTextAreaElement;
-    this.sendBtn = panel.querySelector("[data-send]") as HTMLButtonElement;
-    this.headerTitleEl = panel.querySelector("[data-title]") as HTMLDivElement;
-    this.headerSubEl = panel.querySelector("[data-sub]") as HTMLDivElement;
-    this.headerTitleEl.textContent = this.strings.headerFallback;
+    this.shadow.appendChild(root);
 
-    (panel.querySelector(".close-btn") as HTMLButtonElement).addEventListener("click", () => this.toggle(false));
-    this.sendBtn.addEventListener("click", () => this.send());
-    this.textareaEl.addEventListener("keydown", (event) => {
-      if (event.key === "Enter" && !event.shiftKey) {
-        event.preventDefault();
-        this.send();
-      }
+    this.rootEl = root;
+    this.windowEl = root.querySelector(".window") as HTMLDivElement;
+    this.messagesEl = root.querySelector("[data-messages]") as HTMLDivElement;
+    this.inputEl = root.querySelector("[data-input]") as HTMLInputElement;
+    this.sendBtn = root.querySelector("[data-send]") as HTMLButtonElement;
+    this.titleEl = root.querySelector("[data-title]") as HTMLElement;
+    this.subtitleEl = root.querySelector("[data-subtitle]") as HTMLElement;
+    this.launcherEl = root.querySelector("[data-launcher]") as HTMLButtonElement;
+
+    this.launcherEl.addEventListener("click", () => this.toggle(true));
+    (root.querySelector("[data-minimize]") as HTMLButtonElement).addEventListener("click", () => this.toggle(false));
+    (root.querySelector("[data-close]") as HTMLButtonElement).addEventListener("click", () => this.toggle(false));
+    (root.querySelector("[data-form]") as HTMLFormElement).addEventListener("submit", (event) => {
+      event.preventDefault();
+      this.send();
     });
+
+    if (this.preview) {
+      window.addEventListener("message", (event) => {
+        const data = event.data as { type?: string; payload?: PreviewPayload };
+        if (data && data.type === "ametis-preview" && data.payload) this.renderPreview(data.payload);
+      });
+      this.toggle(true);
+      window.parent.postMessage({ type: "ametis-preview-ready" }, "*");
+    }
+  }
+
+  private renderPreview(payload: PreviewPayload): void {
+    this.applyTheme(payload.theme);
+    const theme = payload.theme;
+    this.titleEl.textContent = (theme && theme.title) || payload.agentName || this.strings.headerFallback;
+    this.subtitleEl.textContent = (theme && theme.subtitle) || payload.deploymentName || this.strings.subtitleFallback;
+    this.messagesEl.innerHTML = "";
+    if (payload.welcomeMessage) this.appendBubble("bot", payload.welcomeMessage);
   }
 
   private toggle(force?: boolean): void {
     this.open = force ?? !this.open;
-    this.panelEl.classList.toggle("open", this.open);
-    if (this.open && !this.loaded) {
-      this.loadInfo();
+    this.windowEl.classList.toggle("open", this.open);
+    if (this.open && !this.preview) {
+      this.inputEl.focus();
+      if (!this.loaded) this.loadInfo();
     }
+  }
+
+  private applyTheme(theme: DeploymentTheme | null): void {
+    const root = this.rootEl.style;
+    const color = theme && theme.primaryColor && /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(theme.primaryColor)
+      ? theme.primaryColor : null;
+    if (color) {
+      root.setProperty("--amw-primary", color);
+      root.setProperty("--amw-grad", `linear-gradient(135deg, ${color} 0%, ${lighten(color, 0.22)} 100%)`);
+    } else {
+      root.removeProperty("--amw-primary");
+      root.removeProperty("--amw-grad");
+    }
+    const stack = theme && theme.font ? FONT_STACKS[theme.font] : null;
+    if (stack) root.setProperty("--amw-font", stack);
+    else root.removeProperty("--amw-font");
+
+    this.rootEl.classList.toggle("left", (theme && theme.position) === "bottom-left");
   }
 
   private async loadInfo(): Promise<void> {
@@ -216,38 +339,61 @@ class AmetisWidget {
     try {
       const response = await fetch(`${this.endpoint}/${this.publicId}`, { method: "GET" });
       if (!response.ok) throw new Error(String(response.status));
-      this.info = (await response.json()) as DeploymentInfo;
-      this.headerTitleEl.textContent = this.info.agentName || this.info.deploymentName || this.strings.headerFallback;
-      this.headerSubEl.textContent = this.info.deploymentName || "";
-      if (this.info.welcomeMessage) {
-        this.appendMessage({ role: "bot", text: this.info.welcomeMessage });
-      }
+      const info = (await response.json()) as DeploymentInfo;
+      this.applyTheme(info.theme);
+      const theme = info.theme;
+      this.titleEl.textContent = (theme && theme.title) || info.agentName || info.deploymentName || this.strings.headerFallback;
+      this.subtitleEl.textContent = (theme && theme.subtitle) || info.deploymentName || this.strings.subtitleFallback;
+      if (info.welcomeMessage) this.appendBubble("bot", info.welcomeMessage);
     } catch {
-      this.appendMessage({ role: "error", text: this.strings.errorGeneric });
+      this.appendBubble("error", this.strings.errorGeneric);
     }
   }
 
-  private appendMessage(message: Message): void {
+  private appendBubble(role: "user" | "bot" | "error", text: string, suggestions?: string[]): void {
+    const msg = document.createElement("div");
+    msg.className = `msg ${role}`;
+    const body = document.createElement("div");
+    body.className = "msg-body";
     const bubble = document.createElement("div");
-    bubble.className = `bubble ${message.role}`;
-    bubble.textContent = message.text;
-    this.messagesEl.appendChild(bubble);
+    bubble.className = "bubble-text";
+    bubble.textContent = text;
+    body.appendChild(bubble);
+    if (role === "bot" && suggestions && suggestions.length) {
+      const wrap = document.createElement("div");
+      wrap.className = "suggestions";
+      for (const suggestion of suggestions) {
+        const btn = document.createElement("button");
+        btn.className = "suggestion";
+        btn.type = "button";
+        btn.textContent = suggestion;
+        btn.addEventListener("click", () => this.send(suggestion));
+        wrap.appendChild(btn);
+      }
+      body.appendChild(wrap);
+    }
+    msg.appendChild(body);
+    this.messagesEl.appendChild(msg);
+    this.scrollToBottom();
+  }
+
+  private scrollToBottom(): void {
     this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
   }
 
-  private async send(): Promise<void> {
-    const question = this.textareaEl.value.trim();
+  private async send(override?: string): Promise<void> {
+    const question = (override ?? this.inputEl.value).trim();
     if (!question || this.sending) return;
     this.sending = true;
     this.sendBtn.disabled = true;
-    this.textareaEl.value = "";
-    this.appendMessage({ role: "user", text: question });
+    if (!override) this.inputEl.value = "";
+    this.appendBubble("user", question);
 
-    const typing = document.createElement("div");
-    typing.className = "typing";
-    typing.textContent = this.strings.typing;
-    this.messagesEl.appendChild(typing);
-    this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
+    const loading = document.createElement("div");
+    loading.className = "msg bot";
+    loading.innerHTML = `<div class="msg-body"><div class="bubble-text"><span class="dots"><span></span><span></span><span></span></span></div></div>`;
+    this.messagesEl.appendChild(loading);
+    this.scrollToBottom();
 
     try {
       const response = await fetch(`${this.endpoint}/${this.publicId}/query`, {
@@ -255,13 +401,13 @@ class AmetisWidget {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question })
       });
-      typing.remove();
+      loading.remove();
       if (!response.ok) throw new Error(String(response.status));
       const data = (await response.json()) as QueryResponse;
-      this.appendMessage({ role: "bot", text: data.answer });
+      this.appendBubble("bot", data.answer || this.strings.errorGeneric, data.suggestions);
     } catch {
-      typing.remove();
-      this.appendMessage({ role: "error", text: this.strings.errorGeneric });
+      loading.remove();
+      this.appendBubble("error", this.strings.errorGeneric);
     } finally {
       this.sending = false;
       this.sendBtn.disabled = false;

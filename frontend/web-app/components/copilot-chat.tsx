@@ -76,7 +76,7 @@ export function CopilotChat() {
         {
           id: crypto.randomUUID(),
           role: "assistant",
-          content: "Ahora mismo no puedo responder esa consulta. Prueba de nuevo en unos segundos.",
+          content: "No se pudo conectar con el servidor. Prueba de nuevo en unos segundos.",
           responseType: "fallback"
         }
       ]);

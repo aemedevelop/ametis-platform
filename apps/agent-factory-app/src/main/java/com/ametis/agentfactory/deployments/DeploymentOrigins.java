@@ -38,13 +38,15 @@ final class DeploymentOrigins {
   /**
    * Indica si un origen entrante está autorizado para el despliegue.
    *
-   * <p>Sin orígenes configurados el canal no restringe por origen. Con lista,
-   * el header {@code Origin} debe coincidir tras normalizar.
+   * <p>Seguro por defecto: sin orígenes configurados el canal <b>no sirve a
+   * nadie</b>. El propietario debe declarar explícitamente cada dominio
+   * (esquema + host [+ puerto]) donde se embeberá el widget. El header
+   * {@code Origin} debe coincidir con uno de ellos tras normalizar.
    */
   static boolean isAllowed(String stored, String requestOrigin) {
     List<String> allowed = parse(stored);
     if (allowed.isEmpty()) {
-      return true;
+      return false;
     }
     String origin = cleanOrigin(requestOrigin);
     return origin != null && allowed.contains(origin);

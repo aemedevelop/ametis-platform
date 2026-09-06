@@ -34,9 +34,10 @@ Tenant (Core, = workspace)
 
 - `agent_deployments.public_id` = opaque 32-hex token (no prefix), immutable except via `POST /deployments/{id}/public-id` (regenerate).
 - Public consumption route (no JWT): `GET|POST {agent-factory.public.base-url}/{publicId}[/query]` -> `PublicDeploymentController` -> resolves deployment -> agent + KB -> `ragClient.query(namespace, businessId, agentId, kbId, question)`.
-- Only channel `WEB_CHAT` is served today; `API` / `INTERNAL_TEST` return 404 (`validateApiKey` exists, unused). `WEB_CHAT` validates the `Origin` header against `agent_deployments.allowed_origins` (empty list = no restriction).
+- Only channel `WEB_CHAT` is served today; `API` / `INTERNAL_TEST` return 404 (`validateApiKey` exists, unused). `WEB_CHAT` validates the `Origin` header against `agent_deployments.allowed_origins`. **Secure by default (2026-09-05): an empty allow-list serves nobody** (403 `error.deploymentOriginNotAllowed`) — the deployment owner must explicitly declare every origin (`scheme://host[:port]`). Origin validation only stops another site embedding the widget; a script can spoof `Origin`, so real lock-down still needs the (unused) API key.
 - `agent-factory.public.base-url` config (`AGENT_FACTORY_PUBLIC_BASE_URL`): local `http://localhost:8440/api/agent-factory/public`, VPS `https://ametis.api.aemetech.com/api/agent-factory/public`. Kong needs no new route (the `/api/agent-factory` prefix already passes through).
-- `DeploymentResponse` returns derived `endpointUrl`, `queryUrl`, `embedSnippet` (widget `<script>` placeholder at `AGENT_FACTORY_PUBLIC_WIDGET_URL`). The widget bundle itself does not exist yet.
+- `DeploymentResponse` returns derived `endpointUrl`, `queryUrl`, `embedSnippet`. `widget-url` derives from `agent-factory.public.base-url` (`/widget.js`), served by `PublicWidgetController` from `resources/widget/ametis-widget.js` (built from `frontend/ametis-widget/`, `npm run build:copy`).
+- **Web chat appearance** (`agent_deployments.theme_*`, V17): `primary_color` (hex), `font` (`system|humanist|serif|mono` — the widget maps to a system stack, no web fonts), `position` (`bottom-right`/`bottom-left`), `title`, `subtitle`. All optional. Configured on a dedicated page `/deployments/[id]/appearance` (not the create/edit form) via `PUT /deployments/{id}/appearance`, returned in `theme` of `GET /public/{publicId}`, applied by the widget. No `data-*` overrides. Avatar deferred to MinIO. The appearance page has a live preview: an `<iframe>` running the real widget bundle in **preview mode** (`data-preview="1"` → skips fetch, reads theme via `postMessage`).
 
 ## Authentication And Authorization
 
@@ -114,7 +115,7 @@ Do not use public HTTPS domains for container-to-container calls unless the brow
 ## Database
 
 - Agent Factory uses schema `agent_factory`.
-- Flyway migrations run from `apps/agent-factory-app/src/main/resources/db/migration`. Current head: **V16**.
-  - V6 agent_deployments · V7 agent_context_profiles (made idempotent) · V8 deployment channel config (welcome message, rate limits) · V9 deployment allowed_origins · V10/V11 deployment public_id (V11 stripped the `dep_` prefix) · V12 businesses · V13 agents/KB business_id + backfill "Negocio principal" · V14 business Drive folder + document_assets.business_id · V15 KB Drive folder + document_assets.knowledge_base_id + drop knowledge_base_documents · V16 business_deletion_log.
+- Flyway migrations run from `apps/agent-factory-app/src/main/resources/db/migration`. Current head: **V17**.
+  - V6 agent_deployments · V7 agent_context_profiles (made idempotent) · V8 deployment channel config (welcome message, rate limits) · V9 deployment allowed_origins · V10/V11 deployment public_id (V11 stripped the `dep_` prefix) · V12 businesses · V13 agents/KB business_id + backfill "Negocio principal" · V14 business Drive folder + document_assets.business_id · V15 KB Drive folder + document_assets.knowledge_base_id + drop knowledge_base_documents · V16 business_deletion_log · V17 `agent_deployments.theme_*` (web chat appearance: `theme_primary_color`, `theme_font`, `theme_position`, `theme_title`, `theme_subtitle`).
 - In VPS, verify table ownership and grants before adding migrations with foreign keys. The app user needs `REFERENCES` on referenced tables (V6 incident). Flyway checksum mismatch after local re-runs: `flyway repair` or make the migration idempotent (`create table if not exists`).
 

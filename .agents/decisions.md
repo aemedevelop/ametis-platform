@@ -52,7 +52,7 @@ Agent context profile data is stored in a separate `agent_context_profiles` tabl
 ## Deployment identifier and channels
 
 - Public identifier is an opaque 32-hex token (`public_id`), no prefix, immutable except explicit regeneration. It is the isolation key of the channel; everything downstream is scoped by the deployment row's `tenant_id` / `agent.business_id`.
-- MVP serves only `WEB_CHAT`, gated by `allowed_origins`. Consumption security beyond origin (api key, rate limit) is stored but not enforced yet.
+- MVP serves only `WEB_CHAT`, gated by `allowed_origins`. **Secure by default (2026-09-05): an empty allow-list rejects every request** — the owner must whitelist each origin. Consumption security beyond origin (api key, rate limit) is stored but not enforced yet; add it later.
 - The embed widget bundle (`ametis-widget.js`) does not exist yet; the snippet is a placeholder.
 
 ## Google Drive: AEME-controlled

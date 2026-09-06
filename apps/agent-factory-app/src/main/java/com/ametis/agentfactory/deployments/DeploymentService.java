@@ -95,6 +95,15 @@ public class DeploymentService {
   }
 
   @Transactional
+  public DeploymentResponse updateAppearance(UUID tenantId, UUID deploymentId, DeploymentTheme theme) {
+    AgentDeployment deployment = deploymentRepository.findByIdAndTenantId(deploymentId, tenantId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "error.deploymentNotFound"));
+    deployment.applyAppearance(theme);
+    AgentDefinition agent = agentRepository.findByIdAndTenantId(deployment.getAgentId(), tenantId).orElse(null);
+    return toResponse(deploymentRepository.save(deployment), agent);
+  }
+
+  @Transactional
   public DeploymentResponse regeneratePublicId(UUID tenantId, UUID deploymentId) {
     AgentDeployment deployment = deploymentRepository.findByIdAndTenantId(deploymentId, tenantId)
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "error.deploymentNotFound"));

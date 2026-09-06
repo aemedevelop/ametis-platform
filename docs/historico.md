@@ -1,5 +1,46 @@
 # Histórico de cambios - AMETIS Platform
 
+## 2026-09-06 - Widget de chat: verificado, seguro por defecto y personalizable
+
+### Verificación end-to-end
+
+El widget (`frontend/ametis-widget/`) se probó en local (`demo.html` + `node
+serve.js`) contra un despliegue `WEB_CHAT` real: carga el mensaje de bienvenida,
+responde con el RAG, muestra chips de sugerencias y los puntos de carga.
+`PublicWidgetController` sirve el bundle en `/api/agent-factory/public/widget.js`.
+
+### Origen seguro por defecto
+
+`DeploymentOrigins.isAllowed`: lista vacía → **403** (antes permitía todo). Un
+despliegue `WEB_CHAT` no responde hasta que se declaran sus orígenes
+(`esquema://host[:puerto]`, sin ruta). Endurecimiento adicional (rate limiting,
+Turnstile, token de sesión, api key) **pospuesto a propósito** — plan por pasos
+en `.agents/current-state.md`.
+
+### Personalización por despliegue (V17) — página propia con preview en vivo
+
+`V17__deployment_web_chat_style.sql` añade a `agent_deployments`:
+`theme_primary_color`, `theme_font` (clave: `system|humanist|serif|mono`),
+`theme_position` (`bottom-right`/`bottom-left`), `theme_title`, `theme_subtitle`.
+**Sin avatar** (espera a MinIO). Todo opcional.
+
+- **Pantalla propia** `/deployments/[id]/appearance` (no el formulario de alta):
+  muestras de color + selector, desplegable de tipografía (stacks del sistema,
+  **sin Google Fonts**), posición, título, subtítulo. Endpoint dedicado
+  `PUT /deployments/{id}/appearance` (`DeploymentTheme`). Botón "Apariencia" en
+  cada tarjeta `WEB_CHAT`.
+- **Previsualización en vivo**: un `<iframe>` con el widget real en **modo
+  preview** (`data-preview="1"` → no llama al backend, recibe el tema por
+  `postMessage`). Toggle escritorio/móvil. Cada cambio se refleja al instante.
+- El objeto `theme` viaja en `GET /public/{publicId}`; el widget lo aplica.
+
+### Validación
+
+- `agent-factory-app` compila (`mvn compile` en Docker).
+- `agent-factory-web` pasa `tsc` + `next build` (ruta `/deployments/[id]/appearance`).
+- Widget: `tsc` + build (13.5 KB, incluye modo preview).
+- Rebuild necesario: `agent-factory-app` (migración V17 + endpoints) + `agent-factory-web`.
+
 ## 2026-09-04 - Login solo SSO; fix de perfil desactualizado en la barra superior
 
 ### Fix: "Usuario AMETIS" en vez del nombre real

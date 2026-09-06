@@ -124,6 +124,17 @@ export type DeploymentChannelType = "WEB_CHAT" | "API" | "INTERNAL_TEST";
 
 export type DeploymentStatus = "ACTIVE" | "INACTIVE";
 
+export type DeploymentFont = "system" | "serif" | "mono" | "humanist";
+export type DeploymentPosition = "bottom-right" | "bottom-left";
+
+export type DeploymentTheme = {
+  primaryColor: string | null;
+  font: DeploymentFont | null;
+  position: DeploymentPosition | null;
+  title: string | null;
+  subtitle: string | null;
+};
+
 export type AgentDeployment = {
   id: string;
   agentId: string;
@@ -141,6 +152,7 @@ export type AgentDeployment = {
   rateLimitPerMinute: number | null;
   rateLimitPerDay: number | null;
   allowedOrigins: string[];
+  theme: DeploymentTheme | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -502,6 +514,20 @@ export function updateDeployment(id: string, input: {
 
 export function regenerateDeploymentPublicId(id: string) {
   return apiFetch<AgentDeployment>(`/api/agent-factory/deployments/${id}/public-id`, { method: "POST" });
+}
+
+export function updateDeploymentAppearance(id: string, theme: {
+  primaryColor?: string;
+  font?: DeploymentFont;
+  position?: DeploymentPosition;
+  title?: string;
+  subtitle?: string;
+}) {
+  return apiFetch<AgentDeployment>(`/api/agent-factory/deployments/${id}/appearance`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(theme)
+  });
 }
 
 export async function deleteDeployment(id: string): Promise<void> {

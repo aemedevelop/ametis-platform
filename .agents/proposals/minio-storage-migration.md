@@ -66,7 +66,7 @@ Today the DB stores Drive folder IDs. Generalise to an opaque locator string:
   the same pattern. Per-tenant credentials = later phase if needed.
 - Isolation: strong at storage level (separate bucket); credential isolation is a later step.
 
-### Data model — migration `V17`
+### Data model — migration (next free `Vnn`)
 
 | Table | Before | After |
 |---|---|---|
@@ -124,7 +124,7 @@ fall back to `MINIO_PREFIX_TEMPLATE`. `google_drive_loader.py` stays, switchable
 ## Implementation checklist (when resumed)
 
 1. `minio` in compose + bucket/credential init.
-2. Migration `V17` (renames + `storage_provider` + `bucket_name` + reset to PENDING).
+2. Migration (next free `Vnn`) (renames + `storage_provider` + `bucket_name` + reset to PENDING).
 3. Platform: `StorageProvider` interface; move Drive behind `GoogleDriveStorageProvider` (mechanical).
 4. Platform: `MinioStorageProvider`; rewire `DocumentService` + the 3 provisioning services +
    `BusinessDeletionService`; rename entity/DTO fields.

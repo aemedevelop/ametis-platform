@@ -61,6 +61,24 @@ public class AgentDeployment {
   @Column(length = 1000)
   private String allowedOrigins;
 
+  // Apariencia del chat web (canal WEB_CHAT). Opcional; se configura en la
+  // pantalla de apariencia, no en el alta. El widget cae a sus valores por
+  // defecto para lo que no esté configurado.
+  @Column(length = 9)
+  private String themePrimaryColor;
+
+  @Column(length = 40)
+  private String themeFont;
+
+  @Column(length = 20)
+  private String themePosition;
+
+  @Column(length = 80)
+  private String themeTitle;
+
+  @Column(length = 160)
+  private String themeSubtitle;
+
   private UUID createdBy;
 
   @Column(nullable = false)
@@ -125,6 +143,24 @@ public class AgentDeployment {
     updatedAt = OffsetDateTime.now();
   }
 
+  /** Apariencia del chat web. Se guarda desde la pantalla de apariencia. */
+  public void applyAppearance(DeploymentTheme theme) {
+    this.themePrimaryColor = normalize(theme == null ? null : theme.primaryColor());
+    this.themeFont = normalize(theme == null ? null : theme.font());
+    this.themePosition = normalize(theme == null ? null : theme.position());
+    this.themeTitle = normalize(theme == null ? null : theme.title());
+    this.themeSubtitle = normalize(theme == null ? null : theme.subtitle());
+    updatedAt = OffsetDateTime.now();
+  }
+
+  private static String normalize(String value) {
+    if (value == null) {
+      return null;
+    }
+    String trimmed = value.trim();
+    return trimmed.isEmpty() ? null : trimmed;
+  }
+
   /** Rota el identificador público (p. ej. si se filtró el que estaba en uso). */
   public void regeneratePublicId() {
     publicId = generatePublicId();
@@ -150,6 +186,11 @@ public class AgentDeployment {
   public Integer getRateLimitPerMinute() { return rateLimitPerMinute; }
   public Integer getRateLimitPerDay() { return rateLimitPerDay; }
   public String getAllowedOrigins() { return allowedOrigins; }
+  public String getThemePrimaryColor() { return themePrimaryColor; }
+  public String getThemeFont() { return themeFont; }
+  public String getThemePosition() { return themePosition; }
+  public String getThemeTitle() { return themeTitle; }
+  public String getThemeSubtitle() { return themeSubtitle; }
   public UUID getCreatedBy() { return createdBy; }
   public OffsetDateTime getCreatedAt() { return createdAt; }
   public OffsetDateTime getUpdatedAt() { return updatedAt; }
