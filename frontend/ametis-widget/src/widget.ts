@@ -295,6 +295,10 @@ class AmetisWidget {
       });
       this.toggle(true);
       window.parent.postMessage({ type: "ametis-preview-ready" }, "*");
+    } else {
+      // Cargar la ficha del despliegue al montar, para que la burbuja ya salga
+      // con el color/posición configurados sin esperar a que se abra el chat.
+      this.loadInfo();
     }
   }
 
@@ -335,18 +339,19 @@ class AmetisWidget {
   }
 
   private async loadInfo(): Promise<void> {
-    this.loaded = true;
     try {
       const response = await fetch(`${this.endpoint}/${this.publicId}`, { method: "GET" });
       if (!response.ok) throw new Error(String(response.status));
       const info = (await response.json()) as DeploymentInfo;
+      this.loaded = true;
       this.applyTheme(info.theme);
       const theme = info.theme;
       this.titleEl.textContent = (theme && theme.title) || info.agentName || info.deploymentName || this.strings.headerFallback;
       this.subtitleEl.textContent = (theme && theme.subtitle) || info.deploymentName || this.strings.subtitleFallback;
-      if (info.welcomeMessage) this.appendBubble("bot", info.welcomeMessage);
+      if (info.welcomeMessage && !this.messagesEl.childElementCount) this.appendBubble("bot", info.welcomeMessage);
     } catch {
-      this.appendBubble("error", this.strings.errorGeneric);
+      // Sin conexión al montar: no molestamos con un error hasta que el usuario abra el chat.
+      if (this.open) this.appendBubble("error", this.strings.errorGeneric);
     }
   }
 

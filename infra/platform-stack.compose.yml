@@ -25,6 +25,7 @@ services:
       AGENT_FACTORY_GOOGLE_TOKEN_ENCRYPTION_KEY: ${AGENT_FACTORY_GOOGLE_TOKEN_ENCRYPTION_KEY:-}
       AGENT_FACTORY_GOOGLE_ROOT_FOLDER_ID: ${AGENT_FACTORY_GOOGLE_ROOT_FOLDER_ID:-}
       AGENT_FACTORY_AMETIS_AI_RAG_BASE_URL: ${AGENT_FACTORY_AMETIS_AI_RAG_BASE_URL:-}
+      AGENT_FACTORY_PUBLIC_BASE_URL: ${AGENT_FACTORY_PUBLIC_BASE_URL:-http://localhost:8440/api/agent-factory/public}
       AGENT_FACTORY_CORS_ALLOWED_ORIGIN_PATTERNS: ${AGENT_FACTORY_CORS_ALLOWED_ORIGIN_PATTERNS:-http://localhost:*,http://127.0.0.1:*,https://localhost:*,https://127.0.0.1:*}
     volumes:
       - ${AGENT_FACTORY_GOOGLE_CREDENTIALS_HOST_FILE:-../../ametis-ai/docker/compose/rag/secrets/google-drive-service-account.json}:/run/secrets/google-drive-service-account.json:ro
