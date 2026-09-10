@@ -508,3 +508,14 @@ tbody tr:last-child td { border-bottom: 0; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+/* Agente — preguntas sugeridas y textos del asistente */
+.suggested-questions { display: flex; flex-direction: column; gap: .5rem; }
+.suggested-question-row { display: flex; gap: .5rem; align-items: center; }
+.suggested-question-row input { flex: 1; min-width: 0; }
+.assistant-texts { border: 1px solid var(--border, #e2e8f0); border-radius: .6rem; padding: .5rem .85rem; }
+.assistant-texts summary { cursor: pointer; font-weight: 600; font-size: .9rem; padding: .25rem 0; }
+.assistant-texts .form-field { margin-top: .6rem; }
+.suggested-questions-display { display: flex; gap: 1rem; margin-top: .7rem; flex-wrap: wrap; }
+.suggested-questions-display .form-field.compact { flex: 0 1 auto; margin: 0; }
+.suggested-questions-display .form-field.compact input[type="number"] { width: 5rem; }

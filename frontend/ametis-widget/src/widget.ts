@@ -33,6 +33,9 @@ type DeploymentInfo = {
   agentName: string;
   channelType: string;
   welcomeMessage: string | null;
+  suggestedQuestions: string[] | null;
+  suggestedQuestionsCount: number | null;
+  suggestedQuestionsOrder: string | null;
   theme: DeploymentTheme | null;
 };
 
@@ -135,6 +138,10 @@ const WIDGET_CSS = `
   }
   .msg.user .bubble-text { background: var(--amw-primary, ${DEFAULT_PRIMARY}); color: #fff; border-color: transparent; }
   .msg.error .bubble-text { background: #fff0f2; color: #962f40; border-color: #f1ccd2; }
+  .bubble-text .rt-p { margin: 0; }
+  .bubble-text .rt-p + .rt-p, .bubble-text .rt-p + .rt-list, .bubble-text .rt-list + .rt-p { margin-top: .5rem; }
+  .bubble-text .rt-list { margin: 0; padding-left: 1.15rem; }
+  .bubble-text .rt-list li { margin: .18rem 0; }
 
   .suggestions { display: flex; flex-direction: column; gap: .45rem; margin-top: .55rem; }
   .suggestion {
@@ -226,6 +233,9 @@ class AmetisWidget {
   private open = false;
   private loaded = false;
   private sending = false;
+  private suggestedQuestions: string[] = [];
+  private suggestionCount = 3;
+  private suggestionOrder: "random" | "fixed" = "random";
 
   constructor(config: WidgetConfig) {
     this.publicId = config.publicId;
@@ -348,7 +358,17 @@ class AmetisWidget {
       const theme = info.theme;
       this.titleEl.textContent = (theme && theme.title) || info.agentName || info.deploymentName || this.strings.headerFallback;
       this.subtitleEl.textContent = (theme && theme.subtitle) || info.deploymentName || this.strings.subtitleFallback;
-      if (info.welcomeMessage && !this.messagesEl.childElementCount) this.appendBubble("bot", info.welcomeMessage);
+      this.suggestedQuestions = Array.isArray(info.suggestedQuestions) ? info.suggestedQuestions.filter(Boolean) : [];
+      this.suggestionCount = Math.max(1, Math.floor(info.suggestedQuestionsCount || 3));
+      this.suggestionOrder = info.suggestedQuestionsOrder === "fixed" ? "fixed" : "random";
+      if (!this.messagesEl.childElementCount) {
+        const chips = this.pickSuggestions();
+        if (info.welcomeMessage) {
+          this.appendBubble("bot", info.welcomeMessage, chips);
+        } else if (chips.length) {
+          this.appendSuggestions(chips);
+        }
+      }
     } catch {
       // Sin conexión al montar: no molestamos con un error hasta que el usuario abra el chat.
       if (this.open) this.appendBubble("error", this.strings.errorGeneric);
@@ -362,7 +382,11 @@ class AmetisWidget {
     body.className = "msg-body";
     const bubble = document.createElement("div");
     bubble.className = "bubble-text";
-    bubble.textContent = text;
+    if (role === "bot") {
+      this.renderRichText(bubble, text);
+    } else {
+      bubble.textContent = text;
+    }
     body.appendChild(bubble);
     if (role === "bot" && suggestions && suggestions.length) {
       const wrap = document.createElement("div");
@@ -382,8 +406,128 @@ class AmetisWidget {
     this.scrollToBottom();
   }
 
+  /**
+   * Muestra un subconjunto aleatorio de las preguntas sugeridas (hasta 3), para
+   * que no salgan siempre las mismas ni todas a la vez.
+   */
+  private pickSuggestions(exclude?: string): string[] {
+    const skip = (exclude || "").trim().toLowerCase();
+    const pool = this.suggestedQuestions.filter((question) => question.trim().toLowerCase() !== skip);
+    if (pool.length <= this.suggestionCount) return pool;
+    if (this.suggestionOrder === "fixed") return pool.slice(0, this.suggestionCount);
+    for (let i = pool.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    return pool.slice(0, this.suggestionCount);
+  }
+
+  /** Bloque de chips sin burbuja de texto (bienvenida sin mensaje). */
+  private appendSuggestions(suggestions: string[]): void {
+    const msg = document.createElement("div");
+    msg.className = "msg bot";
+    const body = document.createElement("div");
+    body.className = "msg-body";
+    const wrap = document.createElement("div");
+    wrap.className = "suggestions";
+    for (const suggestion of suggestions) {
+      const btn = document.createElement("button");
+      btn.className = "suggestion";
+      btn.type = "button";
+      btn.textContent = suggestion;
+      btn.addEventListener("click", () => this.send(suggestion));
+      wrap.appendChild(btn);
+    }
+    body.appendChild(wrap);
+    msg.appendChild(body);
+    this.messagesEl.appendChild(msg);
+    this.scrollToBottom();
+  }
+
   private scrollToBottom(): void {
     this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
+  }
+
+  /** Quita el markdown que el widget no renderiza (negritas, `#`, enlaces, código). */
+  private cleanAnswer(text: string): string {
+    return text
+      .replace(/```([\s\S]*?)```/g, (_, code: string) => code.trim())
+      .replace(/`([^`]+)`/g, "$1")
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+      .replace(/^\s{0,3}#{1,6}\s+/gm, "")
+      .replace(/\*\*([^*]+)\*\*/g, "$1")
+      .replace(/__([^_]+)__/g, "$1")
+      .replace(/(^|\s)\*(?!\s)([^*\n]+?)\*(?=\s|$|[.,;:])/g, "$1$2")
+      .replace(/[ \t]+\n/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+  }
+
+  /**
+   * Pinta el texto del bot con párrafos y listas de verdad: las líneas que
+   * empiezan por viñeta (- * • ·) o "1." van en un <ul>; el resto son <p>.
+   */
+  private renderRichText(container: HTMLElement, text: string): void {
+    const lines = text.split(/\r?\n/);
+    let list: HTMLUListElement | null = null;
+    let paragraph: string[] = [];
+
+    const flushParagraph = () => {
+      if (!paragraph.length) return;
+      const p = document.createElement("p");
+      p.className = "rt-p";
+      p.textContent = paragraph.join(" ");
+      container.appendChild(p);
+      paragraph = [];
+    };
+
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      const bullet = line.match(/^([-*•·]|\d+[.)])\s+(.*)$/);
+      if (bullet) {
+        flushParagraph();
+        if (!list) {
+          list = document.createElement("ul");
+          list.className = "rt-list";
+          container.appendChild(list);
+        }
+        const li = document.createElement("li");
+        li.textContent = bullet[2].trim();
+        list.appendChild(li);
+        continue;
+      }
+      list = null;
+      if (!line) {
+        flushParagraph();
+      } else {
+        paragraph.push(line);
+      }
+    }
+    flushParagraph();
+
+    if (!container.childElementCount) {
+      container.textContent = text;
+    }
+  }
+
+  /**
+   * Si la respuesta termina con una línea de opciones separadas por pleca
+   * ("A | B | C"), las devuelve como lista para pintarlas como botones.
+   */
+  private parseOptions(answer: string): { text: string; options: string[] } {
+    const trimmed = answer.replace(/\s+$/, "");
+    const nl = trimmed.lastIndexOf("\n");
+    const lastLine = (nl === -1 ? trimmed : trimmed.slice(nl + 1)).trim();
+    if (lastLine.includes("|")) {
+      const options = lastLine
+        .split("|")
+        .map((part) => part.trim().replace(/^[-•*]\s*/, ""))
+        .filter(Boolean);
+      if (options.length >= 2 && options.every((option) => option.length <= 80)) {
+        return { text: (nl === -1 ? "" : trimmed.slice(0, nl)).trim(), options };
+      }
+    }
+    return { text: answer, options: [] };
   }
 
   private async send(override?: string): Promise<void> {
@@ -409,7 +553,17 @@ class AmetisWidget {
       loading.remove();
       if (!response.ok) throw new Error(String(response.status));
       const data = (await response.json()) as QueryResponse;
-      this.appendBubble("bot", data.answer || this.strings.errorGeneric, data.suggestions);
+      const raw = this.cleanAnswer(data.answer || this.strings.errorGeneric);
+      const parsed = this.parseOptions(raw);
+      if (parsed.options.length) {
+        if (parsed.text) {
+          this.appendBubble("bot", parsed.text, parsed.options);
+        } else {
+          this.appendSuggestions(parsed.options);
+        }
+      } else {
+        this.appendBubble("bot", raw, this.pickSuggestions(question));
+      }
     } catch {
       loading.remove();
       this.appendBubble("error", this.strings.errorGeneric);

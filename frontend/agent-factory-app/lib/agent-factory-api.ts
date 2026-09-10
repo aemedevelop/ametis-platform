@@ -71,6 +71,10 @@ export type KnowledgeBase = {
   updatedAt: string;
 };
 
+export type AssistantTextKey = "fallback" | "greeting" | "thanks" | "farewell" | "help";
+export type AssistantTexts = Partial<Record<AssistantTextKey, string>>;
+export type SuggestedQuestionsOrder = "random" | "fixed";
+
 export type AgentDefinition = {
   id: string;
   businessId: string;
@@ -81,6 +85,10 @@ export type AgentDefinition = {
   tone: string | null;
   responseLanguage: string | null;
   instructions: string | null;
+  suggestedQuestions: string[];
+  assistantTexts: AssistantTexts;
+  suggestedQuestionsCount: number;
+  suggestedQuestionsOrder: SuggestedQuestionsOrder;
   status: "DRAFT" | "READY";
   knowledgeBaseCount: number;
   knowledgeBaseIds: string[];
@@ -427,6 +435,10 @@ export type AgentInput = {
   tone: string;
   responseLanguage: string;
   instructions: string;
+  suggestedQuestions: string[];
+  assistantTexts: AssistantTexts;
+  suggestedQuestionsCount: number;
+  suggestedQuestionsOrder: SuggestedQuestionsOrder;
   knowledgeBaseIds: string[];
 };
 

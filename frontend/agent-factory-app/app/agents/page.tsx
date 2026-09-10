@@ -6,6 +6,9 @@ import {
   AgentDefinition,
   AgentFactoryApiError,
   AgentIndexingJob,
+  AssistantTextKey,
+  AssistantTexts,
+  SuggestedQuestionsOrder,
   AgentTestResponse,
   createAgent,
   createAgentIndexingJobs,
@@ -28,8 +31,23 @@ const AGENT_FIELD_LIMITS = {
   persona: 500,
   targetAudience: 300,
   instructions: 900,
-  testQuestion: 500
+  testQuestion: 500,
+  suggestedQuestion: 200,
+  assistantText: 500
 } as const;
+
+const ASSISTANT_TEXT_KEYS: AssistantTextKey[] = ["fallback", "greeting", "thanks", "farewell", "help"];
+
+function cleanAssistantTexts(texts: AssistantTexts): AssistantTexts {
+  const result: AssistantTexts = {};
+  for (const key of ASSISTANT_TEXT_KEYS) {
+    const value = (texts[key] ?? "").trim();
+    if (value) {
+      result[key] = value;
+    }
+  }
+  return result;
+}
 
 export default function AgentsPage() {
   const t = useT();
@@ -45,6 +63,10 @@ export default function AgentsPage() {
   const [tone, setTone] = useState("professional");
   const [responseLanguage, setResponseLanguage] = useState("auto");
   const [instructions, setInstructions] = useState("");
+  const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([]);
+  const [suggestedQuestionsCount, setSuggestedQuestionsCount] = useState(3);
+  const [suggestedQuestionsOrder, setSuggestedQuestionsOrder] = useState<SuggestedQuestionsOrder>("random");
+  const [assistantTexts, setAssistantTexts] = useState<AssistantTexts>({});
   const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
   const [expandedAgentId, setExpandedAgentId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -151,6 +173,10 @@ export default function AgentsPage() {
         tone,
         responseLanguage,
         instructions: instructions.trim(),
+        suggestedQuestions: suggestedQuestions.map((question) => question.trim()).filter(Boolean),
+        assistantTexts: cleanAssistantTexts(assistantTexts),
+        suggestedQuestionsCount,
+        suggestedQuestionsOrder,
         knowledgeBaseIds: selectedBases
       };
       if (editingAgentId) {
@@ -180,6 +206,10 @@ export default function AgentsPage() {
     setTone(agent.tone ?? "professional");
     setResponseLanguage(agent.responseLanguage ?? "auto");
     setInstructions(agent.instructions ?? "");
+    setSuggestedQuestions(agent.suggestedQuestions ?? []);
+    setSuggestedQuestionsCount(agent.suggestedQuestionsCount ?? 3);
+    setSuggestedQuestionsOrder(agent.suggestedQuestionsOrder ?? "random");
+    setAssistantTexts(agent.assistantTexts ?? {});
     setSelectedBases(agent.knowledgeBaseIds ?? []);
     setError(null);
   }
@@ -193,6 +223,10 @@ export default function AgentsPage() {
     setTone("professional");
     setResponseLanguage("auto");
     setInstructions("");
+    setSuggestedQuestions([]);
+    setSuggestedQuestionsCount(3);
+    setSuggestedQuestionsOrder("random");
+    setAssistantTexts({});
     setSelectedBases([]);
   }
 
@@ -357,6 +391,76 @@ export default function AgentsPage() {
             <textarea value={instructions} onChange={(event) => setInstructions(event.target.value)} placeholder={t("agents.instructionsPlaceholder")} maxLength={AGENT_FIELD_LIMITS.instructions} />
             <FieldLimit value={instructions} max={AGENT_FIELD_LIMITS.instructions} />
           </label>
+
+          <div className="form-field">
+            <span className="field-label">
+              {t("agents.suggestedQuestionsLabel")}
+              <span className="field-help" tabIndex={0} aria-label={t("agents.suggestedQuestionsHelp")} title={t("agents.suggestedQuestionsHelp")}>?</span>
+            </span>
+            <small className="field-hint">{t("agents.suggestedQuestionsHint")}</small>
+            <div className="suggested-questions">
+              {suggestedQuestions.map((question, index) => (
+                <div className="suggested-question-row" key={index}>
+                  <input
+                    value={question}
+                    onChange={(event) => setSuggestedQuestions((current) => current.map((item, itemIndex) => itemIndex === index ? event.target.value : item))}
+                    placeholder={t("agents.suggestedQuestionPlaceholder")}
+                    maxLength={AGENT_FIELD_LIMITS.suggestedQuestion}
+                  />
+                  <button
+                    type="button"
+                    className="icon-button danger"
+                    onClick={() => setSuggestedQuestions((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+                    aria-label={t("agents.suggestedQuestionRemove")}
+                    title={t("agents.suggestedQuestionRemove")}
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+                  </button>
+                </div>
+              ))}
+              <button type="button" className="secondary-button" onClick={() => setSuggestedQuestions((current) => [...current, ""])}>
+                {t("agents.suggestedQuestionAdd")}
+              </button>
+            </div>
+            {suggestedQuestions.filter((question) => question.trim()).length > 1 ? (
+              <div className="suggested-questions-display">
+                <label className="form-field compact">
+                  <span className="field-label">{t("agents.suggestedQuestionsCountLabel")}</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={suggestedQuestions.filter((question) => question.trim()).length}
+                    value={suggestedQuestionsCount}
+                    onChange={(event) => setSuggestedQuestionsCount(Math.max(1, Number(event.target.value) || 1))}
+                  />
+                </label>
+                <label className="form-field compact">
+                  <span className="field-label">{t("agents.suggestedQuestionsOrderLabel")}</span>
+                  <select value={suggestedQuestionsOrder} onChange={(event) => setSuggestedQuestionsOrder(event.target.value as SuggestedQuestionsOrder)}>
+                    <option value="random">{t("agents.suggestedQuestionsOrder.random")}</option>
+                    <option value="fixed">{t("agents.suggestedQuestionsOrder.fixed")}</option>
+                  </select>
+                </label>
+              </div>
+            ) : null}
+          </div>
+
+          <details className="assistant-texts">
+            <summary>{t("agents.assistantTextsLabel")}</summary>
+            <small className="field-hint">{t("agents.assistantTextsHint")}</small>
+            {ASSISTANT_TEXT_KEYS.map((key) => (
+              <label className="form-field" key={key}>
+                <span className="field-label">{t(`agents.assistantText.${key}`)}</span>
+                <textarea
+                  value={assistantTexts[key] ?? ""}
+                  onChange={(event) => setAssistantTexts((current) => ({ ...current, [key]: event.target.value }))}
+                  placeholder={t(`agents.assistantTextPlaceholder.${key}`)}
+                  maxLength={AGENT_FIELD_LIMITS.assistantText}
+                />
+              </label>
+            ))}
+          </details>
+
           <div className="document-picker">
             <div>
               <span>{t("agents.knowledgeBasesLabel")}</span>

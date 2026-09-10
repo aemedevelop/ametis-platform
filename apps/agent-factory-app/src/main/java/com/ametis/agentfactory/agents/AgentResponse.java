@@ -2,6 +2,7 @@ package com.ametis.agentfactory.agents;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 public record AgentResponse(
@@ -14,6 +15,10 @@ public record AgentResponse(
     String tone,
     String responseLanguage,
     String instructions,
+    List<String> suggestedQuestions,
+    Map<String, String> assistantTexts,
+    int suggestedQuestionsCount,
+    String suggestedQuestionsOrder,
     AgentStatus status,
     int knowledgeBaseCount,
     List<UUID> knowledgeBaseIds,
@@ -40,6 +45,10 @@ public record AgentResponse(
         profile == null ? null : profile.getTone(),
         profile == null ? null : profile.getResponseLanguage(),
         agent.getInstructions(),
+        agent.getSuggestedQuestions(),
+        agent.getAssistantTexts(),
+        agent.getSuggestedQuestionsCount(),
+        agent.getSuggestedQuestionsOrder(),
         agent.getStatus(),
         knowledgeBaseNames.size(),
         knowledgeBaseIds,

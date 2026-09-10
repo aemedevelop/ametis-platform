@@ -87,13 +87,19 @@ public class AgentService {
     if (agentRepository.existsByBusinessIdAndNameIgnoreCase(business.getId(), name)) {
       throw new ResponseStatusException(HttpStatus.CONFLICT, "error.agentNameTaken");
     }
-    AgentDefinition agent = agentRepository.save(AgentDefinition.create(
+    AgentDefinition draft = AgentDefinition.create(
         tenantId,
         business.getId(),
         name,
         cleanText(request.description()),
         cleanText(request.instructions()),
-        userId));
+        userId);
+    draft.applyWidgetContent(
+        cleanSuggestedQuestions(request.suggestedQuestions()),
+        cleanAssistantTexts(request.assistantTexts()),
+        request.suggestedQuestionsCount() == null ? 3 : request.suggestedQuestionsCount(),
+        request.suggestedQuestionsOrder());
+    AgentDefinition agent = agentRepository.save(draft);
     AgentContextProfile profile = contextProfileRepository.save(AgentContextProfile.create(
         tenantId,
         agent.getId(),
@@ -125,6 +131,11 @@ public class AgentService {
         name,
         cleanText(request.description()),
         cleanText(request.instructions()));
+    agent.applyWidgetContent(
+        cleanSuggestedQuestions(request.suggestedQuestions()),
+        cleanAssistantTexts(request.assistantTexts()),
+        request.suggestedQuestionsCount() == null ? 3 : request.suggestedQuestionsCount(),
+        request.suggestedQuestionsOrder());
     AgentContextProfile profile = contextProfileRepository.findByAgentIdAndTenantId(agentId, tenantId)
         .orElseGet(() -> AgentContextProfile.create(tenantId, agentId, null, null, null, null));
     profile.update(
@@ -294,5 +305,35 @@ public class AgentService {
   private String normalizeOption(String value, String defaultValue) {
     String cleaned = cleanText(value);
     return cleaned == null ? defaultValue : cleaned.toLowerCase(java.util.Locale.ROOT);
+  }
+
+  private static final java.util.Set<String> ASSISTANT_TEXT_KEYS =
+      java.util.Set.of("fallback", "greeting", "thanks", "farewell", "help");
+
+  private List<String> cleanSuggestedQuestions(List<String> values) {
+    if (values == null) {
+      return List.of();
+    }
+    return values.stream()
+        .map(value -> value == null ? "" : value.trim())
+        .filter(value -> !value.isBlank())
+        .map(value -> value.length() > 200 ? value.substring(0, 200) : value)
+        .distinct()
+        .limit(50)
+        .toList();
+  }
+
+  private Map<String, String> cleanAssistantTexts(Map<String, String> values) {
+    if (values == null || values.isEmpty()) {
+      return Map.of();
+    }
+    java.util.LinkedHashMap<String, String> cleaned = new java.util.LinkedHashMap<>();
+    for (String key : ASSISTANT_TEXT_KEYS) {
+      String text = cleanText(values.get(key));
+      if (text != null) {
+        cleaned.put(key, text.length() > 500 ? text.substring(0, 500) : text);
+      }
+    }
+    return cleaned;
   }
 }

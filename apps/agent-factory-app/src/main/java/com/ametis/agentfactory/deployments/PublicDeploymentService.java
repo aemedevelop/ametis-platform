@@ -44,7 +44,7 @@ public class PublicDeploymentService {
 
   public PublicDeploymentInfoResponse info(String publicId, String origin) {
     ResolvedDeployment resolved = resolve(publicId, origin);
-    return PublicDeploymentInfoResponse.from(resolved.deployment(), resolved.agent().getName());
+    return PublicDeploymentInfoResponse.from(resolved.deployment(), resolved.agent());
   }
 
   public PublicQueryResponse query(String publicId, String origin, String question) {
@@ -60,7 +60,36 @@ public class PublicDeploymentService {
         resolved.agent().getId(),
         links.get(0).getKnowledgeBaseId(),
         question.trim());
-    return PublicQueryResponse.from(response);
+
+    AgentDefinition agent = resolved.agent();
+    String answer = overrideAnswer(agent, response);
+    List<String> suggestions = agent.getSuggestedQuestions().isEmpty()
+        ? List.of()
+        : agent.getSuggestedQuestions();
+    return PublicQueryResponse.from(response, answer, suggestions);
+  }
+
+  /**
+   * Sustituye el texto genérico del RAG por el que el cliente configuró en el
+   * agente, según el tipo de respuesta prefabricada. La respuesta real del RAG
+   * ({@code rag_answer}) nunca se toca.
+   */
+  private String overrideAnswer(AgentDefinition agent, AmetisAiQueryResponse response) {
+    java.util.Map<String, String> texts = agent.getAssistantTexts();
+    if (texts.isEmpty()) {
+      return response.answer();
+    }
+    String key = null;
+    if ("fallback".equals(response.responseType())) {
+      key = "fallback";
+    } else if (response.prebuiltKey() != null) {
+      key = response.prebuiltKey();
+    }
+    if (key == null) {
+      return response.answer();
+    }
+    String custom = texts.get(key);
+    return custom == null || custom.isBlank() ? response.answer() : custom;
   }
 
   private ResolvedDeployment resolve(String publicId, String origin) {
