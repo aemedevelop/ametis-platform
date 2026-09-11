@@ -362,7 +362,7 @@ class AmetisWidget {
       this.suggestionCount = Math.max(1, Math.floor(info.suggestedQuestionsCount || 3));
       this.suggestionOrder = info.suggestedQuestionsOrder === "fixed" ? "fixed" : "random";
       if (!this.messagesEl.childElementCount) {
-        const chips = this.pickSuggestions();
+        const chips = this.pickFrom(this.suggestedQuestions);
         if (info.welcomeMessage) {
           this.appendBubble("bot", info.welcomeMessage, chips);
         } else if (chips.length) {
@@ -406,13 +406,10 @@ class AmetisWidget {
     this.scrollToBottom();
   }
 
-  /**
-   * Muestra un subconjunto aleatorio de las preguntas sugeridas (hasta 3), para
-   * que no salgan siempre las mismas ni todas a la vez.
-   */
-  private pickSuggestions(exclude?: string): string[] {
+  /** Subconjunto de chips a mostrar (según count/order), excluyendo `exclude`. */
+  private pickFrom(source: string[], exclude?: string): string[] {
     const skip = (exclude || "").trim().toLowerCase();
-    const pool = this.suggestedQuestions.filter((question) => question.trim().toLowerCase() !== skip);
+    const pool = (source || []).filter((question) => question && question.trim().toLowerCase() !== skip);
     if (pool.length <= this.suggestionCount) return pool;
     if (this.suggestionOrder === "fixed") return pool.slice(0, this.suggestionCount);
     for (let i = pool.length - 1; i > 0; i -= 1) {
@@ -562,7 +559,10 @@ class AmetisWidget {
           this.appendSuggestions(parsed.options);
         }
       } else {
-        this.appendBubble("bot", raw, this.pickSuggestions(question));
+        const pool = Array.isArray(data.suggestions) && data.suggestions.length
+          ? data.suggestions
+          : this.suggestedQuestions;
+        this.appendBubble("bot", raw, this.pickFrom(pool, question));
       }
     } catch {
       loading.remove();

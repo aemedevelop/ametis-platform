@@ -18,4 +18,5 @@ public record AgentRequest(
     Map<String, @Size(max = 500) String> assistantTexts,
     Integer suggestedQuestionsCount,
     String suggestedQuestionsOrder,
+    @Size(max = 20) List<QuestionTopic> questionTopics,
     List<UUID> knowledgeBaseIds) {}

@@ -13,12 +13,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class AgentService {
+  private static final Logger LOGGER = LoggerFactory.getLogger(AgentService.class);
   private final RepositoryProvisioningService provisioningService;
   private final AgentRepository agentRepository;
   private final AgentContextProfileRepository contextProfileRepository;
@@ -82,7 +85,7 @@ public class AgentService {
   @Transactional
   public AgentResponse create(Business business, UUID userId, AgentRequest request) {
     UUID tenantId = business.getTenantId();
-    requireActiveRepository(tenantId);
+    RepositoryBinding binding = requireActiveRepository(tenantId);
     String name = cleanName(request.name());
     if (agentRepository.existsByBusinessIdAndNameIgnoreCase(business.getId(), name)) {
       throw new ResponseStatusException(HttpStatus.CONFLICT, "error.agentNameTaken");
@@ -98,8 +101,10 @@ public class AgentService {
         cleanSuggestedQuestions(request.suggestedQuestions()),
         cleanAssistantTexts(request.assistantTexts()),
         request.suggestedQuestionsCount() == null ? 3 : request.suggestedQuestionsCount(),
-        request.suggestedQuestionsOrder());
+        request.suggestedQuestionsOrder(),
+        cleanQuestionTopics(request.questionTopics()));
     AgentDefinition agent = agentRepository.save(draft);
+    syncSuggestionIndexQuietly(binding, business, agent);
     AgentContextProfile profile = contextProfileRepository.save(AgentContextProfile.create(
         tenantId,
         agent.getId(),
@@ -121,7 +126,7 @@ public class AgentService {
   @Transactional
   public AgentResponse update(Business business, UUID agentId, AgentRequest request) {
     UUID tenantId = business.getTenantId();
-    requireActiveRepository(tenantId);
+    RepositoryBinding binding = requireActiveRepository(tenantId);
     AgentDefinition agent = requireAgent(business, agentId);
     String name = cleanName(request.name());
     if (agentRepository.existsByBusinessIdAndNameIgnoreCaseAndIdNot(business.getId(), name, agentId)) {
@@ -135,7 +140,8 @@ public class AgentService {
         cleanSuggestedQuestions(request.suggestedQuestions()),
         cleanAssistantTexts(request.assistantTexts()),
         request.suggestedQuestionsCount() == null ? 3 : request.suggestedQuestionsCount(),
-        request.suggestedQuestionsOrder());
+        request.suggestedQuestionsOrder(),
+        cleanQuestionTopics(request.questionTopics()));
     AgentContextProfile profile = contextProfileRepository.findByAgentIdAndTenantId(agentId, tenantId)
         .orElseGet(() -> AgentContextProfile.create(tenantId, agentId, null, null, null, null));
     profile.update(
@@ -150,8 +156,10 @@ public class AgentService {
     agentKnowledgeBaseRepository.saveAll(bases.stream()
         .map(base -> AgentKnowledgeBase.link(tenantId, agent.getId(), base.getId()))
         .toList());
+    AgentDefinition saved = agentRepository.save(agent);
+    syncSuggestionIndexQuietly(binding, business, saved);
     return AgentResponse.from(
-        agentRepository.save(agent),
+        saved,
         profile,
         bases.stream().map(KnowledgeBase::getId).toList(),
         bases.stream().map(KnowledgeBase::getName).toList());
@@ -160,11 +168,12 @@ public class AgentService {
   @Transactional
   public void delete(Business business, UUID agentId) {
     UUID tenantId = business.getTenantId();
-    requireActiveRepository(tenantId);
+    RepositoryBinding binding = requireActiveRepository(tenantId);
     AgentDefinition agent = requireAgent(business, agentId);
     agentKnowledgeBaseRepository.deleteAllByTenantIdAndAgentId(tenantId, agentId);
     contextProfileRepository.deleteByAgentIdAndTenantId(agentId, tenantId);
     agentRepository.delete(agent);
+    deleteSuggestionIndexQuietly(binding, agentId);
   }
 
   @Transactional
@@ -335,5 +344,72 @@ public class AgentService {
       }
     }
     return cleaned;
+  }
+
+  private List<QuestionTopic> cleanQuestionTopics(List<QuestionTopic> topics) {
+    if (topics == null || topics.isEmpty()) {
+      return List.of();
+    }
+    List<QuestionTopic> cleaned = new java.util.ArrayList<>();
+    java.util.Set<String> usedIds = new java.util.HashSet<>();
+    int index = 0;
+    for (QuestionTopic topic : topics) {
+      if (topic == null) {
+        continue;
+      }
+      List<String> questions = cleanSuggestedQuestions(topic.questions());
+      if (questions.isEmpty()) {
+        continue;
+      }
+      String label = cleanText(topic.label());
+      String id = slug(topic.id() != null && !topic.id().isBlank() ? topic.id() : label);
+      if (id.isBlank()) {
+        id = "tema-" + (index + 1);
+      }
+      while (!usedIds.add(id)) {
+        id = id + "-" + (++index);
+      }
+      cleaned.add(new QuestionTopic(id, label == null ? id : label, questions));
+      index++;
+    }
+    return cleaned;
+  }
+
+  private static String slug(String value) {
+    if (value == null) {
+      return "";
+    }
+    String normalized = java.text.Normalizer.normalize(value, java.text.Normalizer.Form.NFD)
+        .replaceAll("\\p{M}+", "")
+        .toLowerCase(java.util.Locale.ROOT)
+        .replaceAll("[^a-z0-9]+", "-")
+        .replaceAll("(^-+|-+$)", "");
+    return normalized.length() > 40 ? normalized.substring(0, 40) : normalized;
+  }
+
+  private void syncSuggestionIndexQuietly(RepositoryBinding binding, Business business, AgentDefinition agent) {
+    try {
+      List<AmetisAiSuggestionItem> items = new java.util.ArrayList<>();
+      for (String question : agent.getSuggestedQuestions()) {
+        items.add(new AmetisAiSuggestionItem("__general__", question));
+      }
+      for (QuestionTopic topic : agent.getQuestionTopics()) {
+        for (String question : topic.questions()) {
+          items.add(new AmetisAiSuggestionItem(topic.id(), question));
+        }
+      }
+      ragClient.syncSuggestionIndex(
+          binding.getRepositoryNamespace(), business.getId().toString(), agent.getId(), items);
+    } catch (RuntimeException exception) {
+      LOGGER.warn("No se pudo sincronizar el indice de preguntas sugeridas | agent={}", agent.getId(), exception);
+    }
+  }
+
+  private void deleteSuggestionIndexQuietly(RepositoryBinding binding, UUID agentId) {
+    try {
+      ragClient.deleteSuggestionIndex(binding.getRepositoryNamespace(), agentId);
+    } catch (RuntimeException exception) {
+      LOGGER.warn("No se pudo borrar el indice de preguntas sugeridas | agent={}", agentId, exception);
+    }
   }
 }

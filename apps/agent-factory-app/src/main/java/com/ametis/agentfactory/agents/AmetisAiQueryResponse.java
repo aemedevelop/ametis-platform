@@ -12,4 +12,6 @@ public record AmetisAiQueryResponse(
     String responseType,
     @JsonProperty("prebuilt_key")
     String prebuiltKey,
+    @JsonProperty("matched_topic_id")
+    String matchedTopicId,
     List<String> suggestions) {}

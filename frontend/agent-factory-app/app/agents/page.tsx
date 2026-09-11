@@ -8,6 +8,7 @@ import {
   AgentIndexingJob,
   AssistantTextKey,
   AssistantTexts,
+  QuestionTopic,
   SuggestedQuestionsOrder,
   AgentTestResponse,
   createAgent,
@@ -49,6 +50,16 @@ function cleanAssistantTexts(texts: AssistantTexts): AssistantTexts {
   return result;
 }
 
+function cleanQuestionTopics(topics: QuestionTopic[]): QuestionTopic[] {
+  return topics
+    .map((topic) => ({
+      id: topic.id ?? "",
+      label: topic.label.trim(),
+      questions: topic.questions.map((question) => question.trim()).filter(Boolean)
+    }))
+    .filter((topic) => topic.questions.length > 0);
+}
+
 export default function AgentsPage() {
   const t = useT();
   const { locale } = useLocale();
@@ -66,6 +77,7 @@ export default function AgentsPage() {
   const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([]);
   const [suggestedQuestionsCount, setSuggestedQuestionsCount] = useState(3);
   const [suggestedQuestionsOrder, setSuggestedQuestionsOrder] = useState<SuggestedQuestionsOrder>("random");
+  const [questionTopics, setQuestionTopics] = useState<QuestionTopic[]>([]);
   const [assistantTexts, setAssistantTexts] = useState<AssistantTexts>({});
   const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
   const [expandedAgentId, setExpandedAgentId] = useState<string | null>(null);
@@ -177,6 +189,7 @@ export default function AgentsPage() {
         assistantTexts: cleanAssistantTexts(assistantTexts),
         suggestedQuestionsCount,
         suggestedQuestionsOrder,
+        questionTopics: cleanQuestionTopics(questionTopics),
         knowledgeBaseIds: selectedBases
       };
       if (editingAgentId) {
@@ -209,6 +222,7 @@ export default function AgentsPage() {
     setSuggestedQuestions(agent.suggestedQuestions ?? []);
     setSuggestedQuestionsCount(agent.suggestedQuestionsCount ?? 3);
     setSuggestedQuestionsOrder(agent.suggestedQuestionsOrder ?? "random");
+    setQuestionTopics(agent.questionTopics ?? []);
     setAssistantTexts(agent.assistantTexts ?? {});
     setSelectedBases(agent.knowledgeBaseIds ?? []);
     setError(null);
@@ -226,6 +240,7 @@ export default function AgentsPage() {
     setSuggestedQuestions([]);
     setSuggestedQuestionsCount(3);
     setSuggestedQuestionsOrder("random");
+    setQuestionTopics([]);
     setAssistantTexts({});
     setSelectedBases([]);
   }
@@ -443,6 +458,78 @@ export default function AgentsPage() {
                 </label>
               </div>
             ) : null}
+          </div>
+
+          <div className="form-field">
+            <span className="field-label">
+              {t("agents.questionTopicsLabel")}
+              <span className="field-help" tabIndex={0} aria-label={t("agents.questionTopicsHelp")} title={t("agents.questionTopicsHelp")}>?</span>
+            </span>
+            <small className="field-hint">{t("agents.questionTopicsHint")}</small>
+            <div className="question-topics">
+              {questionTopics.map((topic, topicIndex) => (
+                <div className="question-topic" key={topicIndex}>
+                  <div className="question-topic-head">
+                    <input
+                      value={topic.label}
+                      onChange={(event) => setQuestionTopics((current) => current.map((item, index) => index === topicIndex ? { ...item, label: event.target.value } : item))}
+                      placeholder={t("agents.questionTopicLabelPlaceholder")}
+                      maxLength={60}
+                    />
+                    <button
+                      type="button"
+                      className="icon-button danger"
+                      onClick={() => setQuestionTopics((current) => current.filter((_, index) => index !== topicIndex))}
+                      aria-label={t("agents.questionTopicRemove")}
+                      title={t("agents.questionTopicRemove")}
+                    >
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+                    </button>
+                  </div>
+                  <div className="suggested-questions">
+                    {topic.questions.map((question, questionIndex) => (
+                      <div className="suggested-question-row" key={questionIndex}>
+                        <input
+                          value={question}
+                          onChange={(event) => setQuestionTopics((current) => current.map((item, index) => index === topicIndex
+                            ? { ...item, questions: item.questions.map((q, qi) => qi === questionIndex ? event.target.value : q) }
+                            : item))}
+                          placeholder={t("agents.suggestedQuestionPlaceholder")}
+                          maxLength={AGENT_FIELD_LIMITS.suggestedQuestion}
+                        />
+                        <button
+                          type="button"
+                          className="icon-button danger"
+                          onClick={() => setQuestionTopics((current) => current.map((item, index) => index === topicIndex
+                            ? { ...item, questions: item.questions.filter((_, qi) => qi !== questionIndex) }
+                            : item))}
+                          aria-label={t("agents.suggestedQuestionRemove")}
+                          title={t("agents.suggestedQuestionRemove")}
+                        >
+                          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={() => setQuestionTopics((current) => current.map((item, index) => index === topicIndex
+                        ? { ...item, questions: [...item.questions, ""] }
+                        : item))}
+                    >
+                      {t("agents.suggestedQuestionAdd")}
+                    </button>
+                  </div>
+                </div>
+              ))}
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setQuestionTopics((current) => [...current, { id: "", label: "", questions: [""] }])}
+              >
+                {t("agents.questionTopicAdd")}
+              </button>
+            </div>
           </div>
 
           <details className="assistant-texts">

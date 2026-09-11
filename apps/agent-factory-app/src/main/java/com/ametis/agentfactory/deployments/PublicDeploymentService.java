@@ -63,10 +63,24 @@ public class PublicDeploymentService {
 
     AgentDefinition agent = resolved.agent();
     String answer = overrideAnswer(agent, response);
-    List<String> suggestions = agent.getSuggestedQuestions().isEmpty()
-        ? List.of()
-        : agent.getSuggestedQuestions();
+    List<String> suggestions = followUpPool(agent, response.matchedTopicId());
     return PublicQueryResponse.from(response, answer, suggestions);
+  }
+
+  /**
+   * Preguntas para los chips de follow-up: las del tema que casó el RAG, o el
+   * fondo "General" si no casó ninguno. El widget elige el subconjunto final.
+   */
+  private List<String> followUpPool(AgentDefinition agent, String matchedTopicId) {
+    if (matchedTopicId != null && !matchedTopicId.isBlank()) {
+      return agent.getQuestionTopics().stream()
+          .filter(topic -> matchedTopicId.equals(topic.id()))
+          .findFirst()
+          .map(topic -> topic.questions())
+          .filter(questions -> !questions.isEmpty())
+          .orElseGet(agent::getSuggestedQuestions);
+    }
+    return agent.getSuggestedQuestions();
   }
 
   /**

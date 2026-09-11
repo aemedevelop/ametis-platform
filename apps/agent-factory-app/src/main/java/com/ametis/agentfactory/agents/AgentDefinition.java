@@ -50,6 +50,10 @@ public class AgentDefinition {
   @Column(name = "suggested_questions_order", nullable = false, length = 10)
   private String suggestedQuestionsOrder = "random";
 
+  @JdbcTypeCode(SqlTypes.JSON)
+  @Column(name = "question_topics", nullable = false)
+  private List<QuestionTopic> questionTopics = new ArrayList<>();
+
   @Enumerated(EnumType.STRING)
   @Column(nullable = false, length = 32)
   private AgentStatus status;
@@ -104,9 +108,11 @@ public class AgentDefinition {
       List<String> suggestedQuestions,
       Map<String, String> assistantTexts,
       int suggestedQuestionsCount,
-      String suggestedQuestionsOrder) {
+      String suggestedQuestionsOrder,
+      List<QuestionTopic> questionTopics) {
     this.suggestedQuestions = suggestedQuestions == null ? new ArrayList<>() : new ArrayList<>(suggestedQuestions);
     this.assistantTexts = assistantTexts == null ? new LinkedHashMap<>() : new LinkedHashMap<>(assistantTexts);
+    this.questionTopics = questionTopics == null ? new ArrayList<>() : new ArrayList<>(questionTopics);
     int maxCount = Math.max(1, this.suggestedQuestions.size());
     this.suggestedQuestionsCount = Math.min(Math.max(suggestedQuestionsCount, 1), maxCount);
     this.suggestedQuestionsOrder = "fixed".equals(suggestedQuestionsOrder) ? "fixed" : "random";
@@ -133,6 +139,9 @@ public class AgentDefinition {
   }
   public int getSuggestedQuestionsCount() { return suggestedQuestionsCount; }
   public String getSuggestedQuestionsOrder() { return suggestedQuestionsOrder; }
+  public List<QuestionTopic> getQuestionTopics() {
+    return questionTopics == null ? List.of() : List.copyOf(questionTopics);
+  }
   public AgentStatus getStatus() { return status; }
   public UUID getCreatedBy() { return createdBy; }
   public OffsetDateTime getCreatedAt() { return createdAt; }
