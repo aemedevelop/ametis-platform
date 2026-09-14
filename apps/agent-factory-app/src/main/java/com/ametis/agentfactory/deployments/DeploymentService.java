@@ -82,6 +82,7 @@ public class DeploymentService {
       throw new ResponseStatusException(HttpStatus.CONFLICT, "error.deploymentSlugTaken");
     }
     deployment.update(
+        agent.getId(),
         name,
         request.channelType(),
         slug,

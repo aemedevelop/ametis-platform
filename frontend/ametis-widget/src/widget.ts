@@ -94,14 +94,34 @@ const WIDGET_CSS = `
   .root.left { right: auto; left: 1.25rem; align-items: flex-start; }
 
   .bubble {
-    display: inline-flex; align-items: center; justify-content: center; overflow: hidden;
+    position: relative;
+    display: inline-flex; align-items: center; justify-content: center; overflow: visible;
     width: 3.5rem; height: 3.5rem; border: 0; border-radius: 9999px;
     background: var(--amw-grad, ${DEFAULT_GRAD}); color: #fff; box-shadow: 0 18px 35px rgba(30,58,138,.25);
     cursor: pointer; transition: transform 160ms ease, box-shadow 160ms ease;
   }
-  .bubble:hover { transform: translateY(-2px) scale(1.02); box-shadow: 0 22px 40px rgba(30,58,138,.3); }
+  .bubble:hover { transform: translateY(-2px) scale(1.05); box-shadow: 0 22px 40px rgba(30,58,138,.3); }
+  .bubble:active { transform: scale(.95); }
   .bubble svg { width: 24px; height: 24px; }
-  .bubble img { width: 100%; height: 100%; object-fit: cover; }
+  .bubble img { width: 100%; height: 100%; border-radius: 9999px; object-fit: cover; }
+
+  /* Llamada a la atención: rebote de pelota (con "aplastado" al tocar el suelo) mientras el chat está cerrado. */
+  .bubble.attention { animation: amw-launcher-bounce 1.8s infinite; transform-origin: bottom center; }
+  @keyframes amw-launcher-bounce {
+    0%, 100% { transform: translateY(0) scale(1.18, .82); animation-timing-function: cubic-bezier(0,0,.2,1); }
+    12% { transform: translateY(0) scale(1, 1); animation-timing-function: cubic-bezier(.8,0,1,1); }
+    35% { transform: translateY(-15%) scale(.94, 1.06); animation-timing-function: cubic-bezier(0,0,.2,1); }
+    50% { transform: translateY(-20%) scale(1, 1); animation-timing-function: cubic-bezier(.8,0,1,1); }
+    65% { transform: translateY(-15%) scale(.94, 1.06); animation-timing-function: cubic-bezier(0,0,.2,1); }
+    88% { transform: translateY(0) scale(1, 1); animation-timing-function: cubic-bezier(.8,0,1,1); }
+  }
+  .bubble-ping, .bubble-dot {
+    position: absolute; top: -2px; right: -2px; width: .65rem; height: .65rem; border-radius: 9999px;
+    background: var(--amw-primary, ${DEFAULT_PRIMARY});
+  }
+  .bubble-dot { border: 2px solid #fff; }
+  .bubble-ping { opacity: .75; animation: amw-ping 1.8s cubic-bezier(0,0,.2,1) infinite; }
+  @keyframes amw-ping { 75%, 100% { transform: scale(2.2); opacity: 0; } }
 
   .window {
     width: min(92vw, 24rem); max-height: min(80vh, 40rem);
@@ -277,7 +297,11 @@ class AmetisWidget {
           <button class="send" type="submit" data-send aria-label="${this.strings.sendLabel}">${ICONS.send}</button>
         </form>
       </div>
-      <button class="bubble" type="button" data-launcher aria-label="${this.strings.launcherLabel}">${ICONS.message}</button>
+      <button class="bubble attention" type="button" data-launcher aria-label="${this.strings.launcherLabel}">
+        ${ICONS.message}
+        <span class="bubble-ping" data-launcher-badge aria-hidden="true"></span>
+        <span class="bubble-dot" data-launcher-badge aria-hidden="true"></span>
+      </button>
     `;
     this.shadow.appendChild(root);
 
@@ -324,6 +348,12 @@ class AmetisWidget {
   private toggle(force?: boolean): void {
     this.open = force ?? !this.open;
     this.windowEl.classList.toggle("open", this.open);
+    // El rebote y el punto de aviso solo tienen sentido con el chat cerrado;
+    // reaparecen cada vez que se vuelve a cerrar.
+    this.launcherEl.classList.toggle("attention", !this.open);
+    this.launcherEl.querySelectorAll("[data-launcher-badge]").forEach((el) => {
+      (el as HTMLElement).hidden = this.open;
+    });
     if (this.open && !this.preview) {
       this.inputEl.focus();
       if (!this.loaded) this.loadInfo();

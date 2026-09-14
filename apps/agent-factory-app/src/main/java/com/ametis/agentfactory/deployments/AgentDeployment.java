@@ -122,6 +122,7 @@ public class AgentDeployment {
   }
 
   public void update(
+      UUID agentId,
       String name,
       DeploymentChannelType channelType,
       String deploymentSlug,
@@ -131,6 +132,7 @@ public class AgentDeployment {
       Integer rateLimitPerMinute,
       Integer rateLimitPerDay,
       String allowedOrigins) {
+    this.agentId = agentId;
     this.name = name;
     this.channelType = channelType;
     this.deploymentSlug = deploymentSlug;
