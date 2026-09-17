@@ -32,7 +32,7 @@ export type DriveConnection = {
 };
 
 export type StoredDocument = {
-  driveFileId: string;
+  storageObjectKey: string;
   name: string;
   mimeType: string;
   sizeBytes: number;
@@ -143,6 +143,7 @@ export type DeploymentTheme = {
   position: DeploymentPosition | null;
   title: string | null;
   subtitle: string | null;
+  avatarUrl: string | null;
 };
 
 export type AgentDeployment = {
@@ -402,8 +403,8 @@ export function uploadKnowledgeBaseDocument(knowledgeBaseId: string, file: File)
   });
 }
 
-export async function deleteKnowledgeBaseDocument(knowledgeBaseId: string, driveFileId: string): Promise<void> {
-  await authenticatedFetch(`/api/agent-factory/knowledge-bases/${knowledgeBaseId}/documents/${driveFileId}`, {
+export async function deleteKnowledgeBaseDocument(knowledgeBaseId: string, storageObjectKey: string): Promise<void> {
+  await authenticatedFetch(`/api/agent-factory/knowledge-bases/${knowledgeBaseId}/documents/${storageObjectKey}`, {
     method: "DELETE"
   });
 }
@@ -413,7 +414,7 @@ export async function downloadKnowledgeBaseDocument(
   document: StoredDocument
 ): Promise<void> {
   const response = await authenticatedFetch(
-    `/api/agent-factory/knowledge-bases/${knowledgeBaseId}/documents/${document.driveFileId}/download`
+    `/api/agent-factory/knowledge-bases/${knowledgeBaseId}/documents/${document.storageObjectKey}/download`
   );
   if (!response.ok) throw new AgentFactoryApiError(response.status, "error.downloadFailed");
   const blob = await response.blob();
@@ -524,6 +525,21 @@ export function updateDeployment(id: string, input: {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input)
+  });
+}
+
+export function uploadDeploymentAvatar(id: string, file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  return apiFetch<AgentDeployment>(`/api/agent-factory/deployments/${id}/appearance/avatar`, {
+    method: "POST",
+    body: form
+  });
+}
+
+export function deleteDeploymentAvatar(id: string) {
+  return apiFetch<AgentDeployment>(`/api/agent-factory/deployments/${id}/appearance/avatar`, {
+    method: "DELETE"
   });
 }
 

@@ -17,8 +17,8 @@ public record PublicDeploymentInfoResponse(
     String suggestedQuestionsOrder,
     DeploymentTheme theme) {
 
-  static PublicDeploymentInfoResponse from(AgentDeployment deployment, AgentDefinition agent) {
-    DeploymentTheme theme = DeploymentTheme.from(deployment);
+  static PublicDeploymentInfoResponse from(AgentDeployment deployment, AgentDefinition agent, String avatarUrl) {
+    DeploymentTheme theme = DeploymentTheme.from(deployment, avatarUrl);
     return new PublicDeploymentInfoResponse(
         deployment.getName(),
         agent.getName(),

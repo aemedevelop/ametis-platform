@@ -37,9 +37,13 @@ public class Business {
   private BusinessStatus status;
 
   @Column(length = 160)
-  private String workspaceSubfolderId;
+  private String storageLocator;
 
-  @Column(length = 160)
+  // Vestigial: nunca se ha llegado a usar (cada base de conocimiento tiene su
+  // propio documentsLocator; este campo a nivel de negocio quedó sin uso).
+  // El nombre se deja sin renombrar a propósito porque la columna real de BD
+  // sigue siendo `documents_folder_id` (no formaba parte del rename V21).
+  @Column(name = "documents_folder_id", length = 160)
   private String documentsFolderId;
 
   @Enumerated(EnumType.STRING)
@@ -81,8 +85,8 @@ public class Business {
     updatedAt = OffsetDateTime.now();
   }
 
-  public void markRepositoryActive(String workspaceSubfolderId) {
-    this.workspaceSubfolderId = workspaceSubfolderId;
+  public void markRepositoryActive(String storageLocator) {
+    this.storageLocator = storageLocator;
     this.repositoryStatus = BusinessRepositoryStatus.ACTIVE;
     this.repositoryError = null;
     updatedAt = OffsetDateTime.now();
@@ -101,7 +105,7 @@ public class Business {
   public String getSlug() { return slug; }
   public String getDescription() { return description; }
   public BusinessStatus getStatus() { return status; }
-  public String getWorkspaceSubfolderId() { return workspaceSubfolderId; }
+  public String getStorageLocator() { return storageLocator; }
   public String getDocumentsFolderId() { return documentsFolderId; }
   public BusinessRepositoryStatus getRepositoryStatus() { return repositoryStatus; }
   public String getRepositoryError() { return repositoryError; }

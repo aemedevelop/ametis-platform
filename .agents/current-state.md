@@ -1,6 +1,33 @@
 # Current State
 
-Last updated: 2026-08-30
+Last updated: 2026-09-14
+
+## 2026-09-14 — Storage abstraction (Drive/MinIO) + widget avatar
+
+- Implemented the paused MinIO proposal in full: `StorageProvider` interface,
+  `GoogleDriveStorageProvider` (default) and `MinioStorageProvider`
+  (`@ConditionalOnProperty`-gated, bucket per tenant), all document/provisioning
+  services rewired onto the interface. `V21` renamed storage columns to neutral
+  names. Every environment still defaults to `provider=drive` — nothing changes
+  in production until `AGENT_FACTORY_STORAGE_PROVIDER=minio` is set deliberately.
+  Full detail: `.agents/architecture.md` ("Document/Asset Storage"),
+  `.agents/decisions.md`.
+- Fixed a real (not-yet-deployed) bug found along the way: `agent_id` was
+  validated but never applied on `PATCH /deployments/{id}` — editing a
+  deployment's agent in the UI silently did nothing. Fixed in
+  `AgentDeployment.update()` / `DeploymentService.update()`.
+- Widget logo/avatar (the actual feature requested): `V22
+  agent_deployments.theme_avatar_key`. Upload via
+  `POST/DELETE /deployments/{id}/appearance/avatar` (multipart), stored through
+  `StorageProvider` (Drive or MinIO transparently), only the object key is
+  persisted — never a data URI. Served publicly at
+  `GET /public/{publicId}/avatar` (no JWT, like `widget.js`). Widget shows it in
+  the launcher bubble and header, live in the appearance-page preview too.
+- Local infra: `minio` service added to `infra/docker-compose.yml`
+  (ports 9000/9001), env vars in `.env.example`/`.env.local`/`.env.vps.example`
+  (commented-in but `provider` stays `drive` by default).
+- Not yet re-tested end-to-end with `provider=minio` locally — do that before
+  flipping any real environment.
 
 ## Active Branch
 

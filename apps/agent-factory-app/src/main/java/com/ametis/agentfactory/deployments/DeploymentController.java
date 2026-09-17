@@ -14,7 +14,9 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping({"/v1", "/api/agent-factory"})
@@ -58,6 +60,23 @@ public class DeploymentController {
       JwtAuthenticationToken authentication) {
     UUID tenantId = accessGuard.requireAccess(authentication, AccessGuard.DOCUMENTS_MANAGE);
     return deploymentService.updateAppearance(tenantId, deploymentId, theme);
+  }
+
+  @PostMapping("/deployments/{deploymentId}/appearance/avatar")
+  public DeploymentResponse uploadAvatar(
+      @PathVariable UUID deploymentId,
+      @RequestParam("file") MultipartFile file,
+      JwtAuthenticationToken authentication) {
+    UUID tenantId = accessGuard.requireAccess(authentication, AccessGuard.DOCUMENTS_MANAGE);
+    return deploymentService.uploadAvatar(tenantId, deploymentId, file);
+  }
+
+  @DeleteMapping("/deployments/{deploymentId}/appearance/avatar")
+  public DeploymentResponse deleteAvatar(
+      @PathVariable UUID deploymentId,
+      JwtAuthenticationToken authentication) {
+    UUID tenantId = accessGuard.requireAccess(authentication, AccessGuard.DOCUMENTS_MANAGE);
+    return deploymentService.deleteAvatar(tenantId, deploymentId);
   }
 
   @PostMapping("/deployments/{deploymentId}/public-id")

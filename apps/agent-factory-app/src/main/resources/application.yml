@@ -61,6 +61,14 @@ agent-factory:
     application-name: ${AGENT_FACTORY_GOOGLE_APPLICATION_NAME:AMETIS Agent Factory}
   documents:
     max-file-size-bytes: ${AGENT_FACTORY_MAX_FILE_SIZE_BYTES:26214400}
+  storage:
+    provider: ${AGENT_FACTORY_STORAGE_PROVIDER:drive}
+  minio:
+    endpoint: ${AGENT_FACTORY_MINIO_ENDPOINT:}
+    access-key: ${AGENT_FACTORY_MINIO_ACCESS_KEY:}
+    secret-key: ${AGENT_FACTORY_MINIO_SECRET_KEY:}
+    bucket-prefix: ${AGENT_FACTORY_MINIO_BUCKET_PREFIX:af-}
+    secure: ${AGENT_FACTORY_MINIO_SECURE:false}
   ametis-ai:
     rag-base-url: ${AGENT_FACTORY_AMETIS_AI_RAG_BASE_URL:}
   public:

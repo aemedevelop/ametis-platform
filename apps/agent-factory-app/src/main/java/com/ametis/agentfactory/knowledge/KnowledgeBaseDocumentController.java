@@ -73,15 +73,15 @@ public class KnowledgeBaseDocumentController {
     return ResponseEntity.status(HttpStatus.CREATED).body(response);
   }
 
-  @GetMapping("/knowledge-bases/{knowledgeBaseId}/documents/{driveFileId}/download")
+  @GetMapping("/knowledge-bases/{knowledgeBaseId}/documents/{storageObjectKey}/download")
   public ResponseEntity<byte[]> download(
       @PathVariable UUID knowledgeBaseId,
-      @PathVariable String driveFileId,
+      @PathVariable String storageObjectKey,
       JwtAuthenticationToken authentication) {
     Context context = context(authentication, AccessGuard.DOCUMENTS_READ, knowledgeBaseId);
     ByteArrayOutputStream output = new ByteArrayOutputStream();
     DocumentService.DownloadDescriptor descriptor = documentService.download(
-        context.business(), context.base(), driveFileId, output);
+        context.business(), context.base(), storageObjectKey, output);
     ContentDisposition disposition = ContentDisposition.attachment()
         .filename(descriptor.name(), StandardCharsets.UTF_8)
         .build();
@@ -91,13 +91,13 @@ public class KnowledgeBaseDocumentController {
         .body(output.toByteArray());
   }
 
-  @DeleteMapping("/knowledge-bases/{knowledgeBaseId}/documents/{driveFileId}")
+  @DeleteMapping("/knowledge-bases/{knowledgeBaseId}/documents/{storageObjectKey}")
   public ResponseEntity<Void> delete(
       @PathVariable UUID knowledgeBaseId,
-      @PathVariable String driveFileId,
+      @PathVariable String storageObjectKey,
       JwtAuthenticationToken authentication) {
     Context context = context(authentication, AccessGuard.DOCUMENTS_MANAGE, knowledgeBaseId);
-    documentService.delete(context.business(), context.base(), driveFileId);
+    documentService.delete(context.business(), context.base(), storageObjectKey);
     return ResponseEntity.noContent().build();
   }
 }

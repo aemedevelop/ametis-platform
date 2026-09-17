@@ -19,6 +19,7 @@ type DeploymentTheme = {
   position: string | null;
   title: string | null;
   subtitle: string | null;
+  avatarUrl: string | null;
 };
 
 const FONT_STACKS: Record<string, string> = {
@@ -104,6 +105,7 @@ const WIDGET_CSS = `
   .bubble:active { transform: scale(.95); }
   .bubble svg { width: 24px; height: 24px; }
   .bubble img { width: 100%; height: 100%; border-radius: 9999px; object-fit: cover; }
+  .bubble [data-bubble-icon] { display: inline-flex; align-items: center; justify-content: center; width: 100%; height: 100%; }
 
   /* Llamada a la atención: rebote de pelota (con "aplastado" al tocar el suelo) mientras el chat está cerrado. */
   .bubble.attention { animation: amw-launcher-bounce 1.8s infinite; transform-origin: bottom center; }
@@ -250,6 +252,7 @@ class AmetisWidget {
   private titleEl!: HTMLElement;
   private subtitleEl!: HTMLElement;
   private launcherEl!: HTMLButtonElement;
+  private brandIconEl!: HTMLElement;
   private open = false;
   private loaded = false;
   private sending = false;
@@ -298,7 +301,7 @@ class AmetisWidget {
         </form>
       </div>
       <button class="bubble attention" type="button" data-launcher aria-label="${this.strings.launcherLabel}">
-        ${ICONS.message}
+        <span data-bubble-icon>${ICONS.message}</span>
         <span class="bubble-ping" data-launcher-badge aria-hidden="true"></span>
         <span class="bubble-dot" data-launcher-badge aria-hidden="true"></span>
       </button>
@@ -313,6 +316,7 @@ class AmetisWidget {
     this.titleEl = root.querySelector("[data-title]") as HTMLElement;
     this.subtitleEl = root.querySelector("[data-subtitle]") as HTMLElement;
     this.launcherEl = root.querySelector("[data-launcher]") as HTMLButtonElement;
+    this.brandIconEl = root.querySelector("[data-brand-icon]") as HTMLElement;
 
     this.launcherEl.addEventListener("click", () => this.toggle(true));
     (root.querySelector("[data-minimize]") as HTMLButtonElement).addEventListener("click", () => this.toggle(false));
@@ -323,6 +327,9 @@ class AmetisWidget {
     });
 
     if (this.preview) {
+      // Maqueta visual: edición en caliente del tema (color/fuente/logo) sin
+      // guardar, vía postMessage desde la pantalla de apariencia. No consulta
+      // ningún despliegue real.
       window.addEventListener("message", (event) => {
         const data = event.data as { type?: string; payload?: PreviewPayload };
         if (data && data.type === "ametis-preview" && data.payload) this.renderPreview(data.payload);
@@ -376,6 +383,15 @@ class AmetisWidget {
     else root.removeProperty("--amw-font");
 
     this.rootEl.classList.toggle("left", (theme && theme.position) === "bottom-left");
+    this.applyAvatar(theme && theme.avatarUrl ? theme.avatarUrl : null);
+  }
+
+  /**
+   * Sustituye el icono de la cabecera por el logo del negocio, si hay. La
+   * burbuja flotante conserva siempre el icono de chat por defecto.
+   */
+  private applyAvatar(avatarUrl: string | null): void {
+    this.brandIconEl.innerHTML = avatarUrl ? `<img src="${avatarUrl}" alt="" />` : ICONS.message;
   }
 
   private async loadInfo(): Promise<void> {

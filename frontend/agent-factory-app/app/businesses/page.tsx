@@ -160,13 +160,14 @@ export default function BusinessesPage() {
             <p>{t("business.createDescription")}</p>
           </div>
           <label className="form-field">
-            <span className="field-label">{t("business.nameLabel")}</span>
-            <input value={name} onChange={(event) => setName(event.target.value)} placeholder={t("business.namePlaceholder")} maxLength={120} />
+            <span className="field-label">{t("business.nameLabel")} <span className="req" aria-hidden="true">*</span></span>
+            <input value={name} onChange={(event) => setName(event.target.value)} placeholder={t("business.namePlaceholder")} maxLength={120} required aria-required="true" />
           </label>
           <label className="form-field">
             <span className="field-label">{t("business.descriptionLabel")}</span>
             <textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder={t("business.descriptionPlaceholder")} maxLength={500} />
           </label>
+          <p className="form-required-note">{t("common.requiredFields")}</p>
           <div className="form-actions">
             {editingId ? <button className="secondary-button" type="button" onClick={resetForm} disabled={saving}>{t("common.cancel")}</button> : null}
             <button className="primary-button" type="submit" disabled={saving || !name.trim()}>

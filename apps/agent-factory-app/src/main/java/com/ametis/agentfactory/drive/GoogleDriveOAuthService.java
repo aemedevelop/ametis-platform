@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,6 +39,7 @@ public class GoogleDriveOAuthService {
   private final DriveOAuthStateRepository stateRepository;
   private final DriveTokenCipher tokenCipher;
   private final GoogleDriveClientFactory driveClientFactory;
+  private final String storageProvider;
 
   public GoogleDriveOAuthService(
       DriveProperties properties,
@@ -46,7 +48,8 @@ public class GoogleDriveOAuthService {
       DriveConnectionRepository connectionRepository,
       DriveOAuthStateRepository stateRepository,
       DriveTokenCipher tokenCipher,
-      GoogleDriveClientFactory driveClientFactory) {
+      GoogleDriveClientFactory driveClientFactory,
+      @Value("${agent-factory.storage.provider:drive}") String storageProvider) {
     this.properties = properties;
     this.transport = transport;
     this.jsonFactory = jsonFactory;
@@ -54,6 +57,7 @@ public class GoogleDriveOAuthService {
     this.stateRepository = stateRepository;
     this.tokenCipher = tokenCipher;
     this.driveClientFactory = driveClientFactory;
+    this.storageProvider = storageProvider;
   }
 
   public DriveConnectionResponse status(UUID tenantId) {
@@ -66,10 +70,14 @@ public class GoogleDriveOAuthService {
   }
 
   /**
-   * En modos de credenciales compartidas de AEME (oauth-user / service-account) no
-   * hay conexión por tenant: el almacenamiento lo gestiona la plataforma.
+   * En modos de credenciales compartidas de AEME (oauth-user / service-account),
+   * o cuando el almacenamiento activo es MinIO, no hay conexión por tenant: el
+   * almacenamiento lo gestiona la plataforma.
    */
   private boolean managedMode() {
+    if ("minio".equalsIgnoreCase(storageProvider)) {
+      return true;
+    }
     String mode = properties.authMode() == null ? "" : properties.authMode().trim().toLowerCase(java.util.Locale.ROOT);
     return switch (mode) {
       case "oauth-user" -> present(properties.oauthClientId())

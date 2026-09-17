@@ -2,18 +2,13 @@ package com.ametis.agentfactory.documents;
 
 import com.ametis.agentfactory.businesses.Business;
 import com.ametis.agentfactory.businesses.BusinessRepositoryStatus;
-import com.ametis.agentfactory.drive.GoogleDriveRepository;
 import com.ametis.agentfactory.knowledge.KnowledgeBase;
 import com.ametis.agentfactory.knowledge.KnowledgeBaseRepositoryProvisioningService;
-import com.google.api.client.googleapis.json.GoogleJsonResponseException;
-import com.google.api.services.drive.model.File;
-import java.io.IOException;
+import com.ametis.agentfactory.storage.StorageProvider;
 import java.io.OutputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.time.Instant;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
@@ -33,8 +28,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 /**
  * Gestión de documentos, siempre dentro de una base de conocimiento concreta.
- * Cada base tiene su carpeta de Drive; los documentos de bases distintas nunca
- * comparten carpeta.
+ * Cada base tiene su propio contenedor de almacenamiento; los documentos de
+ * bases distintas nunca comparten contenedor.
  */
 @Service
 public class DocumentService {
@@ -45,19 +40,19 @@ public class DocumentService {
   private final RepositoryProvisioningService provisioningService;
   private final KnowledgeBaseRepositoryProvisioningService knowledgeBaseProvisioning;
   private final DocumentAssetRepository assetRepository;
-  private final GoogleDriveRepository googleDriveRepository;
+  private final StorageProvider storageProvider;
   private final long maxFileSizeBytes;
 
   public DocumentService(
       RepositoryProvisioningService provisioningService,
       KnowledgeBaseRepositoryProvisioningService knowledgeBaseProvisioning,
       DocumentAssetRepository assetRepository,
-      GoogleDriveRepository googleDriveRepository,
+      StorageProvider storageProvider,
       @Value("${agent-factory.documents.max-file-size-bytes}") long maxFileSizeBytes) {
     this.provisioningService = provisioningService;
     this.knowledgeBaseProvisioning = knowledgeBaseProvisioning;
     this.assetRepository = assetRepository;
-    this.googleDriveRepository = googleDriveRepository;
+    this.storageProvider = storageProvider;
     this.maxFileSizeBytes = maxFileSizeBytes;
   }
 
@@ -83,9 +78,9 @@ public class DocumentService {
       }
       assetRepository.save(asset);
       try {
-        File stored = googleDriveRepository.upload(
+        StorageProvider.StoredObject stored = storageProvider.putObject(
             tenantId,
-            ready.getDocumentsFolderId(),
+            ready.getDocumentsLocator(),
             originalName,
             mimeType,
             content,
@@ -95,9 +90,9 @@ public class DocumentService {
                 "knowledgeBaseId", ready.getId().toString(),
                 "documentAssetId", asset.getId().toString(),
                 "sha256", sha256));
-        asset.stored(stored.getId());
+        asset.stored(stored.key());
         assetRepository.save(asset);
-        return fromDriveFile(stored, asset);
+        return fromStoredObject(stored, asset);
       } catch (Exception exception) {
         asset.failed();
         assetRepository.save(asset);
@@ -106,87 +101,86 @@ public class DocumentService {
     } catch (ResponseStatusException exception) {
       throw exception;
     } catch (Exception exception) {
-      LOGGER.error("Google Drive upload failed for knowledge base {} and document {}", base.getId(), originalName, exception);
-      if (hasGoogleReason(exception, "storageQuotaExceeded")) {
-        throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "error.driveStorageQuota", exception);
-      }
-      throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Google Drive upload failed", exception);
+      LOGGER.error("Storage upload failed for knowledge base {} and document {}", base.getId(), originalName, exception);
+      throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "error.storageUploadFailed", exception);
     }
   }
 
   public List<DocumentResponse> list(Business business, KnowledgeBase base) {
     KnowledgeBase ready = requireKbRepository(business, base);
     List<DocumentAsset> assets = assetRepository.findAllByKnowledgeBaseIdOrderByCreatedAtDesc(ready.getId());
-    Map<String, DocumentAsset> assetsByDriveId = assets.stream()
-        .filter(asset -> asset.getDriveFileId() != null)
-        .collect(Collectors.toMap(DocumentAsset::getDriveFileId, Function.identity(), (first, ignored) -> first));
+    Map<String, DocumentAsset> assetsByObjectKey = assets.stream()
+        .filter(asset -> asset.getStorageObjectKey() != null)
+        .collect(Collectors.toMap(DocumentAsset::getStorageObjectKey, Function.identity(), (first, ignored) -> first));
     try {
-      List<File> driveFiles = googleDriveRepository.listDocuments(business.getTenantId(), ready.getDocumentsFolderId());
-      Set<String> driveFileIds = driveFiles.stream().map(File::getId).collect(Collectors.toSet());
+      List<StorageProvider.StoredObject> storedObjects = storageProvider.listObjects(business.getTenantId(), ready.getDocumentsLocator());
+      Set<String> storageObjectKeys = storedObjects.stream().map(StorageProvider.StoredObject::key).collect(Collectors.toSet());
       List<DocumentAsset> externallyDeleted = assets.stream()
           .filter(asset -> asset.getStatus() == DocumentStatus.STORED)
-          .filter(asset -> asset.getDriveFileId() != null && !driveFileIds.contains(asset.getDriveFileId()))
+          .filter(asset -> asset.getStorageObjectKey() != null && !storageObjectKeys.contains(asset.getStorageObjectKey()))
           .peek(DocumentAsset::deleted)
           .toList();
       if (!externallyDeleted.isEmpty()) {
         assetRepository.saveAll(externallyDeleted);
       }
-      return driveFiles.stream()
-          .map(fileEntry -> fromDriveFile(fileEntry, assetsByDriveId.get(fileEntry.getId())))
+      return storedObjects.stream()
+          .map(object -> fromStoredObject(object, assetsByObjectKey.get(object.key())))
           .sorted((left, right) -> right.modifiedAt().compareTo(left.modifiedAt()))
           .toList();
-    } catch (IOException exception) {
+    } catch (Exception exception) {
       LOGGER.error(
-          "Google Drive listing failed for knowledge base {} and folder {}",
+          "Storage listing failed for knowledge base {} and container {}",
           ready.getId(),
-          ready.getDocumentsFolderId(),
+          ready.getDocumentsLocator(),
           exception);
-      throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Google Drive listing failed", exception);
+      throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "error.storageListingFailed", exception);
     }
   }
 
-  public DownloadDescriptor download(Business business, KnowledgeBase base, String driveFileId, OutputStream outputStream) {
+  public DownloadDescriptor download(Business business, KnowledgeBase base, String storageObjectKey, OutputStream outputStream) {
     KnowledgeBase ready = requireKbRepository(business, base);
     try {
-      File file = googleDriveRepository.getFile(business.getTenantId(), driveFileId);
-      if (file.getParents() == null || !file.getParents().contains(ready.getDocumentsFolderId())) {
-        throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Document not found");
-      }
-      googleDriveRepository.download(business.getTenantId(), driveFileId, outputStream);
-      return new DownloadDescriptor(file.getName(), file.getMimeType());
+      StorageProvider.StoredObject object = storageProvider.getObject(business.getTenantId(), storageObjectKey);
+      requireOwnedByContainer(object, ready.getDocumentsLocator());
+      storageProvider.downloadObject(business.getTenantId(), storageObjectKey, outputStream);
+      return new DownloadDescriptor(object.name(), object.mimeType());
     } catch (ResponseStatusException exception) {
       throw exception;
-    } catch (IOException exception) {
-      throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Google Drive download failed", exception);
+    } catch (Exception exception) {
+      throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "error.storageDownloadFailed", exception);
     }
   }
 
   @Transactional
-  public void delete(Business business, KnowledgeBase base, String driveFileId) {
+  public void delete(Business business, KnowledgeBase base, String storageObjectKey) {
     KnowledgeBase ready = requireKbRepository(business, base);
     try {
-      File file = googleDriveRepository.getFile(business.getTenantId(), driveFileId);
-      if (file.getParents() == null || !file.getParents().contains(ready.getDocumentsFolderId())) {
-        throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Document not found");
-      }
-      googleDriveRepository.trash(business.getTenantId(), driveFileId);
-      assetRepository.findByKnowledgeBaseIdAndDriveFileId(ready.getId(), driveFileId).ifPresent(asset -> {
+      StorageProvider.StoredObject object = storageProvider.getObject(business.getTenantId(), storageObjectKey);
+      requireOwnedByContainer(object, ready.getDocumentsLocator());
+      storageProvider.deleteObject(business.getTenantId(), storageObjectKey);
+      assetRepository.findByKnowledgeBaseIdAndStorageObjectKey(ready.getId(), storageObjectKey).ifPresent(asset -> {
         asset.deleted();
         assetRepository.save(asset);
       });
     } catch (ResponseStatusException exception) {
       throw exception;
-    } catch (IOException exception) {
-      throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Google Drive delete failed", exception);
+    } catch (Exception exception) {
+      throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "error.storageDeleteFailed", exception);
+    }
+  }
+
+  private void requireOwnedByContainer(StorageProvider.StoredObject object, String documentsLocator) {
+    if (object.containerKeys() == null || !object.containerKeys().contains(documentsLocator)) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Document not found");
     }
   }
 
   private KnowledgeBase requireKbRepository(Business business, KnowledgeBase base) {
     KnowledgeBase ready = base.getRepositoryStatus() == BusinessRepositoryStatus.ACTIVE
-        && base.getDocumentsFolderId() != null
+        && base.getDocumentsLocator() != null
         ? base
         : knowledgeBaseProvisioning.ensureProvisioned(business, base);
-    if (ready.getRepositoryStatus() != BusinessRepositoryStatus.ACTIVE || ready.getDocumentsFolderId() == null) {
+    if (ready.getRepositoryStatus() != BusinessRepositoryStatus.ACTIVE || ready.getDocumentsLocator() == null) {
       throw new ResponseStatusException(HttpStatus.CONFLICT, "error.repositoryNotActive");
     }
     return ready;
@@ -225,37 +219,22 @@ public class DocumentService {
     }
   }
 
-  private boolean hasGoogleReason(Throwable throwable, String expectedReason) {
-    Throwable current = throwable;
-    while (current != null) {
-      if (current instanceof GoogleJsonResponseException googleException
-          && googleException.getDetails() != null
-          && googleException.getDetails().getErrors() != null
-          && googleException.getDetails().getErrors().stream()
-              .anyMatch(error -> expectedReason.equals(error.getReason()))) {
-        return true;
-      }
-      current = current.getCause();
-    }
-    return false;
-  }
-
-  private DocumentResponse fromDriveFile(File file, DocumentAsset asset) {
-    long size = file.getSize() == null ? (asset == null ? 0 : asset.getSizeBytes()) : file.getSize();
-    OffsetDateTime createdAt = asset == null
-        ? OffsetDateTime.ofInstant(Instant.ofEpochMilli(file.getCreatedTime().getValue()), ZoneOffset.UTC)
-        : asset.getCreatedAt();
+  private DocumentResponse fromStoredObject(StorageProvider.StoredObject object, DocumentAsset asset) {
+    long size = object.sizeBytes() == null ? (asset == null ? 0 : asset.getSizeBytes()) : object.sizeBytes();
+    OffsetDateTime createdAt = asset != null
+        ? asset.getCreatedAt()
+        : object.createdAt() != null ? object.createdAt() : OffsetDateTime.now();
     return new DocumentResponse(
-        file.getId(),
-        file.getName(),
-        file.getMimeType(),
+        object.key(),
+        object.name(),
+        object.mimeType(),
         size,
         asset == null ? DocumentStatus.STORED : asset.getStatus(),
         asset == null ? null : asset.getSha256(),
         asset == null ? null : asset.getCreatedBy(),
         createdAt,
-        file.getModifiedTime() == null ? createdAt.toString() : file.getModifiedTime().toString(),
-        file.getWebViewLink());
+        object.modifiedAt() == null ? createdAt.toString() : object.modifiedAt().toString(),
+        object.viewUrl());
   }
 
   public record DownloadDescriptor(String name, String mimeType) {}

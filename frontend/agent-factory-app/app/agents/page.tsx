@@ -344,10 +344,10 @@ export default function AgentsPage() {
           </div>
           <label className="form-field">
             <span className="field-label">
-              {t("agents.nameLabel")}
+              {t("agents.nameLabel")} <span className="req" aria-hidden="true">*</span>
               <span className="field-help" tabIndex={0} aria-label={t("agents.namePlaceholder")} title={t("agents.namePlaceholder")}>?</span>
             </span>
-            <input value={name} onChange={(event) => setName(event.target.value)} placeholder={t("agents.namePlaceholder")} maxLength={AGENT_FIELD_LIMITS.name} />
+            <input value={name} onChange={(event) => setName(event.target.value)} placeholder={t("agents.namePlaceholder")} maxLength={AGENT_FIELD_LIMITS.name} required aria-required="true" />
             <FieldLimit value={name} max={AGENT_FIELD_LIMITS.name} />
           </label>
           <label className="form-field">
@@ -360,18 +360,18 @@ export default function AgentsPage() {
           </label>
           <label className="form-field">
             <span className="field-label">
-              {t("agents.personaLabel")}
+              {t("agents.personaLabel")} <span className="req" aria-hidden="true">*</span>
               <span className="field-help" tabIndex={0} aria-label={t("agents.personaHelp")} title={t("agents.personaHelp")}>?</span>
             </span>
-            <textarea value={persona} onChange={(event) => setPersona(event.target.value)} placeholder={t("agents.personaPlaceholder")} maxLength={AGENT_FIELD_LIMITS.persona} />
+            <textarea value={persona} onChange={(event) => setPersona(event.target.value)} placeholder={t("agents.personaPlaceholder")} maxLength={AGENT_FIELD_LIMITS.persona} required aria-required="true" />
             <FieldLimit value={persona} max={AGENT_FIELD_LIMITS.persona} />
           </label>
           <label className="form-field">
             <span className="field-label">
-              {t("agents.targetAudienceLabel")}
+              {t("agents.targetAudienceLabel")} <span className="req" aria-hidden="true">*</span>
               <span className="field-help" tabIndex={0} aria-label={t("agents.targetAudienceHelp")} title={t("agents.targetAudienceHelp")}>?</span>
             </span>
-            <input value={targetAudience} onChange={(event) => setTargetAudience(event.target.value)} placeholder={t("agents.targetAudiencePlaceholder")} maxLength={AGENT_FIELD_LIMITS.targetAudience} />
+            <input value={targetAudience} onChange={(event) => setTargetAudience(event.target.value)} placeholder={t("agents.targetAudiencePlaceholder")} maxLength={AGENT_FIELD_LIMITS.targetAudience} required aria-required="true" />
             <FieldLimit value={targetAudience} max={AGENT_FIELD_LIMITS.targetAudience} />
           </label>
           <div className="form-split">
@@ -564,6 +564,7 @@ export default function AgentsPage() {
               </label>
             )) : <p className="muted-copy">{t("agents.noKnowledgeBases")}</p>}
           </div>
+          <p className="form-required-note">{t("common.requiredFields")}</p>
           <div className="form-actions">
             {editingAgentId ? (
               <button className="secondary-button" type="button" onClick={resetForm} disabled={saving}>{t("common.cancel")}</button>

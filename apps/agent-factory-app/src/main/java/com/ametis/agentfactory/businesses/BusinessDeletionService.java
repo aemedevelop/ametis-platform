@@ -5,7 +5,7 @@ import com.ametis.agentfactory.agents.AmetisAiRagClient;
 import com.ametis.agentfactory.documents.DocumentAssetRepository;
 import com.ametis.agentfactory.documents.RepositoryBinding;
 import com.ametis.agentfactory.documents.RepositoryProvisioningService;
-import com.ametis.agentfactory.drive.GoogleDriveRepository;
+import com.ametis.agentfactory.storage.StorageProvider;
 import com.ametis.agentfactory.knowledge.KnowledgeBaseRepository;
 import jakarta.transaction.Transactional;
 import java.util.Locale;
@@ -33,7 +33,7 @@ public class BusinessDeletionService {
   private final KnowledgeBaseRepository knowledgeBaseRepository;
   private final DocumentAssetRepository documentAssetRepository;
   private final RepositoryProvisioningService tenantRepository;
-  private final GoogleDriveRepository googleDriveRepository;
+  private final StorageProvider storageProvider;
   private final AmetisAiRagClient ragClient;
 
   public BusinessDeletionService(
@@ -43,7 +43,7 @@ public class BusinessDeletionService {
       KnowledgeBaseRepository knowledgeBaseRepository,
       DocumentAssetRepository documentAssetRepository,
       RepositoryProvisioningService tenantRepository,
-      GoogleDriveRepository googleDriveRepository,
+      StorageProvider storageProvider,
       AmetisAiRagClient ragClient) {
     this.businessRepository = businessRepository;
     this.deletionLogRepository = deletionLogRepository;
@@ -51,7 +51,7 @@ public class BusinessDeletionService {
     this.knowledgeBaseRepository = knowledgeBaseRepository;
     this.documentAssetRepository = documentAssetRepository;
     this.tenantRepository = tenantRepository;
-    this.googleDriveRepository = googleDriveRepository;
+    this.storageProvider = storageProvider;
     this.ragClient = ragClient;
   }
 
@@ -81,8 +81,9 @@ public class BusinessDeletionService {
     deletionLogRepository.save(
         BusinessDeletionLog.of(business, agents, knowledgeBases, documents, userId));
 
-    // Best-effort fuera de la BD: Drive a la papelera (recuperable 30 días) y RAG.
-    trashDriveFolder(business);
+    // Best-effort fuera de la BD: almacenamiento (papelera en Drive, borrado
+    // definitivo en MinIO) y RAG.
+    deleteStorageContainer(business);
     deleteRagData(business);
 
     LOGGER.info(
@@ -90,14 +91,14 @@ public class BusinessDeletionService {
         tenantId, businessId, business.getName(), agents, knowledgeBases, documents);
   }
 
-  private void trashDriveFolder(Business business) {
-    if (business.getWorkspaceSubfolderId() == null) {
+  private void deleteStorageContainer(Business business) {
+    if (business.getStorageLocator() == null) {
       return;
     }
     try {
-      googleDriveRepository.trash(business.getTenantId(), business.getWorkspaceSubfolderId());
+      storageProvider.deleteContainer(business.getTenantId(), business.getStorageLocator());
     } catch (Exception exception) {
-      LOGGER.warn("No se pudo enviar a la papelera la carpeta del negocio {}", business.getId(), exception);
+      LOGGER.warn("No se pudo borrar el almacenamiento del negocio {}", business.getId(), exception);
     }
   }
 

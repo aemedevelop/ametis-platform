@@ -219,10 +219,10 @@ export default function DeploymentsPage() {
           </div>
           <label className="form-field">
             <span className="field-label">
-              {t("deployments.agentLabel")}
+              {t("deployments.agentLabel")} <span className="req" aria-hidden="true">*</span>
               <span className="field-help" tabIndex={0} aria-label={t("deployments.agentHelp")} title={t("deployments.agentHelp")}>?</span>
             </span>
-            <select value={form.agentId} onChange={(event) => setField("agentId", event.target.value)}>
+            <select value={form.agentId} onChange={(event) => setField("agentId", event.target.value)} required aria-required="true">
               <option value="">{t("deployments.agentPlaceholder")}</option>
               {readyAgents.map((agent) => (
                 <option key={agent.id} value={agent.id}>{agent.name}</option>
@@ -232,10 +232,10 @@ export default function DeploymentsPage() {
           {!readyAgents.length ? <p className="muted-copy">{t("deployments.noReadyAgents")}</p> : null}
           <label className="form-field">
             <span className="field-label">
-              {t("deployments.nameLabel")}
+              {t("deployments.nameLabel")} <span className="req" aria-hidden="true">*</span>
               <span className="field-help" tabIndex={0} aria-label={t("deployments.nameHelp")} title={t("deployments.nameHelp")}>?</span>
             </span>
-            <input value={form.name} onChange={(event) => setField("name", event.target.value)} placeholder={t("deployments.namePlaceholder")} />
+            <input value={form.name} onChange={(event) => setField("name", event.target.value)} placeholder={t("deployments.namePlaceholder")} required aria-required="true" />
           </label>
           <label className="form-field">
             <span className="field-label">
@@ -249,10 +249,10 @@ export default function DeploymentsPage() {
           </label>
           <label className="form-field">
             <span className="field-label">
-              {t("deployments.slugLabel")}
+              {t("deployments.slugLabel")} <span className="req" aria-hidden="true">*</span>
               <span className="field-help" tabIndex={0} aria-label={t("deployments.slugHelp")} title={t("deployments.slugHelp")}>?</span>
             </span>
-            <input value={form.deploymentSlug} onChange={(event) => setField("deploymentSlug", slugify(event.target.value))} placeholder={t("deployments.slugPlaceholder")} />
+            <input value={form.deploymentSlug} onChange={(event) => setField("deploymentSlug", slugify(event.target.value))} placeholder={t("deployments.slugPlaceholder")} required aria-required="true" />
             <small className="field-limit">{t("deployments.slugHint")}</small>
           </label>
           {form.channelType !== "WEB_CHAT" ? (
@@ -307,6 +307,7 @@ export default function DeploymentsPage() {
               </select>
             </label>
           ) : null}
+          <p className="form-required-note">{t("common.requiredFields")}</p>
           <div className="form-actions">
             {editingId ? <button className="secondary-button" type="button" onClick={resetForm} disabled={saving}>{t("common.cancel")}</button> : null}
             <button className="primary-button" type="submit" disabled={saving || !form.agentId || !form.name.trim() || !form.deploymentSlug.trim()}>

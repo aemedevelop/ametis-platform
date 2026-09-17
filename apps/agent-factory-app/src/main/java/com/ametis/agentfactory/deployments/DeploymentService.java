@@ -3,31 +3,46 @@ package com.ametis.agentfactory.deployments;
 import com.ametis.agentfactory.agents.AgentDefinition;
 import com.ametis.agentfactory.agents.AgentRepository;
 import com.ametis.agentfactory.agents.AgentStatus;
+import com.ametis.agentfactory.documents.RepositoryBinding;
+import com.ametis.agentfactory.documents.RepositoryBindingRepository;
+import com.ametis.agentfactory.storage.StorageProvider;
 import java.text.Normalizer;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class DeploymentService {
+  private static final long MAX_AVATAR_BYTES = 2 * 1024 * 1024;
+  private static final Set<String> SUPPORTED_AVATAR_TYPES =
+      Set.of("image/png", "image/jpeg", "image/webp", "image/svg+xml");
+
   private final AgentDeploymentRepository deploymentRepository;
   private final AgentRepository agentRepository;
   private final DeploymentEndpoints deploymentEndpoints;
+  private final StorageProvider storageProvider;
+  private final RepositoryBindingRepository repositoryBindingRepository;
 
   public DeploymentService(
       AgentDeploymentRepository deploymentRepository,
       AgentRepository agentRepository,
-      DeploymentEndpoints deploymentEndpoints) {
+      DeploymentEndpoints deploymentEndpoints,
+      StorageProvider storageProvider,
+      RepositoryBindingRepository repositoryBindingRepository) {
     this.deploymentRepository = deploymentRepository;
     this.agentRepository = agentRepository;
     this.deploymentEndpoints = deploymentEndpoints;
+    this.storageProvider = storageProvider;
+    this.repositoryBindingRepository = repositoryBindingRepository;
   }
 
   private DeploymentResponse toResponse(AgentDeployment deployment, AgentDefinition agent) {
@@ -102,6 +117,73 @@ public class DeploymentService {
     deployment.applyAppearance(theme);
     AgentDefinition agent = agentRepository.findByIdAndTenantId(deployment.getAgentId(), tenantId).orElse(null);
     return toResponse(deploymentRepository.save(deployment), agent);
+  }
+
+  @Transactional
+  public DeploymentResponse uploadAvatar(UUID tenantId, UUID deploymentId, MultipartFile file) {
+    AgentDeployment deployment = deploymentRepository.findByIdAndTenantId(deploymentId, tenantId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "error.deploymentNotFound"));
+    validateAvatar(file);
+    RepositoryBinding binding = repositoryBindingRepository.findByTenantId(tenantId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "error.repositoryNotActive"));
+    String previousKey = deployment.getThemeAvatarKey();
+    try {
+      String container = storageProvider.provisionContainer(
+          tenantId, binding.getWorkspaceLocator(), "branding", Map.of("purpose", "branding"));
+      String mimeType = file.getContentType() == null ? "application/octet-stream" : file.getContentType();
+      StorageProvider.StoredObject stored = storageProvider.putObject(
+          tenantId,
+          container,
+          "avatar-" + deploymentId,
+          mimeType,
+          file.getBytes(),
+          Map.of("deploymentId", deploymentId.toString(), "purpose", "avatar"));
+      deployment.applyAvatar(stored.key());
+      AgentDefinition agent = agentRepository.findByIdAndTenantId(deployment.getAgentId(), tenantId).orElse(null);
+      DeploymentResponse response = toResponse(deploymentRepository.save(deployment), agent);
+      if (previousKey != null && !previousKey.equals(stored.key())) {
+        deleteAvatarObjectQuietly(tenantId, previousKey);
+      }
+      return response;
+    } catch (ResponseStatusException exception) {
+      throw exception;
+    } catch (Exception exception) {
+      throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "error.storageUploadFailed", exception);
+    }
+  }
+
+  @Transactional
+  public DeploymentResponse deleteAvatar(UUID tenantId, UUID deploymentId) {
+    AgentDeployment deployment = deploymentRepository.findByIdAndTenantId(deploymentId, tenantId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "error.deploymentNotFound"));
+    String key = deployment.getThemeAvatarKey();
+    if (key != null) {
+      deleteAvatarObjectQuietly(tenantId, key);
+      deployment.applyAvatar(null);
+    }
+    AgentDefinition agent = agentRepository.findByIdAndTenantId(deployment.getAgentId(), tenantId).orElse(null);
+    return toResponse(deploymentRepository.save(deployment), agent);
+  }
+
+  private void deleteAvatarObjectQuietly(UUID tenantId, String key) {
+    try {
+      storageProvider.deleteObject(tenantId, key);
+    } catch (Exception ignored) {
+      // El objeto viejo puede haber desaparecido ya; no bloquea la operación.
+    }
+  }
+
+  private void validateAvatar(MultipartFile file) {
+    if (file == null || file.isEmpty()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "error.deploymentAvatarRequired");
+    }
+    if (file.getSize() > MAX_AVATAR_BYTES) {
+      throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "error.deploymentAvatarTooLarge");
+    }
+    String type = file.getContentType() == null ? "" : file.getContentType().toLowerCase(Locale.ROOT);
+    if (!SUPPORTED_AVATAR_TYPES.contains(type)) {
+      throw new ResponseStatusException(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "error.deploymentAvatarUnsupportedType");
+    }
   }
 
   @Transactional

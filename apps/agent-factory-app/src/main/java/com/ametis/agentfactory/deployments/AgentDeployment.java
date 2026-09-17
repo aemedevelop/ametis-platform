@@ -79,6 +79,9 @@ public class AgentDeployment {
   @Column(length = 160)
   private String themeSubtitle;
 
+  @Column(length = 300)
+  private String themeAvatarKey;
+
   private UUID createdBy;
 
   @Column(nullable = false)
@@ -193,6 +196,12 @@ public class AgentDeployment {
   public String getThemePosition() { return themePosition; }
   public String getThemeTitle() { return themeTitle; }
   public String getThemeSubtitle() { return themeSubtitle; }
+  public String getThemeAvatarKey() { return themeAvatarKey; }
+
+  public void applyAvatar(String avatarKey) {
+    this.themeAvatarKey = avatarKey;
+    updatedAt = OffsetDateTime.now();
+  }
   public UUID getCreatedBy() { return createdBy; }
   public OffsetDateTime getCreatedAt() { return createdAt; }
   public OffsetDateTime getUpdatedAt() { return updatedAt; }

@@ -35,6 +35,7 @@ export default function KnowledgeBasesPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [busyFileId, setBusyFileId] = useState<string | null>(null);
   const [baseToDelete, setBaseToDelete] = useState<KnowledgeBase | null>(null);
+  const [documentToDelete, setDocumentToDelete] = useState<{ baseId: string; document: StoredDocument } | null>(null);
   const [error, setError] = useState<unknown>(null);
 
   const load = useCallback(async () => {
@@ -150,18 +151,21 @@ export default function KnowledgeBasesPage() {
     }
   }
 
-  async function removeDocument(baseId: string, document: StoredDocument) {
-    setBusyFileId(document.driveFileId);
+  async function removeDocument() {
+    if (!documentToDelete) return;
+    const { baseId, document } = documentToDelete;
+    setBusyFileId(document.storageObjectKey);
     setError(null);
     try {
-      await deleteKnowledgeBaseDocument(baseId, document.driveFileId);
+      await deleteKnowledgeBaseDocument(baseId, document.storageObjectKey);
       setDocumentsByBase((current) => ({
         ...current,
-        [baseId]: (current[baseId] ?? []).filter((item) => item.driveFileId !== document.driveFileId)
+        [baseId]: (current[baseId] ?? []).filter((item) => item.storageObjectKey !== document.storageObjectKey)
       }));
       setKnowledgeBases((current) =>
         current.map((item) => (item.id === baseId ? { ...item, documentCount: Math.max(0, item.documentCount - 1) } : item))
       );
+      setDocumentToDelete(null);
     } catch (requestError) {
       setError(requestError);
     } finally {
@@ -170,7 +174,7 @@ export default function KnowledgeBasesPage() {
   }
 
   async function download(baseId: string, document: StoredDocument) {
-    setBusyFileId(document.driveFileId);
+    setBusyFileId(document.storageObjectKey);
     try {
       await downloadKnowledgeBaseDocument(baseId, document);
     } catch (requestError) {
@@ -204,8 +208,8 @@ export default function KnowledgeBasesPage() {
             <p>{t("knowledge.createDescription")}</p>
           </div>
           <label className="form-field">
-            <span>{t("knowledge.nameLabel")}</span>
-            <input value={name} onChange={(event) => setName(event.target.value)} placeholder={t("knowledge.namePlaceholder")} maxLength={120} />
+            <span className="field-label">{t("knowledge.nameLabel")} <span className="req" aria-hidden="true">*</span></span>
+            <input value={name} onChange={(event) => setName(event.target.value)} placeholder={t("knowledge.namePlaceholder")} maxLength={120} required aria-required="true" />
           </label>
           <label className="form-field">
             <span className="field-label">
@@ -214,6 +218,7 @@ export default function KnowledgeBasesPage() {
             </span>
             <textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder={t("knowledge.descriptionPlaceholder")} maxLength={1000} />
           </label>
+          <p className="form-required-note">{t("common.requiredFields")}</p>
           <div className="form-actions">
             {editingId ? <button className="secondary-button" type="button" onClick={resetForm} disabled={saving}>{t("common.cancel")}</button> : null}
             <button className="primary-button" type="submit" disabled={saving || !name.trim()}>
@@ -287,14 +292,14 @@ export default function KnowledgeBasesPage() {
                         {docs.length ? (
                           <ul className="base-docs-list">
                             {docs.map((document) => (
-                              <li key={document.driveFileId}>
+                              <li key={document.storageObjectKey}>
                                 <span>
                                   <strong>{document.name}</strong>
                                   <small>{formatBytes(document.sizeBytes, locale, t)} · {t(`knowledge.docStatus.${document.status.toLowerCase()}`)}</small>
                                 </span>
                                 <span className="item-actions">
-                                  <button className="link-button" type="button" onClick={() => download(base.id, document)} disabled={busyFileId === document.driveFileId}>{t("knowledge.download")}</button>
-                                  <button className="link-button" type="button" onClick={() => removeDocument(base.id, document)} disabled={busyFileId === document.driveFileId}>{t("knowledge.removeDocument")}</button>
+                                  <button className="link-button" type="button" onClick={() => download(base.id, document)} disabled={busyFileId === document.storageObjectKey}>{t("knowledge.download")}</button>
+                                  <button className="link-button" type="button" onClick={() => setDocumentToDelete({ baseId: base.id, document })} disabled={busyFileId === document.storageObjectKey}>{t("knowledge.removeDocument")}</button>
                                 </span>
                               </li>
                             ))}
@@ -322,6 +327,19 @@ export default function KnowledgeBasesPage() {
             <div className="confirmation-actions">
               <button className="secondary-button" type="button" onClick={() => setBaseToDelete(null)} disabled={deletingId === baseToDelete.id}>{t("common.cancel")}</button>
               <button className="danger-button" type="button" onClick={remove} disabled={deletingId === baseToDelete.id}>{deletingId === baseToDelete.id ? t("knowledge.deleting") : t("knowledge.deleteAction")}</button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+      {documentToDelete ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busyFileId) setDocumentToDelete(null); }}>
+          <section className="confirmation-dialog" role="alertdialog" aria-modal="true" aria-labelledby="delete-document-title" aria-describedby="delete-document-description">
+            <span className="confirmation-icon" aria-hidden="true">!</span>
+            <h2 id="delete-document-title">{t("knowledge.deleteDocumentDialog.title")}</h2>
+            <p id="delete-document-description">{t("knowledge.deleteDocumentDialog.description", { name: documentToDelete.document.name })}</p>
+            <div className="confirmation-actions">
+              <button className="secondary-button" type="button" onClick={() => setDocumentToDelete(null)} disabled={!!busyFileId}>{t("common.cancel")}</button>
+              <button className="danger-button" type="button" onClick={removeDocument} disabled={!!busyFileId}>{busyFileId ? t("knowledge.deleting") : t("knowledge.deleteAction")}</button>
             </div>
           </section>
         </div>

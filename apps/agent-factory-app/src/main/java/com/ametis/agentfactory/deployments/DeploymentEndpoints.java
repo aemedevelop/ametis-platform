@@ -27,7 +27,10 @@ public class DeploymentEndpoints {
         ? "<script src=\"" + widgetUrl + "\" data-deployment=\"" + deployment.getPublicId()
             + "\" data-endpoint=\"" + baseUrl + "\" async></script>"
         : null;
-    return new DeploymentEndpointInfo(deployment.getPublicId(), endpointUrl, queryUrl, embedSnippet);
+    String avatarUrl = deployment.getThemeAvatarKey() == null || deployment.getThemeAvatarKey().isBlank()
+        ? null
+        : endpointUrl + "/avatar";
+    return new DeploymentEndpointInfo(deployment.getPublicId(), endpointUrl, queryUrl, embedSnippet, avatarUrl);
   }
 
   private static String trimTrailingSlash(String value) {
@@ -39,5 +42,5 @@ public class DeploymentEndpoints {
   }
 
   public record DeploymentEndpointInfo(
-      String publicId, String endpointUrl, String queryUrl, String embedSnippet) {}
+      String publicId, String endpointUrl, String queryUrl, String embedSnippet, String avatarUrl) {}
 }

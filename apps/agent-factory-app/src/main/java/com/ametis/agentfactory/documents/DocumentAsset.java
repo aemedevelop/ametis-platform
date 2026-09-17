@@ -28,7 +28,7 @@ public class DocumentAsset {
   private UUID repositoryBindingId;
 
   @Column(unique = true, length = 160)
-  private String driveFileId;
+  private String storageObjectKey;
 
   @Column(nullable = false)
   private String originalName;
@@ -85,8 +85,8 @@ public class DocumentAsset {
     updatedAt = OffsetDateTime.now();
   }
 
-  public void stored(String driveFileId) {
-    this.driveFileId = driveFileId;
+  public void stored(String storageObjectKey) {
+    this.storageObjectKey = storageObjectKey;
     status = DocumentStatus.STORED;
     updatedAt = OffsetDateTime.now();
   }
@@ -106,7 +106,7 @@ public class DocumentAsset {
   public UUID getBusinessId() { return businessId; }
   public UUID getKnowledgeBaseId() { return knowledgeBaseId; }
   public UUID getRepositoryBindingId() { return repositoryBindingId; }
-  public String getDriveFileId() { return driveFileId; }
+  public String getStorageObjectKey() { return storageObjectKey; }
   public String getOriginalName() { return originalName; }
   public String getMimeType() { return mimeType; }
   public long getSizeBytes() { return sizeBytes; }

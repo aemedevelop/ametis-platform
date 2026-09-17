@@ -9,7 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 
 public interface DocumentAssetRepository extends JpaRepository<DocumentAsset, UUID> {
   Optional<DocumentAsset> findByKnowledgeBaseIdAndSha256(UUID knowledgeBaseId, String sha256);
-  Optional<DocumentAsset> findByKnowledgeBaseIdAndDriveFileId(UUID knowledgeBaseId, String driveFileId);
+  Optional<DocumentAsset> findByKnowledgeBaseIdAndStorageObjectKey(UUID knowledgeBaseId, String storageObjectKey);
   List<DocumentAsset> findAllByKnowledgeBaseIdOrderByCreatedAtDesc(UUID knowledgeBaseId);
   List<DocumentAsset> findAllByKnowledgeBaseIdIn(List<UUID> knowledgeBaseIds);
   long countByKnowledgeBaseIdAndStatus(UUID knowledgeBaseId, DocumentStatus status);

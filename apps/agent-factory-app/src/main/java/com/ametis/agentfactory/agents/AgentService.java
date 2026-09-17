@@ -209,7 +209,7 @@ public class AgentService {
                 base.getId(),
                 base.getName(),
                 (int) documentAssetRepository.countByKnowledgeBaseIdAndStatus(base.getId(), DocumentStatus.STORED),
-                base.getDocumentsFolderId()))
+                base.getDocumentsLocator()))
             .toList()));
     return AgentResponse.from(
         agentRepository.save(agent),

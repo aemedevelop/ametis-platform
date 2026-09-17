@@ -36,7 +36,7 @@ public class KnowledgeBase {
 
   /** Carpeta de Drive propia: {tenant-workspace}/{negocio-slug}/{base-slug}/ */
   @Column(length = 160)
-  private String documentsFolderId;
+  private String documentsLocator;
 
   @Enumerated(EnumType.STRING)
   @Column(nullable = false, length = 32)
@@ -76,8 +76,8 @@ public class KnowledgeBase {
     updatedAt = OffsetDateTime.now();
   }
 
-  public void markRepositoryActive(String documentsFolderId) {
-    this.documentsFolderId = documentsFolderId;
+  public void markRepositoryActive(String documentsLocator) {
+    this.documentsLocator = documentsLocator;
     this.repositoryStatus = BusinessRepositoryStatus.ACTIVE;
     this.repositoryError = null;
     updatedAt = OffsetDateTime.now();
@@ -110,7 +110,7 @@ public class KnowledgeBase {
   public String getName() { return name; }
   public String getDescription() { return description; }
   public KnowledgeBaseStatus getStatus() { return status; }
-  public String getDocumentsFolderId() { return documentsFolderId; }
+  public String getDocumentsLocator() { return documentsLocator; }
   public BusinessRepositoryStatus getRepositoryStatus() { return repositoryStatus; }
   public String getRepositoryError() { return repositoryError; }
   public UUID getCreatedBy() { return createdBy; }

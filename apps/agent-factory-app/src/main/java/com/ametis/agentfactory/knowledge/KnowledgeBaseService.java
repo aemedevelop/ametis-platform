@@ -7,7 +7,7 @@ import com.ametis.agentfactory.documents.DocumentStatus;
 import com.ametis.agentfactory.documents.RepositoryBinding;
 import com.ametis.agentfactory.documents.RepositoryProvisioningService;
 import com.ametis.agentfactory.documents.RepositoryStatus;
-import com.ametis.agentfactory.drive.GoogleDriveRepository;
+import com.ametis.agentfactory.storage.StorageProvider;
 import jakarta.transaction.Transactional;
 import java.util.List;
 import java.util.Map;
@@ -27,19 +27,19 @@ public class KnowledgeBaseService {
   private final KnowledgeBaseRepository knowledgeBaseRepository;
   private final KnowledgeBaseRepositoryProvisioningService knowledgeBaseProvisioning;
   private final DocumentAssetRepository documentAssetRepository;
-  private final GoogleDriveRepository googleDriveRepository;
+  private final StorageProvider storageProvider;
 
   public KnowledgeBaseService(
       RepositoryProvisioningService provisioningService,
       KnowledgeBaseRepository knowledgeBaseRepository,
       KnowledgeBaseRepositoryProvisioningService knowledgeBaseProvisioning,
       DocumentAssetRepository documentAssetRepository,
-      GoogleDriveRepository googleDriveRepository) {
+      StorageProvider storageProvider) {
     this.provisioningService = provisioningService;
     this.knowledgeBaseRepository = knowledgeBaseRepository;
     this.knowledgeBaseProvisioning = knowledgeBaseProvisioning;
     this.documentAssetRepository = documentAssetRepository;
-    this.googleDriveRepository = googleDriveRepository;
+    this.storageProvider = storageProvider;
   }
 
   public List<KnowledgeBaseResponse> list(Business business) {
@@ -87,9 +87,9 @@ public class KnowledgeBaseService {
   public void delete(Business business, UUID knowledgeBaseId) {
     requireActiveRepository(business.getTenantId());
     KnowledgeBase base = requireBase(business, knowledgeBaseId);
-    if (base.getDocumentsFolderId() != null) {
+    if (base.getDocumentsLocator() != null) {
       try {
-        googleDriveRepository.trash(business.getTenantId(), base.getDocumentsFolderId());
+        storageProvider.deleteContainer(business.getTenantId(), base.getDocumentsLocator());
       } catch (Exception exception) {
         LOGGER.warn("No se pudo enviar a la papelera la carpeta de la base {}", knowledgeBaseId, exception);
       }

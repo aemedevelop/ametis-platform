@@ -10,8 +10,11 @@ import jakarta.validation.constraints.Size;
  * apariencia ({@code PUT /deployments/{id}/appearance}), no en el alta.
  *
  * <p>{@code font} es una clave de un stack del sistema
- * ({@code system|serif|mono|humanist}); el widget la resuelve. El avatar llegará
- * con MinIO.
+ * ({@code system|serif|mono|humanist}); el widget la resuelve. {@code avatarUrl}
+ * es de solo lectura: la sube el cliente vía
+ * {@code POST /deployments/{id}/appearance/avatar} (guardado como referencia en
+ * el almacenamiento configurado, nunca como data URI) y se calcula aquí, no se
+ * acepta en el cuerpo de esta petición.
  */
 public record DeploymentTheme(
     @Pattern(regexp = "^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$", message = "error.deploymentThemeColorInvalid")
@@ -25,20 +28,23 @@ public record DeploymentTheme(
 
     @Size(max = 80) String title,
 
-    @Size(max = 160) String subtitle) {
+    @Size(max = 160) String subtitle,
 
-  static DeploymentTheme from(AgentDeployment deployment) {
+    String avatarUrl) {
+
+  static DeploymentTheme from(AgentDeployment deployment, String avatarUrl) {
     return new DeploymentTheme(
         deployment.getThemePrimaryColor(),
         deployment.getThemeFont(),
         deployment.getThemePosition(),
         deployment.getThemeTitle(),
-        deployment.getThemeSubtitle());
+        deployment.getThemeSubtitle(),
+        avatarUrl);
   }
 
   boolean isEmpty() {
     return blank(primaryColor) && blank(font) && blank(position)
-        && blank(title) && blank(subtitle);
+        && blank(title) && blank(subtitle) && blank(avatarUrl);
   }
 
   private static boolean blank(String value) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useT } from "@/components/IntlProviderClient";
@@ -9,8 +9,10 @@ import {
   AgentFactoryApiError,
   DeploymentFont,
   DeploymentPosition,
+  deleteDeploymentAvatar,
   fetchDeployments,
-  updateDeploymentAppearance
+  updateDeploymentAppearance,
+  uploadDeploymentAvatar
 } from "@/lib/agent-factory-api";
 
 type Translate = (key: string, vars?: Record<string, string | number>) => string;
@@ -22,6 +24,10 @@ const POSITIONS: DeploymentPosition[] = ["bottom-right", "bottom-left"];
 
 const WIDGET_SRC = `${process.env.NEXT_PUBLIC_AGENT_FACTORY_API_BASE_URL ?? "http://localhost:8440"}/api/agent-factory/public/widget.js`;
 
+// Maqueta puramente visual: no apunta a un despliegue real. El origen/las
+// demás validaciones del canal no lo permitirían sin réplicas de config solo
+// para esto, así que el tema se previsualiza en caliente vía postMessage y
+// las preguntas no se responden de verdad (comportamiento esperado).
 const IFRAME_DOC = `<!doctype html><html><head><meta charset="utf-8"><style>
   html,body{margin:0;height:100%;background:#eef2f8;font-family:system-ui,sans-serif}
   .hint{position:absolute;inset:0;display:grid;place-items:center;color:#94a3b8;font-size:13px}
@@ -48,6 +54,7 @@ export default function AppearancePage() {
   const [position, setPosition] = useState<DeploymentPosition | "">("");
   const [title, setTitle] = useState("");
   const [subtitle, setSubtitle] = useState("");
+  const [avatarUploading, setAvatarUploading] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -79,7 +86,8 @@ export default function AppearancePage() {
       font: font || null,
       position: position || null,
       title: title.trim() || null,
-      subtitle: subtitle.trim() || null
+      subtitle: subtitle.trim() || null,
+      avatarUrl: deployment?.theme?.avatarUrl ?? null
     },
     welcomeMessage: deployment?.welcomeMessage ?? "Hola 👋 ¿En qué puedo ayudarte?",
     agentName: deployment?.agentName ?? "Asistente",
@@ -123,6 +131,35 @@ export default function AppearancePage() {
     }
   }
 
+  async function onAvatarPicked(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setAvatarUploading(true);
+    setError(null);
+    try {
+      const updated = await uploadDeploymentAvatar(id, file);
+      setDeployment(updated);
+    } catch (requestError) {
+      setError(requestError);
+    } finally {
+      setAvatarUploading(false);
+    }
+  }
+
+  async function removeAvatar() {
+    setAvatarUploading(true);
+    setError(null);
+    try {
+      const updated = await deleteDeploymentAvatar(id);
+      setDeployment(updated);
+    } catch (requestError) {
+      setError(requestError);
+    } finally {
+      setAvatarUploading(false);
+    }
+  }
+
   function reset() {
     setColor("");
     setFont("");
@@ -160,6 +197,36 @@ export default function AppearancePage() {
 
       <section className="appearance-layout">
         <div className="appearance-controls">
+          <div className="form-field">
+            <span className="field-label">{t("appearance.avatarLabel")}</span>
+            <small className="field-hint">{t("appearance.avatarHint")}</small>
+            <div className="avatar-picker">
+              {deployment.theme?.avatarUrl ? (
+                <img className="avatar-preview" src={deployment.theme.avatarUrl} alt="" />
+              ) : (
+                <span className="avatar-preview empty" aria-hidden="true">{deployment.agentName.charAt(0).toUpperCase()}</span>
+              )}
+              <div className="avatar-picker-actions">
+                <label className="small-action" htmlFor="avatar-file">
+                  {avatarUploading ? t("appearance.avatarUploading") : t("appearance.avatarUpload")}
+                </label>
+                <input
+                  id="avatar-file"
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                  hidden
+                  onChange={onAvatarPicked}
+                  disabled={avatarUploading}
+                />
+                {deployment.theme?.avatarUrl ? (
+                  <button type="button" className="link-button" onClick={removeAvatar} disabled={avatarUploading}>
+                    {t("appearance.avatarRemove")}
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          </div>
+
           <div className="form-field">
             <span className="field-label">{t("appearance.colorLabel")}</span>
             <div className="swatch-row">
@@ -221,6 +288,10 @@ export default function AppearancePage() {
               <button type="button" className={device === "desktop" ? "active" : ""} onClick={() => setDevice("desktop")}>{t("appearance.previewDesktop")}</button>
               <button type="button" className={device === "mobile" ? "active" : ""} onClick={() => setDevice("mobile")}>{t("appearance.previewMobile")}</button>
             </div>
+          </div>
+          <div className="alert warning compact" role="status">
+            <span aria-hidden="true">⚠️</span>
+            <span>{t("appearance.previewDisclaimer")}</span>
           </div>
           <div className={`preview-stage ${device}`}>
             <iframe ref={iframeRef} title={t("appearance.previewLabel")} srcDoc={IFRAME_DOC} />

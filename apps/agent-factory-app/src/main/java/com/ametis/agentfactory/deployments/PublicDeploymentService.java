@@ -9,6 +9,8 @@ import com.ametis.agentfactory.agents.AmetisAiQueryResponse;
 import com.ametis.agentfactory.agents.AmetisAiRagClient;
 import com.ametis.agentfactory.documents.RepositoryBinding;
 import com.ametis.agentfactory.documents.RepositoryBindingRepository;
+import com.ametis.agentfactory.storage.StorageProvider;
+import java.io.OutputStream;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -28,23 +30,49 @@ public class PublicDeploymentService {
   private final AgentRepository agentRepository;
   private final AgentKnowledgeBaseRepository agentKnowledgeBaseRepository;
   private final AmetisAiRagClient ragClient;
+  private final StorageProvider storageProvider;
+  private final DeploymentEndpoints endpoints;
 
   public PublicDeploymentService(
       RepositoryBindingRepository repositoryBindingRepository,
       AgentDeploymentRepository deploymentRepository,
       AgentRepository agentRepository,
       AgentKnowledgeBaseRepository agentKnowledgeBaseRepository,
-      AmetisAiRagClient ragClient) {
+      AmetisAiRagClient ragClient,
+      StorageProvider storageProvider,
+      DeploymentEndpoints endpoints) {
     this.repositoryBindingRepository = repositoryBindingRepository;
     this.deploymentRepository = deploymentRepository;
     this.agentRepository = agentRepository;
     this.agentKnowledgeBaseRepository = agentKnowledgeBaseRepository;
     this.ragClient = ragClient;
+    this.storageProvider = storageProvider;
+    this.endpoints = endpoints;
   }
 
   public PublicDeploymentInfoResponse info(String publicId, String origin) {
     ResolvedDeployment resolved = resolve(publicId, origin);
-    return PublicDeploymentInfoResponse.from(resolved.deployment(), resolved.agent());
+    String avatarUrl = endpoints.describe(resolved.deployment()).avatarUrl();
+    return PublicDeploymentInfoResponse.from(resolved.deployment(), resolved.agent(), avatarUrl);
+  }
+
+  /** Content-type del avatar servido. */
+  public record AvatarDescriptor(String mimeType) {}
+
+  public AvatarDescriptor avatar(String publicId, OutputStream outputStream) {
+    AgentDeployment deployment = resolveForAsset(publicId);
+    if (deployment.getThemeAvatarKey() == null || deployment.getThemeAvatarKey().isBlank()) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "error.deploymentAvatarNotFound");
+    }
+    try {
+      StorageProvider.StoredObject object = storageProvider.getObject(deployment.getTenantId(), deployment.getThemeAvatarKey());
+      storageProvider.downloadObject(deployment.getTenantId(), deployment.getThemeAvatarKey(), outputStream);
+      return new AvatarDescriptor(object.mimeType() == null ? "application/octet-stream" : object.mimeType());
+    } catch (ResponseStatusException exception) {
+      throw exception;
+    } catch (Exception exception) {
+      throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "error.storageDownloadFailed", exception);
+    }
   }
 
   public PublicQueryResponse query(String publicId, String origin, String question) {
@@ -125,6 +153,23 @@ public class PublicDeploymentService {
       throw new ResponseStatusException(HttpStatus.CONFLICT, "error.deploymentAgentNotReady");
     }
     return new ResolvedDeployment(binding, deployment, agent);
+  }
+
+  /**
+   * Resolución ligera para activos públicos sin datos sensibles (avatar, como
+   * {@code widget.js}): sin chequeo de {@code Origin}. Un {@code <img>} normal
+   * no manda cabecera Origin, así que exigirla dejaría el logo siempre roto —
+   * tanto en la vista previa del panel como en el propio widget del cliente.
+   */
+  private AgentDeployment resolveForAsset(String publicId) {
+    AgentDeployment deployment = deploymentRepository
+        .findByPublicId(publicId == null ? "" : publicId.trim())
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "error.deploymentNotFound"));
+    if (deployment.getStatus() != DeploymentStatus.ACTIVE
+        || deployment.getChannelType() != DeploymentChannelType.WEB_CHAT) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "error.deploymentNotFound");
+    }
+    return deployment;
   }
 
   private void enforceChannelSecurity(AgentDeployment deployment, String origin) {

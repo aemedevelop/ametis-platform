@@ -25,10 +25,13 @@ public class RepositoryBinding {
   private String provider;
 
   @Column(length = 160)
-  private String workspaceFolderId;
+  private String workspaceLocator;
 
   @Column(length = 160)
-  private String documentsFolderId;
+  private String documentsLocator;
+
+  @Column(length = 63)
+  private String bucketName;
 
   @Enumerated(EnumType.STRING)
   @Column(nullable = false, length = 32)
@@ -45,12 +48,12 @@ public class RepositoryBinding {
 
   protected RepositoryBinding() {}
 
-  public static RepositoryBinding provisioning(UUID tenantId, String repositoryNamespace) {
+  public static RepositoryBinding provisioning(UUID tenantId, String repositoryNamespace, String provider) {
     RepositoryBinding binding = new RepositoryBinding();
     binding.id = UUID.randomUUID();
     binding.tenantId = tenantId;
     binding.repositoryNamespace = repositoryNamespace;
-    binding.provider = "GOOGLE_DRIVE";
+    binding.provider = provider;
     binding.status = RepositoryStatus.PROVISIONING;
     binding.createdAt = OffsetDateTime.now();
     binding.updatedAt = binding.createdAt;
@@ -63,13 +66,18 @@ public class RepositoryBinding {
     updatedAt = OffsetDateTime.now();
   }
 
-  public void activate(String namespace, String workspaceFolderId, String documentsFolderId) {
+  public void activate(String namespace, String workspaceLocator, String documentsLocator) {
     repositoryNamespace = namespace;
-    this.workspaceFolderId = workspaceFolderId;
-    this.documentsFolderId = documentsFolderId;
+    this.workspaceLocator = workspaceLocator;
+    this.documentsLocator = documentsLocator;
     status = RepositoryStatus.ACTIVE;
     lastError = null;
     updatedAt = OffsetDateTime.now();
+  }
+
+  public void activate(String namespace, String workspaceLocator, String documentsLocator, String bucketName) {
+    activate(namespace, workspaceLocator, documentsLocator);
+    this.bucketName = bucketName;
   }
 
   public void renameNamespace(String namespace) {
@@ -87,8 +95,9 @@ public class RepositoryBinding {
   public UUID getTenantId() { return tenantId; }
   public String getRepositoryNamespace() { return repositoryNamespace; }
   public String getProvider() { return provider; }
-  public String getWorkspaceFolderId() { return workspaceFolderId; }
-  public String getDocumentsFolderId() { return documentsFolderId; }
+  public String getWorkspaceLocator() { return workspaceLocator; }
+  public String getDocumentsLocator() { return documentsLocator; }
+  public String getBucketName() { return bucketName; }
   public RepositoryStatus getStatus() { return status; }
   public String getLastError() { return lastError; }
   public OffsetDateTime getCreatedAt() { return createdAt; }
