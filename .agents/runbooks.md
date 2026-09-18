@@ -61,6 +61,48 @@ docker logs ametis-agent-factory-app --tail 160
 docker logs ametis-kong --tail 120
 ```
 
+## VPS Pre Start (aislado de produccion, mismo VPS)
+
+Requiere una red Docker propia (una sola vez) y un checkout de repo separado
+del de produccion, p. ej. `/opt/ametis-platform-pre` y `/opt/ametis-ai-pre`
+(rama `develop`, en vez de `main`):
+
+```bash
+docker network create ametis_internal_pre
+```
+
+Run from `/opt/ametis-platform-pre`:
+
+```bash
+docker compose --env-file .env.pre \
+  -f ./infra/docker-compose.yml \
+  -f ./infra/platform-stack.compose.yml \
+  up -d --build
+```
+
+Run from `/opt/ametis-ai-pre/docker/compose/rag`:
+
+```bash
+docker compose --env-file .env.pre -f docker-compose.pre.yml up -d --build
+```
+
+Useful checks (mismo patron que produccion, puertos +1000):
+
+```bash
+docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" | grep ametis-pre
+curl -i http://127.0.0.1:9440/v1/health
+curl -i http://127.0.0.1:9440/api/agent-factory/drive/connection
+docker logs ametis-pre-kong --tail 120
+docker logs ametis-pre-agent-factory-app --tail 160
+docker logs ametis_pre_rag_service --tail 160
+```
+
+`.env.pre` (ametis-platform) y `.env.pre`/`.env.secrets.pre` (ametis-ai) se
+copian de sus `.example` respectivos y nunca se suben a Git (ya cubiertos por
+`.env.*` en `.gitignore`). Ver [[ametis-platform-web-container]] y
+[[ametis-secrets-per-tenant-llm-key]] en la memoria de Claude para el
+contexto de por que este entorno existe.
+
 ## VPS Platform Start
 
 Run from `/opt/ametis-platform`:

@@ -3,8 +3,8 @@ services:
     build:
       context: ../apps/agent-factory-app
       dockerfile: Dockerfile
-    image: ametis/agent-factory-app:0.1.0
-    container_name: ametis-agent-factory-app
+    image: ametis/agent-factory-app:${IMAGE_TAG:-0.1.0}
+    container_name: ${CONTAINER_PREFIX:-ametis}-agent-factory-app
     depends_on:
       keycloak:
         condition: service_started
@@ -55,8 +55,8 @@ services:
         NEXT_PUBLIC_APP_URL: ${HUB_WEB_URL:-http://localhost:3000}
         NEXT_PUBLIC_KEYCLOAK_AUTH_URL: ${KEYCLOAK_AUTH_URL:-http://localhost:8081/realms/ametis/protocol/openid-connect/auth}
         NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: ${HUB_KEYCLOAK_CLIENT_ID:-ametis-hub-web}
-    image: ametis/hub-web:0.1.0
-    container_name: ametis-hub-web
+    image: ametis/hub-web:${IMAGE_TAG:-0.1.0}
+    container_name: ${CONTAINER_PREFIX:-ametis}-hub-web
     environment:
       NEXT_PUBLIC_API_BASE_URL: ${HUB_API_BASE_URL:-http://localhost:8000}
       NEXT_PUBLIC_CHAT_API_URL: ${CHAT_API_URL:-/api/rag-chat}
@@ -86,8 +86,8 @@ services:
         NEXT_PUBLIC_HUB_URL: ${HUB_WEB_URL:-http://localhost:3000}
         NEXT_PUBLIC_KEYCLOAK_AUTH_URL: ${KEYCLOAK_AUTH_URL:-http://localhost:8081/realms/ametis/protocol/openid-connect/auth}
         NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: ${AGENT_FACTORY_KEYCLOAK_CLIENT_ID:-agent-factory-web}
-    image: ametis/agent-factory-web:0.1.0
-    container_name: ametis-agent-factory-web
+    image: ametis/agent-factory-web:${IMAGE_TAG:-0.1.0}
+    container_name: ${CONTAINER_PREFIX:-ametis}-agent-factory-web
     ports:
       - "${AGENT_FACTORY_WEB_PORT:-3200}:3200"
     networks:
@@ -99,3 +99,4 @@ services:
 networks:
   ametis_internal:
     external: true
+    name: ${DOCKER_NETWORK:-ametis_internal}

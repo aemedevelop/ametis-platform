@@ -42,9 +42,38 @@ services:
   #     timeout: 10s
   #     retries: 10
 
+  # Postgres propio, solo para entornos que no reutilizan un Postgres externo
+  # ya existente (p. ej. "pre"). Producción sigue apuntando a su Postgres del
+  # VPS via *_DB_URL y no activa este servicio -- se activa solo con
+  # COMPOSE_PROFILES=local-db (ver .env.pre.example).
+  postgres:
+    profiles: ["local-db"]
+    image: postgres:16-alpine
+    container_name: ${CONTAINER_PREFIX:-ametis}-postgres
+    environment:
+      POSTGRES_USER: ${LOCAL_DB_ADMIN_USER:-postgres}
+      POSTGRES_PASSWORD: ${LOCAL_DB_ADMIN_PASSWORD:-postgres}
+      POSTGRES_DB: postgres
+    ports:
+      # Solo localhost: 01-init-databases.sql usa contraseñas fijas de
+      # desarrollo, no aptas para exponer el puerto a toda la red del VPS.
+      - "127.0.0.1:${PLATFORM_POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../db/postgres/01-init-databases.sql:/docker-entrypoint-initdb.d/01-init-databases.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${LOCAL_DB_ADMIN_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      ametis_internal:
+        aliases:
+          - postgres
+
   keycloak:
     image: quay.io/keycloak/keycloak:26.1
-    container_name: ametis-keycloak
+    container_name: ${CONTAINER_PREFIX:-ametis}-keycloak
     command: start-dev --import-realm
     environment:
       KC_DB: postgres
@@ -70,8 +99,8 @@ services:
     build:
       context: ../core/apps/core-api
       dockerfile: Dockerfile
-    image: ametis/core-api:0.1.0
-    container_name: ametis-core-api
+    image: ametis/core-api:${IMAGE_TAG:-0.1.0}
+    container_name: ${CONTAINER_PREFIX:-ametis}-core-api
     depends_on:
       keycloak:
         condition: service_started
@@ -99,7 +128,7 @@ services:
 
   kong:
     image: kong:3.7
-    container_name: ametis-kong
+    container_name: ${CONTAINER_PREFIX:-ametis}-kong
     depends_on:
       - core-api
     environment:
@@ -126,7 +155,7 @@ services:
 
   minio:
     image: quay.io/minio/minio:RELEASE.2024-11-07T00-52-20Z
-    container_name: ametis-minio
+    container_name: ${CONTAINER_PREFIX:-ametis}-minio
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${AGENT_FACTORY_MINIO_ACCESS_KEY:-ametis_minio}
@@ -135,7 +164,7 @@ services:
       - "${MINIO_API_PORT:-9000}:9000"
       - "${MINIO_CONSOLE_PORT:-9001}:9001"
     volumes:
-      - ametis_minio_data:/data
+      - minio_data:/data
     healthcheck:
       test: ["CMD", "mc", "ready", "local"]
       interval: 10s
@@ -147,13 +176,13 @@ services:
           - minio
           - ametis-minio
 
-# Volúmenes comentados: usando postgres del VPS
-# volumes:
-#   ametis_postgres_data:
-
 volumes:
-  ametis_minio_data:
+  postgres_data:
+    name: ${CONTAINER_PREFIX:-ametis}_postgres_data
+  minio_data:
+    name: ${CONTAINER_PREFIX:-ametis}_minio_data
 
 networks:
   ametis_internal:
     external: true
+    name: ${DOCKER_NETWORK:-ametis_internal}
