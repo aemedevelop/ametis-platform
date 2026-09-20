@@ -80,6 +80,7 @@ services:
         NEXT_PUBLIC_HUB_URL: ${HUB_WEB_URL:-http://localhost:3000}
         NEXT_PUBLIC_KEYCLOAK_AUTH_URL: ${KEYCLOAK_AUTH_URL:-http://localhost:8081/realms/ametis/protocol/openid-connect/auth}
         NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: ${AGENT_FACTORY_KEYCLOAK_CLIENT_ID:-agent-factory-web}
+        NEXT_PUBLIC_REGISTRATION_ENABLED: ${AUTH_REGISTRATION_ENABLED:-true}
     image: ametis/agent-factory-web:0.1.0
     container_name: ametis-agent-factory-web
     ports:
