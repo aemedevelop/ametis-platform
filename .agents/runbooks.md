@@ -61,6 +61,27 @@ docker logs ametis-agent-factory-app --tail 160
 docker logs ametis-kong --tail 120
 ```
 
+## Core DB bootstrap — required once per brand-new Postgres
+
+`core-api` has no embedded Flyway (`ddl-auto: none`, unlike `agent-factory-app`
+which migrates itself automatically). The `core` schema (`users`, `tenants`,
+`roles`, `plans`, etc.) only exists after manually running `db/apply-db-config.ps1`
+against that Postgres — a one-time bootstrap per environment, not per deploy.
+Skipping it produces `relation "core.users" does not exist` the first time
+someone tries to log in / onboard.
+
+Run once, right after a fresh Postgres is created for any new environment
+(local, pre, a future prod-on-another-host):
+
+```powershell
+.\db\apply-db-config.ps1 -ContainerName ametis-pre-postgres
+```
+
+(swap `-ContainerName` for whichever Postgres container the new environment
+uses; defaults to `ametis-postgres`). Needs `pwsh`/PowerShell with Docker CLI
+access to that container — if run from Windows against a remote VPS
+container, needs a Docker context or SSH session with Docker available.
+
 ## VPS Platform Start
 
 Run from `/opt/ametis-platform`:
@@ -186,3 +207,21 @@ does not yet exist) — it must be configured by hand in **every** Keycloak inst
    Google, not something to edit.
 3. Repeat step 2 on every other Keycloak instance (VPS) with the same Google
    Client ID/secret — each realm DB is separate and needs its own Identity Provider row.
+
+## Keycloak redirect URIs — per-environment manual step
+
+`infra/keycloak/realm-export.json` only ships `http://localhost:3200/auth/callback`
+as a valid redirect URI for the `agent-factory-web` client (and the matching
+`http://localhost:3200` web origin) — it is intentionally generic and never
+carries real domains. The import only runs once per fresh Keycloak instance,
+so **every** new instance (VPS pre, VPS prod) needs its own domain added by
+hand, or login fails with Keycloak's `Invalid parameter: redirect_uri` error.
+
+For each new instance, in the admin console (realm **ametis** -> **Clients**
+-> `agent-factory-web` -> Settings):
+
+- **Valid redirect URIs**: add `https://<its-own-domain>/auth/callback`
+- **Web origins**: add `https://<its-own-domain>`
+
+Repeat for `ametis-hub-web` too if that frontend is also exposed on the same
+instance.
