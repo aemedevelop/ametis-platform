@@ -11,8 +11,14 @@ import {
   updateBusiness
 } from "@/lib/agent-factory-api";
 import { clearActiveBusinessId, getActiveBusinessId, setActiveBusinessId } from "@/lib/session";
+import { GuidedTour, TourHelpButton, useTour, type TourStep } from "@/components/guided-tour";
 
 type Translate = (key: string, vars?: Record<string, string | number>) => string;
+
+const BUSINESS_FORM_TOUR_STEPS: TourStep[] = [
+  { selector: "[data-tour='business-field-name']", titleKey: "tour.business.name.title", descriptionKey: "tour.business.name.description" },
+  { selector: "[data-tour='business-field-description']", titleKey: "tour.business.description.title", descriptionKey: "tour.business.description.description" }
+];
 
 function notifyBusinessesChanged() {
   window.dispatchEvent(new Event("ametis:businesses-changed"));
@@ -33,6 +39,7 @@ export default function BusinessesPage() {
   const [deleteConfirm, setDeleteConfirm] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<unknown>(null);
+  const formTour = useTour("business-form");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -156,14 +163,17 @@ export default function BusinessesPage() {
         <form className="knowledge-form" onSubmit={submit}>
           <div>
             <span className="eyebrow">{t(editingId ? "business.editEyebrow" : "business.createEyebrow")}</span>
-            <h2>{t(editingId ? "business.editTitle" : "business.createTitle")}</h2>
+            <div className="section-heading-inline">
+              <h2>{t(editingId ? "business.editTitle" : "business.createTitle")}</h2>
+              <TourHelpButton onClick={formTour.restart} label={t("tour.business.helpButton")} />
+            </div>
             <p>{t("business.createDescription")}</p>
           </div>
-          <label className="form-field">
+          <label className="form-field" data-tour="business-field-name">
             <span className="field-label">{t("business.nameLabel")} <span className="req" aria-hidden="true">*</span></span>
             <input value={name} onChange={(event) => setName(event.target.value)} placeholder={t("business.namePlaceholder")} maxLength={120} required aria-required="true" />
           </label>
-          <label className="form-field">
+          <label className="form-field" data-tour="business-field-description">
             <span className="field-label">{t("business.descriptionLabel")}</span>
             <textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder={t("business.descriptionPlaceholder")} maxLength={500} />
           </label>
@@ -256,6 +266,7 @@ export default function BusinessesPage() {
           </section>
         </div>
       ) : null}
+      <GuidedTour open={formTour.open} steps={BUSINESS_FORM_TOUR_STEPS} onClose={formTour.close} />
     </div>
   );
 }

@@ -23,8 +23,23 @@ import {
   testAgent,
   updateAgent
 } from "@/lib/agent-factory-api";
+import { GuidedTour, TourHelpButton, useTour, type TourStep } from "@/components/guided-tour";
 
 type Translate = (key: string, vars?: Record<string, string | number>) => string;
+
+const AGENT_FORM_TOUR_STEPS: TourStep[] = [
+  { selector: "[data-tour='agent-field-name']", titleKey: "tour.agents.name.title", descriptionKey: "tour.agents.name.description" },
+  { selector: "[data-tour='agent-field-description']", titleKey: "tour.agents.description.title", descriptionKey: "tour.agents.description.description" },
+  { selector: "[data-tour='agent-field-persona']", titleKey: "tour.agents.persona.title", descriptionKey: "tour.agents.persona.description" },
+  { selector: "[data-tour='agent-field-audience']", titleKey: "tour.agents.audience.title", descriptionKey: "tour.agents.audience.description" },
+  { selector: "[data-tour='agent-field-tone']", titleKey: "tour.agents.tone.title", descriptionKey: "tour.agents.tone.description" },
+  { selector: "[data-tour='agent-field-language']", titleKey: "tour.agents.language.title", descriptionKey: "tour.agents.language.description" },
+  { selector: "[data-tour='agent-field-instructions']", titleKey: "tour.agents.instructions.title", descriptionKey: "tour.agents.instructions.description" },
+  { selector: "[data-tour='agent-field-suggested']", titleKey: "tour.agents.suggested.title", descriptionKey: "tour.agents.suggested.description" },
+  { selector: "[data-tour='agent-field-topics']", titleKey: "tour.agents.topics.title", descriptionKey: "tour.agents.topics.description" },
+  { selector: "[data-tour='agent-field-assistant-texts']", titleKey: "tour.agents.assistantTexts.title", descriptionKey: "tour.agents.assistantTexts.description" },
+  { selector: "[data-tour='agent-field-knowledge-bases']", titleKey: "tour.agents.knowledgeBases.title", descriptionKey: "tour.agents.knowledgeBases.description" }
+];
 
 const AGENT_FIELD_LIMITS = {
   name: 80,
@@ -92,6 +107,7 @@ export default function AgentsPage() {
   const [testQuestions, setTestQuestions] = useState<Record<string, string>>({});
   const [testResponses, setTestResponses] = useState<Record<string, AgentTestResponse>>({});
   const [error, setError] = useState<unknown>(null);
+  const formTour = useTour("agents-form");
 
   const refreshIndexingJobs = useCallback(async (currentAgents: AgentDefinition[]) => {
     const jobs = await Promise.all(
@@ -339,10 +355,13 @@ export default function AgentsPage() {
         <form className="knowledge-form" onSubmit={submit}>
           <div>
             <span className="eyebrow">{t("agents.createEyebrow")}</span>
-            <h2>{t(editingAgentId ? "agents.editTitle" : "agents.createTitle")}</h2>
+            <div className="section-heading-inline">
+              <h2>{t(editingAgentId ? "agents.editTitle" : "agents.createTitle")}</h2>
+              <TourHelpButton onClick={formTour.restart} label={t("tour.agents.helpButton")} />
+            </div>
             <p>{t(editingAgentId ? "agents.editDescription" : "agents.createDescription")}</p>
           </div>
-          <label className="form-field">
+          <label className="form-field" data-tour="agent-field-name">
             <span className="field-label">
               {t("agents.nameLabel")} <span className="req" aria-hidden="true">*</span>
               <span className="field-help" tabIndex={0} aria-label={t("agents.namePlaceholder")} title={t("agents.namePlaceholder")}>?</span>
@@ -350,7 +369,7 @@ export default function AgentsPage() {
             <input value={name} onChange={(event) => setName(event.target.value)} placeholder={t("agents.namePlaceholder")} maxLength={AGENT_FIELD_LIMITS.name} required aria-required="true" />
             <FieldLimit value={name} max={AGENT_FIELD_LIMITS.name} />
           </label>
-          <label className="form-field">
+          <label className="form-field" data-tour="agent-field-description">
             <span className="field-label">
               {t("agents.descriptionLabel")}
               <span className="field-help" tabIndex={0} aria-label={t("agents.descriptionPlaceholder")} title={t("agents.descriptionPlaceholder")}>?</span>
@@ -358,7 +377,7 @@ export default function AgentsPage() {
             <textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder={t("agents.descriptionPlaceholder")} maxLength={AGENT_FIELD_LIMITS.description} />
             <FieldLimit value={description} max={AGENT_FIELD_LIMITS.description} />
           </label>
-          <label className="form-field">
+          <label className="form-field" data-tour="agent-field-persona">
             <span className="field-label">
               {t("agents.personaLabel")} <span className="req" aria-hidden="true">*</span>
               <span className="field-help" tabIndex={0} aria-label={t("agents.personaHelp")} title={t("agents.personaHelp")}>?</span>
@@ -366,7 +385,7 @@ export default function AgentsPage() {
             <textarea value={persona} onChange={(event) => setPersona(event.target.value)} placeholder={t("agents.personaPlaceholder")} maxLength={AGENT_FIELD_LIMITS.persona} required aria-required="true" />
             <FieldLimit value={persona} max={AGENT_FIELD_LIMITS.persona} />
           </label>
-          <label className="form-field">
+          <label className="form-field" data-tour="agent-field-audience">
             <span className="field-label">
               {t("agents.targetAudienceLabel")} <span className="req" aria-hidden="true">*</span>
               <span className="field-help" tabIndex={0} aria-label={t("agents.targetAudienceHelp")} title={t("agents.targetAudienceHelp")}>?</span>
@@ -375,7 +394,7 @@ export default function AgentsPage() {
             <FieldLimit value={targetAudience} max={AGENT_FIELD_LIMITS.targetAudience} />
           </label>
           <div className="form-split">
-            <label className="form-field">
+            <label className="form-field" data-tour="agent-field-tone">
               <span className="field-label">
                 {t("agents.toneLabel")}
                 <span className="field-help" tabIndex={0} aria-label={t("agents.toneHelp")} title={t("agents.toneHelp")}>?</span>
@@ -386,7 +405,7 @@ export default function AgentsPage() {
                 ))}
               </select>
             </label>
-            <label className="form-field">
+            <label className="form-field" data-tour="agent-field-language">
               <span className="field-label">
                 {t("agents.responseLanguageLabel")}
                 <span className="field-help" tabIndex={0} aria-label={t("agents.responseLanguageHelp")} title={t("agents.responseLanguageHelp")}>?</span>
@@ -398,7 +417,7 @@ export default function AgentsPage() {
               </select>
             </label>
           </div>
-          <label className="form-field">
+          <label className="form-field" data-tour="agent-field-instructions">
             <span className="field-label">
               {t("agents.instructionsLabel")}
               <span className="field-help" tabIndex={0} aria-label={t("agents.instructionsPlaceholder")} title={t("agents.instructionsPlaceholder")}>?</span>
@@ -407,7 +426,7 @@ export default function AgentsPage() {
             <FieldLimit value={instructions} max={AGENT_FIELD_LIMITS.instructions} />
           </label>
 
-          <div className="form-field">
+          <div className="form-field" data-tour="agent-field-suggested">
             <span className="field-label">
               {t("agents.suggestedQuestionsLabel")}
               <span className="field-help" tabIndex={0} aria-label={t("agents.suggestedQuestionsHelp")} title={t("agents.suggestedQuestionsHelp")}>?</span>
@@ -460,7 +479,7 @@ export default function AgentsPage() {
             ) : null}
           </div>
 
-          <div className="form-field">
+          <div className="form-field" data-tour="agent-field-topics">
             <span className="field-label">
               {t("agents.questionTopicsLabel")}
               <span className="field-help" tabIndex={0} aria-label={t("agents.questionTopicsHelp")} title={t("agents.questionTopicsHelp")}>?</span>
@@ -532,7 +551,7 @@ export default function AgentsPage() {
             </div>
           </div>
 
-          <details className="assistant-texts">
+          <details className="assistant-texts" data-tour="agent-field-assistant-texts">
             <summary>{t("agents.assistantTextsLabel")}</summary>
             <small className="field-hint">{t("agents.assistantTextsHint")}</small>
             {ASSISTANT_TEXT_KEYS.map((key) => (
@@ -548,7 +567,7 @@ export default function AgentsPage() {
             ))}
           </details>
 
-          <div className="document-picker">
+          <div className="document-picker" data-tour="agent-field-knowledge-bases">
             <div>
               <span>{t("agents.knowledgeBasesLabel")}</span>
               <small>{t("agents.knowledgeBasesHelp")}</small>
@@ -728,6 +747,7 @@ export default function AgentsPage() {
           </section>
         </div>
       ) : null}
+      <GuidedTour open={formTour.open} steps={AGENT_FORM_TOUR_STEPS} onClose={formTour.close} />
     </div>
   );
 }

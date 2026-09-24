@@ -16,8 +16,19 @@ import {
   regenerateDeploymentPublicId,
   updateDeployment
 } from "@/lib/agent-factory-api";
+import { GuidedTour, TourHelpButton, useTour, type TourStep } from "@/components/guided-tour";
 
 type Translate = (key: string, vars?: Record<string, string | number>) => string;
+
+const DEPLOYMENT_FORM_TOUR_STEPS: TourStep[] = [
+  { selector: "[data-tour='deployment-field-agent']", titleKey: "tour.deployments.agent.title", descriptionKey: "tour.deployments.agent.description" },
+  { selector: "[data-tour='deployment-field-name']", titleKey: "tour.deployments.name.title", descriptionKey: "tour.deployments.name.description" },
+  { selector: "[data-tour='deployment-field-channel']", titleKey: "tour.deployments.channel.title", descriptionKey: "tour.deployments.channel.description" },
+  { selector: "[data-tour='deployment-field-slug']", titleKey: "tour.deployments.slug.title", descriptionKey: "tour.deployments.slug.description" },
+  { selector: "[data-tour='deployment-field-welcome']", titleKey: "tour.deployments.welcome.title", descriptionKey: "tour.deployments.welcome.description" },
+  { selector: "[data-tour='deployment-field-rate-limits']", titleKey: "tour.deployments.rateLimits.title", descriptionKey: "tour.deployments.rateLimits.description" },
+  { selector: "[data-tour='deployment-field-origins']", titleKey: "tour.deployments.origins.title", descriptionKey: "tour.deployments.origins.description" }
+];
 
 type FormState = {
   agentId: string;
@@ -59,6 +70,7 @@ export default function DeploymentsPage() {
   const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [error, setError] = useState<unknown>(null);
+  const formTour = useTour("deployments-form");
 
   async function copyText(text: string, key: string) {
     try {
@@ -214,10 +226,13 @@ export default function DeploymentsPage() {
         <form className="knowledge-form" onSubmit={submit}>
           <div>
             <span className="eyebrow">{t("deployments.createEyebrow")}</span>
-            <h2>{t(editingId ? "deployments.editTitle" : "deployments.createTitle")}</h2>
+            <div className="section-heading-inline">
+              <h2>{t(editingId ? "deployments.editTitle" : "deployments.createTitle")}</h2>
+              <TourHelpButton onClick={formTour.restart} label={t("tour.deployments.helpButton")} />
+            </div>
             <p>{t(editingId ? "deployments.editDescription" : "deployments.createDescription")}</p>
           </div>
-          <label className="form-field">
+          <label className="form-field" data-tour="deployment-field-agent">
             <span className="field-label">
               {t("deployments.agentLabel")} <span className="req" aria-hidden="true">*</span>
               <span className="field-help" tabIndex={0} aria-label={t("deployments.agentHelp")} title={t("deployments.agentHelp")}>?</span>
@@ -230,14 +245,14 @@ export default function DeploymentsPage() {
             </select>
           </label>
           {!readyAgents.length ? <p className="muted-copy">{t("deployments.noReadyAgents")}</p> : null}
-          <label className="form-field">
+          <label className="form-field" data-tour="deployment-field-name">
             <span className="field-label">
               {t("deployments.nameLabel")} <span className="req" aria-hidden="true">*</span>
               <span className="field-help" tabIndex={0} aria-label={t("deployments.nameHelp")} title={t("deployments.nameHelp")}>?</span>
             </span>
             <input value={form.name} onChange={(event) => setField("name", event.target.value)} placeholder={t("deployments.namePlaceholder")} required aria-required="true" />
           </label>
-          <label className="form-field">
+          <label className="form-field" data-tour="deployment-field-channel">
             <span className="field-label">
               {t("deployments.channelLabel")}
               <span className="field-help" tabIndex={0} aria-label={t("deployments.channelHelp")} title={t("deployments.channelHelp")}>?</span>
@@ -247,7 +262,7 @@ export default function DeploymentsPage() {
             </select>
             <small className="field-limit">{t("deployments.channelSoon")}</small>
           </label>
-          <label className="form-field">
+          <label className="form-field" data-tour="deployment-field-slug">
             <span className="field-label">
               {t("deployments.slugLabel")} <span className="req" aria-hidden="true">*</span>
               <span className="field-help" tabIndex={0} aria-label={t("deployments.slugHelp")} title={t("deployments.slugHelp")}>?</span>
@@ -264,14 +279,14 @@ export default function DeploymentsPage() {
               <input value={form.apiKey} onChange={(event) => setField("apiKey", event.target.value)} placeholder={editingId ? t("deployments.apiKeyEditPlaceholder") : t("deployments.apiKeyPlaceholder")} />
             </label>
           ) : null}
-          <label className="form-field">
+          <label className="form-field" data-tour="deployment-field-welcome">
             <span className="field-label">
               {t("deployments.welcomeMessageLabel")}
               <span className="field-help" tabIndex={0} aria-label={t("deployments.welcomeMessageHelp")} title={t("deployments.welcomeMessageHelp")}>?</span>
             </span>
             <textarea value={form.welcomeMessage} onChange={(event) => setField("welcomeMessage", event.target.value)} placeholder={t("deployments.welcomeMessagePlaceholder")} maxLength={500} />
           </label>
-          <div className="form-split">
+          <div className="form-split" data-tour="deployment-field-rate-limits">
             <label className="form-field">
               <span className="field-label">
                 {t("deployments.rateLimitMinuteLabel")}
@@ -287,7 +302,7 @@ export default function DeploymentsPage() {
               <input type="number" min={1} inputMode="numeric" value={form.rateLimitPerDay} onChange={(event) => setField("rateLimitPerDay", event.target.value)} placeholder={t("deployments.rateLimitPlaceholder")} />
             </label>
           </div>
-          <label className="form-field">
+          <label className="form-field" data-tour="deployment-field-origins">
             <span className="field-label">
               {t("deployments.allowedOriginsLabel")}
               <span className="field-help" tabIndex={0} aria-label={t("deployments.allowedOriginsHelp")} title={t("deployments.allowedOriginsHelp")}>?</span>
@@ -405,6 +420,7 @@ export default function DeploymentsPage() {
           </section>
         </div>
       ) : null}
+      <GuidedTour open={formTour.open} steps={DEPLOYMENT_FORM_TOUR_STEPS} onClose={formTour.close} />
     </div>
   );
 }

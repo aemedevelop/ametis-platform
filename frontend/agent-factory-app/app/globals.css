@@ -548,6 +548,8 @@ tbody tr:last-child td { border-bottom: 0; }
 }
 .tour-help-button:hover { background: color-mix(in srgb, var(--blue) 22%, transparent); transform: translateY(-1px); }
 .tour-help-button:focus-visible { outline: 3px solid #2f6ed5; outline-offset: 2px; }
+.section-heading-inline { display: flex; align-items: center; gap: 8px; }
+.section-heading-inline h2 { margin: 0; }
 
 .tour-overlay { position: fixed; inset: 0; z-index: 500; }
 .tour-mask {

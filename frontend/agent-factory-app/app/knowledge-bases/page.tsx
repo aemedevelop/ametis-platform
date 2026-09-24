@@ -16,8 +16,14 @@ import {
   updateKnowledgeBase,
   uploadKnowledgeBaseDocument
 } from "@/lib/agent-factory-api";
+import { GuidedTour, TourHelpButton, useTour, type TourStep } from "@/components/guided-tour";
 
 type Translate = (key: string, vars?: Record<string, string | number>) => string;
+
+const KNOWLEDGE_FORM_TOUR_STEPS: TourStep[] = [
+  { selector: "[data-tour='kb-field-name']", titleKey: "tour.knowledge.name.title", descriptionKey: "tour.knowledge.name.description" },
+  { selector: "[data-tour='kb-field-description']", titleKey: "tour.knowledge.description.title", descriptionKey: "tour.knowledge.description.description" }
+];
 
 export default function KnowledgeBasesPage() {
   const t = useT();
@@ -37,6 +43,7 @@ export default function KnowledgeBasesPage() {
   const [baseToDelete, setBaseToDelete] = useState<KnowledgeBase | null>(null);
   const [documentToDelete, setDocumentToDelete] = useState<{ baseId: string; document: StoredDocument } | null>(null);
   const [error, setError] = useState<unknown>(null);
+  const formTour = useTour("knowledge-form");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -204,14 +211,17 @@ export default function KnowledgeBasesPage() {
         <form className="knowledge-form" onSubmit={submit}>
           <div>
             <span className="eyebrow">{t(editingId ? "knowledge.editEyebrow" : "knowledge.createEyebrow")}</span>
-            <h2>{t(editingId ? "knowledge.editTitle" : "knowledge.createTitle")}</h2>
+            <div className="section-heading-inline">
+              <h2>{t(editingId ? "knowledge.editTitle" : "knowledge.createTitle")}</h2>
+              <TourHelpButton onClick={formTour.restart} label={t("tour.knowledge.helpButton")} />
+            </div>
             <p>{t("knowledge.createDescription")}</p>
           </div>
-          <label className="form-field">
+          <label className="form-field" data-tour="kb-field-name">
             <span className="field-label">{t("knowledge.nameLabel")} <span className="req" aria-hidden="true">*</span></span>
             <input value={name} onChange={(event) => setName(event.target.value)} placeholder={t("knowledge.namePlaceholder")} maxLength={120} required aria-required="true" />
           </label>
-          <label className="form-field">
+          <label className="form-field" data-tour="kb-field-description">
             <span className="field-label">
               {t("knowledge.descriptionLabel")}
               <span className="field-help" tabIndex={0} aria-label={t("knowledge.descriptionPlaceholder")} title={t("knowledge.descriptionPlaceholder")}>?</span>
@@ -344,6 +354,7 @@ export default function KnowledgeBasesPage() {
           </section>
         </div>
       ) : null}
+      <GuidedTour open={formTour.open} steps={KNOWLEDGE_FORM_TOUR_STEPS} onClose={formTour.close} />
     </div>
   );
 }
