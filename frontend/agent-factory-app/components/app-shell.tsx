@@ -8,6 +8,17 @@ import { LanguageSwitcher } from "@/components/language-switcher";
 import { useT } from "@/components/IntlProviderClient";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { BusinessSwitcher } from "@/components/business-switcher";
+import { GuidedTour, TourHelpButton, useTour, type TourStep } from "@/components/guided-tour";
+
+const WORKSPACE_TOUR_STEPS: TourStep[] = [
+  { selector: "[data-tour='shell-business-switcher']", titleKey: "tour.workspace.business.title", descriptionKey: "tour.workspace.business.description" },
+  { selector: "[data-tour='shell-nav-businesses']", titleKey: "tour.workspace.navBusinesses.title", descriptionKey: "tour.workspace.navBusinesses.description" },
+  { selector: "[data-tour='shell-nav-documents']", titleKey: "tour.workspace.navDocuments.title", descriptionKey: "tour.workspace.navDocuments.description" },
+  { selector: "[data-tour='shell-nav-knowledge']", titleKey: "tour.workspace.navKnowledge.title", descriptionKey: "tour.workspace.navKnowledge.description" },
+  { selector: "[data-tour='shell-nav-agents']", titleKey: "tour.workspace.navAgents.title", descriptionKey: "tour.workspace.navAgents.description" },
+  { selector: "[data-tour='shell-nav-deployments']", titleKey: "tour.workspace.navDeployments.title", descriptionKey: "tour.workspace.navDeployments.description" },
+  { selector: "[data-tour='shell-profile-menu']", titleKey: "tour.workspace.profile.title", descriptionKey: "tour.workspace.profile.description" }
+];
 
 type AuthProfile = {
   name: string;
@@ -22,6 +33,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<AuthProfile | null>(null);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const workspaceTour = useTour("workspace-shell");
 
   useEffect(() => {
     // Se reevalúa en cada cambio de ruta: tras iniciar sesión (contraseña o SSO)
@@ -95,11 +107,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </Link>
         <nav className="side-nav">
           <span className="nav-section">{t("navigation.section.workspace")}</span>
-          <Link className={`nav-item ${isBusinessesActive ? "active" : ""}`} href="/businesses">{t("navigation.businesses")}</Link>
-          <Link className={`nav-item ${isDocumentsActive ? "active" : ""}`} href="/">{t("navigation.documents")}</Link>
-          <Link className={`nav-item ${isKnowledgeBasesActive ? "active" : ""}`} href="/knowledge-bases">{t("navigation.knowledgeBases")}</Link>
-          <Link className={`nav-item ${isAgentsActive ? "active" : ""}`} href="/agents">{t("navigation.agents")}</Link>
-          <Link className={`nav-item ${isDeploymentsActive ? "active" : ""}`} href="/deployments">{t("navigation.deployments")}</Link>
+          <Link data-tour="shell-nav-businesses" className={`nav-item ${isBusinessesActive ? "active" : ""}`} href="/businesses">{t("navigation.businesses")}</Link>
+          <Link data-tour="shell-nav-documents" className={`nav-item ${isDocumentsActive ? "active" : ""}`} href="/">{t("navigation.documents")}</Link>
+          <Link data-tour="shell-nav-knowledge" className={`nav-item ${isKnowledgeBasesActive ? "active" : ""}`} href="/knowledge-bases">{t("navigation.knowledgeBases")}</Link>
+          <Link data-tour="shell-nav-agents" className={`nav-item ${isAgentsActive ? "active" : ""}`} href="/agents">{t("navigation.agents")}</Link>
+          <Link data-tour="shell-nav-deployments" className={`nav-item ${isDeploymentsActive ? "active" : ""}`} href="/deployments">{t("navigation.deployments")}</Link>
         </nav>
       </aside>
       <section className="content-shell">
@@ -109,10 +121,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <h1>{t("header.title")}</h1>
           </div>
           <div className="topbar-actions">
-            <BusinessSwitcher />
+            <TourHelpButton onClick={workspaceTour.restart} label={t("tour.workspace.helpButton")} />
+            <div data-tour="shell-business-switcher"><BusinessSwitcher /></div>
             <LanguageSwitcher />
             <ThemeSwitcher />
             <details
+              data-tour="shell-profile-menu"
               className="profile-menu"
               open={profileMenuOpen}
               onToggle={(event) => setProfileMenuOpen(event.currentTarget.open)}
@@ -137,6 +151,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </header>
         {children}
       </section>
+      <GuidedTour open={workspaceTour.open} steps={WORKSPACE_TOUR_STEPS} onClose={workspaceTour.close} />
     </main>
   );
 }
