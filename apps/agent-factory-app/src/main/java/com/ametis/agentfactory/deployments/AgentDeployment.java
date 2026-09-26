@@ -82,6 +82,10 @@ public class AgentDeployment {
   @Column(length = 300)
   private String themeAvatarKey;
 
+  /** Estilo de animación de la burbuja flotante cerrada: none|bounce|float|ring. */
+  @Column(length = 20)
+  private String themeBubbleAnimation;
+
   private UUID createdBy;
 
   @Column(nullable = false)
@@ -157,6 +161,7 @@ public class AgentDeployment {
     this.themePosition = normalize(theme == null ? null : theme.position());
     this.themeTitle = normalize(theme == null ? null : theme.title());
     this.themeSubtitle = normalize(theme == null ? null : theme.subtitle());
+    this.themeBubbleAnimation = normalize(theme == null ? null : theme.bubbleAnimation());
     updatedAt = OffsetDateTime.now();
   }
 
@@ -187,6 +192,19 @@ public class AgentDeployment {
    */
   void repointAgent(UUID agentId) {
     this.agentId = agentId;
+    updatedAt = OffsetDateTime.now();
+  }
+
+  /**
+   * Sincroniza los orígenes permitidos del despliegue de prueba fijo con el
+   * origen actual de la plataforma. Sin esto, si el despliegue se llegó a
+   * crear antes de que {@code AGENT_FACTORY_WEB_URL} estuviera bien
+   * configurado (o si cambia de dominio más adelante), se quedaría para
+   * siempre con el origen viejo guardado y el widget dejaría de responder
+   * (403 por chequeo de Origin) sin que se note por qué.
+   */
+  void resyncAllowedOrigins(String allowedOrigins) {
+    this.allowedOrigins = allowedOrigins;
     updatedAt = OffsetDateTime.now();
   }
 
@@ -221,6 +239,7 @@ public class AgentDeployment {
   public String getThemeTitle() { return themeTitle; }
   public String getThemeSubtitle() { return themeSubtitle; }
   public String getThemeAvatarKey() { return themeAvatarKey; }
+  public String getThemeBubbleAnimation() { return themeBubbleAnimation; }
 
   public void applyAvatar(String avatarKey) {
     this.themeAvatarKey = avatarKey;

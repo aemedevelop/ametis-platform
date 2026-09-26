@@ -30,7 +30,10 @@ public record DeploymentTheme(
 
     @Size(max = 160) String subtitle,
 
-    String avatarUrl) {
+    String avatarUrl,
+
+    @Pattern(regexp = "^(none|bounce|float|ring)$", message = "error.deploymentThemeBubbleAnimationInvalid")
+    String bubbleAnimation) {
 
   static DeploymentTheme from(AgentDeployment deployment, String avatarUrl) {
     return new DeploymentTheme(
@@ -39,12 +42,13 @@ public record DeploymentTheme(
         deployment.getThemePosition(),
         deployment.getThemeTitle(),
         deployment.getThemeSubtitle(),
-        avatarUrl);
+        avatarUrl,
+        deployment.getThemeBubbleAnimation());
   }
 
   boolean isEmpty() {
     return blank(primaryColor) && blank(font) && blank(position)
-        && blank(title) && blank(subtitle) && blank(avatarUrl);
+        && blank(title) && blank(subtitle) && blank(avatarUrl) && blank(bubbleAnimation);
   }
 
   private static boolean blank(String value) {

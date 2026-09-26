@@ -13,6 +13,8 @@
  * estilos viven dentro de un Shadow DOM aislado.
  */
 
+type BubbleAnimation = "none" | "bounce" | "float" | "ring";
+
 type DeploymentTheme = {
   primaryColor: string | null;
   font: string | null;
@@ -20,7 +22,11 @@ type DeploymentTheme = {
   title: string | null;
   subtitle: string | null;
   avatarUrl: string | null;
+  bubbleAnimation: BubbleAnimation | null;
 };
+
+const DEFAULT_BUBBLE_ANIMATION: BubbleAnimation = "bounce";
+const BUBBLE_ANIMATIONS: BubbleAnimation[] = ["none", "bounce", "float", "ring"];
 
 const FONT_STACKS: Record<string, string> = {
   system: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
@@ -107,8 +113,9 @@ const WIDGET_CSS = `
   .bubble img { width: 100%; height: 100%; border-radius: 9999px; object-fit: cover; }
   .bubble [data-bubble-icon] { display: inline-flex; align-items: center; justify-content: center; width: 100%; height: 100%; }
 
-  /* Llamada a la atención: rebote de pelota (con "aplastado" al tocar el suelo) mientras el chat está cerrado. */
-  .bubble.attention { animation: amw-launcher-bounce 1.8s infinite; transform-origin: bottom center; }
+  /* Llamadas a la atención de la burbuja cerrada -- una de cuatro, elegida
+     en la pantalla de apariencia (theme.bubbleAnimation). "none" no anima. */
+  .bubble.anim-bounce { animation: amw-launcher-bounce 1.8s infinite; transform-origin: bottom center; }
   @keyframes amw-launcher-bounce {
     0%, 100% { transform: translateY(0) scale(1.18, .82); animation-timing-function: cubic-bezier(0,0,.2,1); }
     12% { transform: translateY(0) scale(1, 1); animation-timing-function: cubic-bezier(.8,0,1,1); }
@@ -116,6 +123,25 @@ const WIDGET_CSS = `
     50% { transform: translateY(-20%) scale(1, 1); animation-timing-function: cubic-bezier(.8,0,1,1); }
     65% { transform: translateY(-15%) scale(.94, 1.06); animation-timing-function: cubic-bezier(0,0,.2,1); }
     88% { transform: translateY(0) scale(1, 1); animation-timing-function: cubic-bezier(.8,0,1,1); }
+  }
+
+  /* Sube y baja: flotación vertical suave, sin achatarse. */
+  .bubble.anim-float { animation: amw-launcher-float 2.6s ease-in-out infinite; }
+  @keyframes amw-launcher-float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+  }
+
+  /* Timbre periódico: quieta la mayor parte del ciclo, con un pequeño
+     temblor de campana cada tanto. */
+  .bubble.anim-ring { animation: amw-launcher-ring 2.4s ease-in-out infinite; transform-origin: top center; }
+  @keyframes amw-launcher-ring {
+    0%, 88%, 100% { transform: rotate(0deg); }
+    90% { transform: rotate(-13deg); }
+    92% { transform: rotate(10deg); }
+    94% { transform: rotate(-7deg); }
+    96% { transform: rotate(4deg); }
+    98% { transform: rotate(-2deg); }
   }
   .bubble-ping, .bubble-dot {
     position: absolute; top: -2px; right: -2px; width: .65rem; height: .65rem; border-radius: 9999px;
@@ -254,6 +280,7 @@ class AmetisWidget {
   private launcherEl!: HTMLButtonElement;
   private brandIconEl!: HTMLElement;
   private open = false;
+  private bubbleAnimation: BubbleAnimation = DEFAULT_BUBBLE_ANIMATION;
   private loaded = false;
   private sending = false;
   private suggestedQuestions: string[] = [];
@@ -305,7 +332,7 @@ class AmetisWidget {
           <button class="send" type="submit" data-send aria-label="${this.strings.sendLabel}">${ICONS.send}</button>
         </form>
       </div>
-      <button class="bubble attention" type="button" data-launcher aria-label="${this.strings.launcherLabel}">
+      <button class="bubble" type="button" data-launcher aria-label="${this.strings.launcherLabel}">
         <span data-bubble-icon>${ICONS.message}</span>
         <span class="bubble-ping" data-launcher-badge aria-hidden="true"></span>
         <span class="bubble-dot" data-launcher-badge aria-hidden="true"></span>
@@ -360,9 +387,11 @@ class AmetisWidget {
   private toggle(force?: boolean): void {
     this.open = force ?? !this.open;
     this.windowEl.classList.toggle("open", this.open);
-    // El rebote y el punto de aviso solo tienen sentido con el chat cerrado;
-    // reaparecen cada vez que se vuelve a cerrar.
-    this.launcherEl.classList.toggle("attention", !this.open);
+    // La animación de la burbuja y el punto de aviso solo tienen sentido con
+    // el chat cerrado; reaparecen cada vez que se vuelve a cerrar.
+    for (const animation of BUBBLE_ANIMATIONS) {
+      this.launcherEl.classList.toggle(`anim-${animation}`, !this.open && this.bubbleAnimation === animation);
+    }
     this.launcherEl.querySelectorAll("[data-launcher-badge]").forEach((el) => {
       (el as HTMLElement).hidden = this.open;
     });
@@ -389,6 +418,13 @@ class AmetisWidget {
 
     this.rootEl.classList.toggle("left", (theme && theme.position) === "bottom-left");
     this.applyAvatar(theme && theme.avatarUrl ? theme.avatarUrl : null);
+
+    this.bubbleAnimation = (theme && theme.bubbleAnimation) || DEFAULT_BUBBLE_ANIMATION;
+    // El tema puede llegar (loadInfo) después del primer render de la
+    // burbuja; reaplica las clases de animación con el valor ya resuelto.
+    for (const animation of BUBBLE_ANIMATIONS) {
+      this.launcherEl.classList.toggle(`anim-${animation}`, !this.open && this.bubbleAnimation === animation);
+    }
   }
 
   /**

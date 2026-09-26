@@ -136,6 +136,7 @@ export type DeploymentStatus = "ACTIVE" | "INACTIVE";
 
 export type DeploymentFont = "system" | "serif" | "mono" | "humanist";
 export type DeploymentPosition = "bottom-right" | "bottom-left";
+export type DeploymentBubbleAnimation = "none" | "bounce" | "float" | "ring";
 
 export type DeploymentTheme = {
   primaryColor: string | null;
@@ -144,6 +145,7 @@ export type DeploymentTheme = {
   title: string | null;
   subtitle: string | null;
   avatarUrl: string | null;
+  bubbleAnimation: DeploymentBubbleAnimation | null;
 };
 
 export type AgentDeployment = {
@@ -562,6 +564,7 @@ export function updateDeploymentAppearance(id: string, theme: {
   position?: DeploymentPosition;
   title?: string;
   subtitle?: string;
+  bubbleAnimation?: DeploymentBubbleAnimation;
 }) {
   return apiFetch<AgentDeployment>(`/api/agent-factory/deployments/${id}/appearance`, {
     method: "PATCH",

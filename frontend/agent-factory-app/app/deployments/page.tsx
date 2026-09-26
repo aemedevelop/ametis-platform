@@ -28,7 +28,10 @@ const DEPLOYMENT_FORM_TOUR_STEPS: TourStep[] = [
   { selector: "[data-tour='deployment-field-slug']", titleKey: "tour.deployments.slug.title", descriptionKey: "tour.deployments.slug.description" },
   { selector: "[data-tour='deployment-field-welcome']", titleKey: "tour.deployments.welcome.title", descriptionKey: "tour.deployments.welcome.description" },
   { selector: "[data-tour='deployment-field-rate-limits']", titleKey: "tour.deployments.rateLimits.title", descriptionKey: "tour.deployments.rateLimits.description" },
-  { selector: "[data-tour='deployment-field-origins']", titleKey: "tour.deployments.origins.title", descriptionKey: "tour.deployments.origins.description" }
+  { selector: "[data-tour='deployment-field-origins']", titleKey: "tour.deployments.origins.title", descriptionKey: "tour.deployments.origins.description" },
+  { selector: "[data-tour='deployment-field-test-chat']", titleKey: "tour.deployments.testChat.title", descriptionKey: "tour.deployments.testChat.description" },
+  { selector: "[data-tour='deployment-status-badge']", titleKey: "tour.deployments.statusBadge.title", descriptionKey: "tour.deployments.statusBadge.description" },
+  { selector: "[data-tour='deployment-list-toggle']", titleKey: "tour.deployments.listToggle.title", descriptionKey: "tour.deployments.listToggle.description" }
 ];
 
 type FormState = {
@@ -464,7 +467,7 @@ export default function DeploymentsPage() {
           </label>
           {editingId ? <p className="muted-copy">{t("deployments.statusHelp")}</p> : null}
 
-          <div className="test-chat-toggle-row">
+          <div className="test-chat-toggle-row" data-tour="deployment-field-test-chat">
             <button
               type="button"
               className={`toggle-switch ${testChatTarget?.key === formTestChatKey ? "on" : ""}`}
@@ -516,6 +519,7 @@ export default function DeploymentsPage() {
                       <button
                         className="agent-toggle"
                         type="button"
+                        data-tour="deployment-list-toggle"
                         onClick={() => toggleExpanded(deployment.id)}
                         aria-expanded={expanded}
                         aria-controls={`deployment-panel-${deployment.id}`}
@@ -530,7 +534,7 @@ export default function DeploymentsPage() {
                         </span>
                       </button>
                       <div className="agent-collapsed-meta">
-                        <span className={`status-badge ${deployment.status === "ACTIVE" ? "stored" : "inactive"}`}>
+                        <span className={`status-badge ${deployment.status === "ACTIVE" ? "stored" : "inactive"}`} data-tour="deployment-status-badge">
                           {t(`deployments.status.${deployment.status.toLowerCase()}`)}
                         </span>
                         {deployment.channelType === "WEB_CHAT" ? (

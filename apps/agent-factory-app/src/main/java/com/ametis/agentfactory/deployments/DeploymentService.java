@@ -283,8 +283,23 @@ public class DeploymentService {
     }
 
     if (existing != null) {
+      boolean changed = false;
       if (agent != null && !existing.getAgentId().equals(agent.getId())) {
         existing.repointAgent(agent.getId());
+        changed = true;
+      }
+      // El origen permitido se resincroniza en cada uso (no solo al crear):
+      // si AGENT_FACTORY_WEB_URL cambió (o no estaba bien puesta la primera
+      // vez que se creó este despliegue), lo corrige solo en vez de dejar el
+      // widget respondiendo 403 para siempre.
+      if (!platformWebOrigin.isBlank()) {
+        String expectedOrigins = DeploymentOrigins.normalize(List.of(platformWebOrigin));
+        if (!expectedOrigins.equals(existing.getAllowedOrigins())) {
+          existing.resyncAllowedOrigins(expectedOrigins);
+          changed = true;
+        }
+      }
+      if (changed) {
         existing = deploymentRepository.save(existing);
       }
       return toResponse(existing, agent);

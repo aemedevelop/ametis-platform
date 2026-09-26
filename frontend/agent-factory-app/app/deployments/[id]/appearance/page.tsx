@@ -7,6 +7,7 @@ import { useT } from "@/components/IntlProviderClient";
 import {
   AgentDeployment,
   AgentFactoryApiError,
+  DeploymentBubbleAnimation,
   DeploymentFont,
   DeploymentPosition,
   deleteDeploymentAvatar,
@@ -21,6 +22,7 @@ const DEFAULT_COLOR = "#1e3a8a";
 const PALETTE = ["#1e3a8a", "#0369a1", "#0f766e", "#4d7c0f", "#b45309", "#be123c", "#7c3aed", "#334155"];
 const FONTS: DeploymentFont[] = ["system", "humanist", "serif", "mono"];
 const POSITIONS: DeploymentPosition[] = ["bottom-right", "bottom-left"];
+const BUBBLE_ANIMATIONS: DeploymentBubbleAnimation[] = ["bounce", "float", "ring", "none"];
 
 const WIDGET_SRC = `${process.env.NEXT_PUBLIC_AGENT_FACTORY_API_BASE_URL ?? "http://localhost:8440"}/api/agent-factory/public/widget.js`;
 
@@ -54,6 +56,7 @@ export default function AppearancePage() {
   const [position, setPosition] = useState<DeploymentPosition | "">("");
   const [title, setTitle] = useState("");
   const [subtitle, setSubtitle] = useState("");
+  const [bubbleAnimation, setBubbleAnimation] = useState<DeploymentBubbleAnimation | "">("");
   const [avatarUploading, setAvatarUploading] = useState(false);
 
   const load = useCallback(async () => {
@@ -68,6 +71,7 @@ export default function AppearancePage() {
         setPosition((found.theme.position ?? "") as DeploymentPosition | "");
         setTitle(found.theme.title ?? "");
         setSubtitle(found.theme.subtitle ?? "");
+        setBubbleAnimation((found.theme.bubbleAnimation ?? "") as DeploymentBubbleAnimation | "");
       }
     } catch (requestError) {
       setError(requestError);
@@ -87,12 +91,13 @@ export default function AppearancePage() {
       position: position || null,
       title: title.trim() || null,
       subtitle: subtitle.trim() || null,
-      avatarUrl: deployment?.theme?.avatarUrl ?? null
+      avatarUrl: deployment?.theme?.avatarUrl ?? null,
+      bubbleAnimation: bubbleAnimation || null
     },
     welcomeMessage: deployment?.welcomeMessage ?? "Hola 👋 ¿En qué puedo ayudarte?",
     agentName: deployment?.agentName ?? "Asistente",
     deploymentName: deployment?.name ?? ""
-  }), [color, font, position, title, subtitle, deployment]);
+  }), [color, font, position, title, subtitle, bubbleAnimation, deployment]);
 
   const postPreview = useCallback(() => {
     iframeRef.current?.contentWindow?.postMessage({ type: "ametis-preview", payload: previewPayload }, "*");
@@ -120,7 +125,8 @@ export default function AppearancePage() {
         font: font || undefined,
         position: position || undefined,
         title: title.trim() || undefined,
-        subtitle: subtitle.trim() || undefined
+        subtitle: subtitle.trim() || undefined,
+        bubbleAnimation: bubbleAnimation || undefined
       });
       setDeployment(updated);
       setSavedAt(Date.now());
@@ -166,6 +172,7 @@ export default function AppearancePage() {
     setPosition("");
     setTitle("");
     setSubtitle("");
+    setBubbleAnimation("");
   }
 
   if (loading) {
@@ -273,12 +280,33 @@ export default function AppearancePage() {
             <input value={subtitle} onChange={(event) => setSubtitle(event.target.value)} placeholder={t("appearance.subtitlePlaceholder")} maxLength={160} />
           </label>
 
+          <div className="form-field">
+            <span className="field-label">{t("appearance.bubbleAnimationLabel")}</span>
+            <small className="field-hint">{t("appearance.bubbleAnimationHint")}</small>
+            <div className="bubble-anim-options">
+              {BUBBLE_ANIMATIONS.map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  className={`bubble-anim-option ${(bubbleAnimation || "bounce") === option ? "selected" : ""}`}
+                  onClick={() => setBubbleAnimation(option)}
+                >
+                  <span className={`bubble-anim-demo anim-${option}`} aria-hidden="true">
+                    <svg viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" /></svg>
+                  </span>
+                  <span>{t(`appearance.bubbleAnimation.${option}`)}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="form-actions">
             <button className="secondary-button" type="button" onClick={reset} disabled={saving}>{t("appearance.reset")}</button>
             <button className="primary-button" type="button" onClick={save} disabled={saving}>
               {saving ? t("appearance.saving") : t("appearance.save")}
             </button>
           </div>
+          <Link className="small-action appearance-bottom-back" href="/deployments">{t("appearance.back")}</Link>
         </div>
 
         <div className="appearance-preview">

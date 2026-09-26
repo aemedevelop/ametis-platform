@@ -103,6 +103,80 @@ copian de sus `.example` respectivos y nunca se suben a Git (ya cubiertos por
 [[ametis-secrets-per-tenant-llm-key]] en la memoria de Claude para el
 contexto de por que este entorno existe.
 
+### Gotcha: Kong se queda con la IP vieja tras un redeploy (502 en /v1/... o /api/agent-factory/...)
+
+`infra/kong/kong.yml` apunta a los servicios por **nombre de contenedor**
+(`http://ametis-core-api:8080`, `http://ametis-agent-factory-app:8083`) --
+en `pre` esto funciona porque `ametis-pre-core-api`/`ametis-pre-agent-factory-app`
+tienen un alias de red con ese mismo nombre generico, asi el mismo `kong.yml`
+sirve para prod y para pre sin parametrizar nada.
+
+El problema: Kong resuelve ese nombre a una IP y la cachea. Si `core-api` o
+`agent-factory-app` se recrean (redeploy, `docker compose up -d --build`) sin
+reiniciar Kong, Docker les asigna una IP nueva pero Kong sigue mandando
+trafico a la IP vieja -> `502 Bad Gateway` / `connect() failed (111: Connection
+refused)` en los logs de Kong, aunque el contenedor nuevo este "Up" y sano.
+
+Diagnostico rapido:
+```bash
+docker logs --tail 100 ametis-pre-kong | grep "connect() failed"
+docker inspect ametis-pre-core-api --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}'
+```
+Si la IP del log no coincide con la del `inspect`, es esto.
+
+Arreglo (no requiere tocar ningun archivo):
+```bash
+docker restart ametis-pre-kong   # o ametis-kong en produccion
+```
+
+**Regla practica**: despues de cualquier redeploy que recree `core-api` o
+`agent-factory-app` (en pre o en produccion), reiniciar tambien el `kong` de
+ese mismo entorno.
+
+### Gotcha: despliegue de prueba fijo (`workspace-test`) con Origin viejo -> 403 en el widget
+
+El despliegue interno `workspace-test` (usado por el toggle "Probar chat en
+vivo" del panel de despliegues) se autoaprovisiona la primera vez que se
+pide, con `allowedOrigins` = `AGENT_FACTORY_WEB_URL` en ese momento. Si se
+creo ANTES de que esa variable estuviera bien puesta en el entorno (o si el
+dominio cambia mas adelante), queda con el origen viejo guardado para
+siempre -> el widget responde `403` (`GET /api/agent-factory/public/<id>`)
+y el chat se queda pensando / muestra "No se pudo conectar con el servidor".
+
+Diagnostico:
+```bash
+docker logs --tail 60 ametis-pre-agent-factory-app | grep "public/"   # busca el 403
+docker exec ametis-pre-agent-factory-app env | grep AGENT_FACTORY_WEB_URL
+```
+Si la variable de entorno ya esta correcta pero el 403 persiste, es esto:
+el despliegue ya existente tiene el origen viejo grabado en la base.
+
+Arreglo manual (mientras el fix de codigo de abajo no este desplegado):
+borrar el despliegue "Chat de prueba del workspace" desde el listado y
+volver a activar el chat de prueba -- se recrea con el origen correcto.
+
+Arreglo de fondo (ya en el codigo, agregado 2026-09-26, pendiente de
+desplegar a pre/produccion): `DeploymentService.getOrCreateWorkspaceTestDeployment`
+ahora resincroniza `allowedOrigins` con `AGENT_FACTORY_WEB_URL` en CADA uso,
+no solo al crear -- se autocorrige solo, sin necesidad de borrar nada.
+
+## Incidente 2026-09-26 en pre: resumen de lo que hubo que hacer
+
+Contexto: se desplego a `develop`/pre la funcionalidad de despliegues en
+borrador/publicado + chat de prueba en vivo. Dos cosas se rompieron:
+
+1. **Login roto (502 en `/v1/auth/code/exchange`)**: Kong (`ametis-pre-kong`,
+   6 dias sin reiniciarse) se quedo con la IP vieja de `ametis-pre-core-api`
+   tras el redeploy. Arreglo: `docker restart ametis-pre-kong`.
+2. **Widget de prueba con 403**: el despliegue fijo `workspace-test` se
+   habia creado (en una prueba anterior) con `allowedOrigins` apuntando a
+   `localhost` en vez del dominio real de pre. Arreglo manual: borrarlo
+   desde el listado para que se recreara con el origen correcto. Arreglo de
+   fondo en codigo (ver gotcha arriba): pendiente de desplegar.
+
+Ninguno de los dos fue un bug del feature en si -- ambos son gotchas de
+infraestructura que ya quedaron documentados arriba para la proxima vez.
+
 ## VPS Platform Start
 
 Run from `/opt/ametis-platform`:
