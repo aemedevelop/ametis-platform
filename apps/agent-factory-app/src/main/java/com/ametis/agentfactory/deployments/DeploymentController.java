@@ -35,6 +35,22 @@ public class DeploymentController {
     return deploymentService.list(tenantId);
   }
 
+  /**
+   * Despliegue de prueba fijo del workspace (uno por tenant, mismo
+   * {@code publicId} siempre) — usado por el toggle de prueba en el
+   * formulario de despliegues para cargar el widget real dentro de la
+   * propia plataforma. Se crea la primera vez que se pide. Si se manda
+   * {@code agentId} (el agente seleccionado en el formulario), el
+   * despliegue se reapunta a ese agente.
+   */
+  @GetMapping("/deployments/workspace-test")
+  public DeploymentResponse workspaceTest(
+      @RequestParam(required = false) UUID agentId,
+      JwtAuthenticationToken authentication) {
+    UUID tenantId = accessGuard.requireAccess(authentication, AccessGuard.DOCUMENTS_MANAGE);
+    return deploymentService.getOrCreateWorkspaceTestDeployment(tenantId, accessGuard.currentUserId(authentication), agentId);
+  }
+
   @PostMapping("/deployments")
   public ResponseEntity<DeploymentResponse> create(
       @Valid @RequestBody DeploymentRequest request,

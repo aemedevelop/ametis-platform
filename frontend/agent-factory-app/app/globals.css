@@ -218,12 +218,70 @@ tbody tr:last-child td { border-bottom: 0; }
 .status-badge { display: inline-flex; padding: 5px 8px; border-radius: 999px; font-size: 11px; font-weight: 800; }
 .status-badge.stored { border: 1px solid color-mix(in srgb, var(--success) 36%, var(--line)); background: color-mix(in srgb, var(--success) 14%, transparent); color: var(--success); }
 .status-badge.inactive { border: 1px solid color-mix(in srgb, var(--muted) 28%, var(--line)); background: color-mix(in srgb, var(--bg-soft) 58%, transparent); color: var(--muted); }
+
+.field-error { display: block; margin-top: 4px; color: var(--danger); font-size: 12px; }
+
+.test-chat-toggle-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 0 4px; }
+.toggle-switch { display: inline-flex; align-items: center; gap: 8px; background: none; border: none; padding: 0; cursor: pointer; }
+.toggle-switch:disabled { cursor: not-allowed; opacity: .5; }
+.toggle-switch-track {
+  position: relative; width: 36px; height: 20px; border-radius: 999px; flex: none;
+  border: 1px solid color-mix(in srgb, var(--muted) 30%, var(--line));
+  background: color-mix(in srgb, var(--bg-soft) 60%, transparent);
+  transition: background .16s ease, border-color .16s ease;
+}
+.toggle-switch-track::after {
+  content: ""; position: absolute; top: 1px; left: 1px; width: 16px; height: 16px; border-radius: 50%;
+  background: var(--panel-bg-solid, var(--panel-bg)); box-shadow: 0 1px 3px rgba(2,6,16,.4);
+  transition: transform .16s ease;
+}
+.toggle-switch.on .toggle-switch-track { border-color: color-mix(in srgb, var(--success) 40%, var(--line)); background: color-mix(in srgb, var(--success) 30%, transparent); }
+.toggle-switch.on .toggle-switch-track::after { transform: translateX(16px); }
+.toggle-switch:focus-visible .toggle-switch-track { outline: 3px solid #2f6ed5; outline-offset: 2px; }
+.toggle-switch-label { font-size: 12px; font-weight: 800; color: var(--muted); }
+.toggle-switch.on .toggle-switch-label { color: var(--success); }
+
+.test-chat-stage {
+  position: fixed; z-index: 900; right: 20px; bottom: 20px;
+  /* Por defecto, del tamaño de la burbuja cerrada -- no de la ventana
+     completa -- para no tapar la lista mientras el chat no está en uso.
+     Más margen del que ocupa la burbuja en reposo (56px + 20px de margen
+     interno = 76px) porque su animación de "llamar la atención" la agranda
+     y la mueve un poco (scale/translateY) mientras rebota. */
+  width: 110px; height: 110px;
+  transition: width .18s ease, height .18s ease;
+  /* pointer-events: none para que el hueco vacío de esta caja no tape clics
+     sobre lo que haya debajo (tarjetas de la lista). El widget real, dentro,
+     se ve y funciona igual: su Shadow DOM resetea pointer-events a "auto" en
+     su propio host (:host{all:initial}) sin importar lo que diga aquí. Al
+     forzar su elemento raíz a "position: absolute" (ver deployments/page.tsx),
+     este mismo div (position: fixed) ya sirve de bloque de contención y de
+     recorte -- no hace falta ningún truco extra de transform.
+  */
+  overflow: hidden; pointer-events: none; background: transparent; border: 0;
+}
+/* Crece al tamaño real de la ventana de conversación SOLO mientras está
+   abierta (ver el MutationObserver en deployments/page.tsx que sincroniza
+   esta clase con la clase "open" de la ventana del widget). */
+.test-chat-stage.open {
+  /* La ventana del widget puede pedir hasta 24rem (384px) de ancho y 40rem
+     (640px) de alto, más su propio margen interno de 1.25rem (20px) contra
+     cada borde -- de ahí el margen extra aquí para que no quede recortada. */
+  width: min(460px, calc(100vw - 40px)); height: min(700px, calc(100vh - 40px));
+}
+.test-chat-stage[hidden] { display: none; }
+
 .document-actions { display: flex; justify-content: flex-end; gap: 6px; min-width: 108px; }
 .icon-button { display: inline-grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 1px solid var(--line); border-radius: 9px; background: color-mix(in srgb, var(--bg-soft) 80%, transparent); color: var(--blue); font-weight: 800; text-decoration: none; }
 .icon-button svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
 .icon-button:hover { border-color: #8fabe0; background: var(--blue-soft); }
+.icon-button:disabled { cursor: wait; opacity: .55; }
 .icon-button.danger { color: var(--danger); }
 .icon-button.danger:hover { border-color: color-mix(in srgb, var(--danger) 55%, var(--line)); background: color-mix(in srgb, var(--danger) 12%, transparent); }
+.icon-button.publish { color: var(--success); border-color: color-mix(in srgb, var(--success) 36%, var(--line)); }
+.icon-button.publish:hover { border-color: color-mix(in srgb, var(--success) 55%, var(--line)); background: color-mix(in srgb, var(--success) 14%, transparent); }
+.icon-button.active { color: #fff; border-color: transparent; background: var(--blue); }
+.icon-button.active:hover { background: color-mix(in srgb, var(--blue) 85%, #000); }
 .small-action { border: 1px solid color-mix(in srgb, var(--blue) 45%, var(--line)); border-radius: 999px; background: var(--blue-soft); color: var(--blue); padding: 8px 12px; font-size: 12px; font-weight: 800; cursor: pointer; }
 .small-action:disabled { cursor: not-allowed; opacity: .55; }
 .empty-state { display: grid; justify-items: center; padding: 48px; border: 1px dashed #c8d5e6; border-radius: 14px; color: var(--muted); text-align: center; }
@@ -288,13 +346,15 @@ tbody tr:last-child td { border-bottom: 0; }
 .knowledge-item small { color: color-mix(in srgb, var(--muted) 78%, transparent); font-size: 11px; }
 .agent-inventory-item { grid-template-columns: 1fr; gap: 14px; padding: 14px; }
 .base-inventory-item { grid-template-columns: 1fr; gap: 14px; padding: 14px; }
+.deployment-inventory-item { grid-template-columns: 1fr; gap: 14px; padding: 14px; }
 .agent-inventory-header { display: grid; grid-template-columns: minmax(0, 1fr) minmax(150px, 220px); gap: 14px; align-items: center; }
 .agent-toggle { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 12px; align-items: center; width: 100%; min-height: 58px; padding: 0; border: 0; background: transparent; color: var(--ink); text-align: left; cursor: pointer; }
 .agent-toggle-icon { display: grid; place-items: center; width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 9px; background: color-mix(in srgb, var(--panel-bg) 78%, transparent); color: var(--blue); transition: background .16s ease, border-color .16s ease, transform .16s ease; }
 .agent-toggle-icon svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; transition: transform .18s ease; }
 .agent-toggle:hover .agent-toggle-icon, .agent-toggle:focus-visible .agent-toggle-icon { border-color: color-mix(in srgb, var(--blue) 46%, var(--line)); background: var(--blue-soft); }
 .agent-toggle:focus-visible { outline: 3px solid rgba(47,140,255,.18); outline-offset: 4px; border-radius: 10px; }
-.agent-inventory-item.expanded .agent-toggle-icon svg { transform: rotate(180deg); }
+.agent-inventory-item.expanded .agent-toggle-icon svg,
+.deployment-inventory-item.expanded .agent-toggle-icon svg { transform: rotate(180deg); }
 .agent-toggle-copy { display: grid; gap: 5px; min-width: 0; }
 .agent-toggle-copy strong { overflow: hidden; color: var(--ink); font-size: 16px; font-weight: 820; text-overflow: ellipsis; white-space: nowrap; }
 .agent-toggle-copy small { overflow: hidden; color: var(--muted); font-size: 12px; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
@@ -550,6 +610,7 @@ tbody tr:last-child td { border-bottom: 0; }
 .tour-help-button:focus-visible { outline: 3px solid #2f6ed5; outline-offset: 2px; }
 .section-heading-inline { display: flex; align-items: center; gap: 8px; }
 .section-heading-inline h2 { margin: 0; }
+
 
 .tour-overlay { position: fixed; inset: 0; z-index: 500; }
 .tour-mask {

@@ -74,5 +74,11 @@ agent-factory:
   public:
     base-url: ${AGENT_FACTORY_PUBLIC_BASE_URL:http://localhost:8440/api/agent-factory/public}
     widget-url: ${AGENT_FACTORY_PUBLIC_WIDGET_URL:${agent-factory.public.base-url}/widget.js}
+    # Origen propio del frontend de la plataforma (mismo valor que
+    # NEXT_PUBLIC_APP_URL del build de agent-factory-web). Se usa solo para
+    # el despliegue de prueba interno del workspace, como su unico "origen
+    # permitido" -- asi el widget real, cargado dentro de la propia app,
+    # pasa el chequeo de Origin normal sin ningun atajo de seguridad.
+    web-app-origin: ${AGENT_FACTORY_WEB_URL:http://localhost:3200}
   cors:
     allowed-origin-patterns: ${AGENT_FACTORY_CORS_ALLOWED_ORIGIN_PATTERNS:http://localhost:*,http://127.0.0.1:*,https://localhost:*,https://127.0.0.1:*}

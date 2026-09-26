@@ -14,6 +14,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,23 +27,33 @@ public class DeploymentService {
   private static final Set<String> SUPPORTED_AVATAR_TYPES =
       Set.of("image/png", "image/jpeg", "image/webp", "image/svg+xml");
 
+  /**
+   * Slug reservado del despliegue de prueba interno: uno por tenant, fijo,
+   * autoaprovisionado. No es seleccionable al crear un despliegue normal
+   * (ver {@link #normalizeSlug}).
+   */
+  static final String WORKSPACE_TEST_SLUG = "workspace-test";
+
   private final AgentDeploymentRepository deploymentRepository;
   private final AgentRepository agentRepository;
   private final DeploymentEndpoints deploymentEndpoints;
   private final StorageProvider storageProvider;
   private final RepositoryBindingRepository repositoryBindingRepository;
+  private final String platformWebOrigin;
 
   public DeploymentService(
       AgentDeploymentRepository deploymentRepository,
       AgentRepository agentRepository,
       DeploymentEndpoints deploymentEndpoints,
       StorageProvider storageProvider,
-      RepositoryBindingRepository repositoryBindingRepository) {
+      RepositoryBindingRepository repositoryBindingRepository,
+      @Value("${agent-factory.public.web-app-origin:}") String platformWebOrigin) {
     this.deploymentRepository = deploymentRepository;
     this.agentRepository = agentRepository;
     this.deploymentEndpoints = deploymentEndpoints;
     this.storageProvider = storageProvider;
     this.repositoryBindingRepository = repositoryBindingRepository;
+    this.platformWebOrigin = platformWebOrigin == null ? "" : platformWebOrigin.trim();
   }
 
   private DeploymentResponse toResponse(AgentDeployment deployment, AgentDefinition agent) {
@@ -233,6 +244,68 @@ public class DeploymentService {
     if (normalized.isBlank()) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "error.deploymentSlugRequired");
     }
+    if (normalized.equals(WORKSPACE_TEST_SLUG)) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "error.deploymentSlugReserved");
+    }
     return normalized.substring(0, Math.min(normalized.length(), 80));
+  }
+
+  /**
+   * Devuelve el despliegue de prueba fijo del workspace (uno por tenant,
+   * siempre el mismo {@code publicId}), creándolo la primera vez que se pide.
+   * Se sirve por el mismo camino público que cualquier despliegue real -- la
+   * única diferencia es que sus "orígenes permitidos" ya incluyen el propio
+   * dominio de la plataforma, para que el widget cargado dentro de la propia
+   * app pase el chequeo de {@code Origin} sin trato especial. Nace publicado
+   * (no en borrador) porque su único propósito es responder de verdad.
+   *
+   * <p>Si se indica {@code requestedAgentId} (el agente que el usuario tiene
+   * seleccionado en ese momento en el formulario de alta/edición), el
+   * despliegue se reapunta a ese agente en caliente -- así el widget, con el
+   * mismo {@code publicId} de siempre, siempre conversa con el agente que se
+   * está probando en el formulario.
+   */
+  @Transactional
+  public DeploymentResponse getOrCreateWorkspaceTestDeployment(UUID tenantId, UUID userId, UUID requestedAgentId) {
+    AgentDeployment existing = deploymentRepository
+        .findByTenantIdAndDeploymentSlugIgnoreCase(tenantId, WORKSPACE_TEST_SLUG)
+        .orElse(null);
+
+    AgentDefinition agent;
+    if (requestedAgentId != null) {
+      agent = requireReadyAgent(tenantId, requestedAgentId);
+    } else if (existing != null) {
+      agent = agentRepository.findByIdAndTenantId(existing.getAgentId(), tenantId).orElse(null);
+    } else {
+      agent = agentRepository
+          .findFirstByTenantIdAndStatusOrderByUpdatedAtDesc(tenantId, AgentStatus.READY)
+          .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "error.workspaceTestRequiresReadyAgent"));
+    }
+
+    if (existing != null) {
+      if (agent != null && !existing.getAgentId().equals(agent.getId())) {
+        existing.repointAgent(agent.getId());
+        existing = deploymentRepository.save(existing);
+      }
+      return toResponse(existing, agent);
+    }
+
+    if (platformWebOrigin.isBlank()) {
+      throw new ResponseStatusException(HttpStatus.CONFLICT, "error.workspaceTestOriginNotConfigured");
+    }
+    AgentDeployment deployment = AgentDeployment.create(
+        tenantId,
+        agent.getId(),
+        "Chat de prueba del workspace",
+        DeploymentChannelType.WEB_CHAT,
+        WORKSPACE_TEST_SLUG,
+        null,
+        null,
+        null,
+        null,
+        DeploymentOrigins.normalize(List.of(platformWebOrigin)),
+        userId);
+    deployment.activate();
+    return toResponse(deploymentRepository.save(deployment), agent);
   }
 }

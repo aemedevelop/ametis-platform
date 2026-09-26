@@ -490,6 +490,15 @@ export function fetchDeployments() {
   return apiFetch<AgentDeployment[]>("/api/agent-factory/deployments");
 }
 
+/**
+ * Despliegue de prueba fijo del workspace (uno por tenant); se autocrea la
+ * primera vez que se pide. Si se pasa `agentId`, se reapunta a ese agente.
+ */
+export function fetchWorkspaceTestDeployment(agentId?: string) {
+  const query = agentId ? `?agentId=${encodeURIComponent(agentId)}` : "";
+  return apiFetch<AgentDeployment>(`/api/agent-factory/deployments/workspace-test${query}`);
+}
+
 export function createDeployment(input: {
   agentId: string;
   name: string;

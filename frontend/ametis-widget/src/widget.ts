@@ -270,6 +270,11 @@ class AmetisWidget {
   mount(): void {
     const host = document.createElement("div");
     host.style.all = "initial";
+    // Marca el host para que un embebedor externo (p. ej. el probador de chat
+    // en vivo del panel de administración) pueda ubicarlo y retirarlo con
+    // precisión, sin tener que adivinar cuál nodo recién agregado a <body> es
+    // el suyo.
+    host.setAttribute("data-ametis-widget-host", this.publicId);
     document.body.appendChild(host);
     this.shadow = host.attachShadow({ mode: "open" });
 

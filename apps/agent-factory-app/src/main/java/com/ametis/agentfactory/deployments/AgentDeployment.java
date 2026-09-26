@@ -112,7 +112,9 @@ public class AgentDeployment {
     deployment.name = name;
     deployment.channelType = channelType;
     deployment.deploymentSlug = deploymentSlug;
-    deployment.status = DeploymentStatus.ACTIVE;
+    // Nace en borrador: el usuario configura todo (orígenes, apariencia,
+    // límites) y publica de forma explícita con el switch en el listado.
+    deployment.status = DeploymentStatus.INACTIVE;
     deployment.apiKey = apiKey;
     deployment.welcomeMessage = welcomeMessage;
     deployment.rateLimitPerMinute = rateLimitPerMinute;
@@ -164,6 +166,28 @@ public class AgentDeployment {
     }
     String trimmed = value.trim();
     return trimmed.isEmpty() ? null : trimmed;
+  }
+
+  /**
+   * Fuerza el estado a publicado inmediatamente tras crear. Solo lo usa el
+   * aprovisionamiento del despliegue de prueba fijo del workspace: como su
+   * único propósito es servir el widget real dentro de la propia app, no
+   * tiene sentido que nazca en borrador esperando publicación manual.
+   */
+  void activate() {
+    status = DeploymentStatus.ACTIVE;
+    updatedAt = OffsetDateTime.now();
+  }
+
+  /**
+   * Reapunta el despliegue de prueba fijo a otro agente (p. ej. el que el
+   * usuario tiene seleccionado en ese momento en el formulario de alta). El
+   * {@code publicId} no cambia, así que el widget ya cargado en pantalla
+   * sigue funcionando sin recargar el script.
+   */
+  void repointAgent(UUID agentId) {
+    this.agentId = agentId;
+    updatedAt = OffsetDateTime.now();
   }
 
   /** Rota el identificador público (p. ej. si se filtró el que estaba en uso). */
