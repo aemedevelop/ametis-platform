@@ -97,6 +97,60 @@ public class DeploymentService {
     return toResponse(deploymentRepository.save(deployment), agent);
   }
 
+  /** Todos los despliegues de un agente, listos para exportarse (ver {@link AgentDeploymentExport}). */
+  public List<AgentDeploymentExport> exportForAgent(UUID tenantId, UUID agentId) {
+    return deploymentRepository.findAllByTenantIdAndAgentId(tenantId, agentId).stream()
+        .map(AgentDeploymentExport::from)
+        .toList();
+  }
+
+  /**
+   * Recrea un despliegue exportado bajo un agente nuevo (import entre
+   * entornos). Nace SIEMPRE en borrador -- aunque en el origen estuviera
+   * publicado, hay que revisar orígenes/slug antes de exponerlo de verdad en
+   * el entorno de destino -- y con un slug único (le agrega un sufijo si el
+   * de origen ya está en uso). No requiere que el agente esté publicado: el
+   * despliegue puede quedar configurado a la espera de que se termine de
+   * indexar el conocimiento.
+   */
+  @Transactional
+  public void importDeployment(UUID tenantId, UUID userId, UUID agentId, AgentDeploymentExport item) {
+    String name = requireText(item.name(), "error.deploymentNameRequired");
+    // El slug de origen puede venir vacío o ser el reservado "workspace-test"
+    // (p. ej. si se exportó por error el despliegue de prueba fijo). A
+    // diferencia del alta manual, un import no debe abortar por esto -- se
+    // genera un slug propio a partir del nombre en su lugar.
+    String baseSlug;
+    try {
+      baseSlug = normalizeSlug(item.deploymentSlug());
+    } catch (ResponseStatusException ex) {
+      baseSlug = normalizeSlug(name + "-importado");
+    }
+    String slug = baseSlug;
+    int suffix = 2;
+    while (deploymentRepository.existsByTenantIdAndDeploymentSlugIgnoreCase(tenantId, slug)) {
+      slug = baseSlug + "-" + suffix;
+      suffix++;
+    }
+    DeploymentChannelType channelType = item.channelType() == null ? DeploymentChannelType.WEB_CHAT : item.channelType();
+    AgentDeployment deployment = AgentDeployment.create(
+        tenantId,
+        agentId,
+        name,
+        channelType,
+        slug,
+        null,
+        cleanOptional(item.welcomeMessage()),
+        item.rateLimitPerMinute(),
+        item.rateLimitPerDay(),
+        DeploymentOrigins.normalize(item.allowedOrigins()),
+        userId);
+    if (item.theme() != null) {
+      deployment.applyAppearance(item.theme());
+    }
+    deploymentRepository.save(deployment);
+  }
+
   @Transactional
   public DeploymentResponse update(UUID tenantId, UUID deploymentId, DeploymentRequest request) {
     AgentDeployment deployment = deploymentRepository.findByIdAndTenantId(deploymentId, tenantId)

@@ -24,11 +24,17 @@ public class AgentController {
   private final AccessGuard accessGuard;
   private final BusinessService businessService;
   private final AgentService agentService;
+  private final AgentTransferService agentTransferService;
 
-  public AgentController(AccessGuard accessGuard, BusinessService businessService, AgentService agentService) {
+  public AgentController(
+      AccessGuard accessGuard,
+      BusinessService businessService,
+      AgentService agentService,
+      AgentTransferService agentTransferService) {
     this.accessGuard = accessGuard;
     this.businessService = businessService;
     this.agentService = agentService;
+    this.agentTransferService = agentTransferService;
   }
 
   private Business business(JwtAuthenticationToken authentication, String permission) {
@@ -94,5 +100,26 @@ public class AgentController {
       @Valid @RequestBody AgentTestRequest request,
       JwtAuthenticationToken authentication) {
     return agentService.testAgent(business(authentication, AccessGuard.DOCUMENTS_READ), agentId, request);
+  }
+
+  /**
+   * Exporta el agente (config + todos sus despliegues) como un paquete
+   * portable a otro entorno -- ver {@link AgentTransferService}.
+   */
+  @GetMapping("/agents/{agentId}/export")
+  public AgentExportBundle export(
+      @PathVariable UUID agentId,
+      JwtAuthenticationToken authentication) {
+    return agentTransferService.export(business(authentication, AccessGuard.DOCUMENTS_READ), agentId);
+  }
+
+  /** Crea un agente (y sus despliegues, todos en borrador) a partir de un paquete exportado. */
+  @PostMapping("/agents/import")
+  public ResponseEntity<AgentResponse> importAgent(
+      @RequestBody AgentExportBundle bundle,
+      JwtAuthenticationToken authentication) {
+    Business business = business(authentication, AccessGuard.DOCUMENTS_MANAGE);
+    AgentResponse response = agentTransferService.importBundle(business, accessGuard.currentUserId(authentication), bundle);
+    return ResponseEntity.status(HttpStatus.CREATED).body(response);
   }
 }

@@ -1,9 +1,10 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { ChangeEvent, FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useLocale, useT } from "@/components/IntlProviderClient";
 import {
   AgentDefinition,
+  AgentExportBundle,
   AgentFactoryApiError,
   AgentIndexingJob,
   AssistantTextKey,
@@ -14,10 +15,12 @@ import {
   createAgent,
   createAgentIndexingJobs,
   deleteAgent,
+  fetchAgentExport,
   fetchAgentIndexingJobs,
   fetchAgents,
   fetchKnowledgeBases,
   fetchRepository,
+  importAgentBundle,
   KnowledgeBase,
   publishAgent,
   testAgent,
@@ -107,7 +110,50 @@ export default function AgentsPage() {
   const [testQuestions, setTestQuestions] = useState<Record<string, string>>({});
   const [testResponses, setTestResponses] = useState<Record<string, AgentTestResponse>>({});
   const [error, setError] = useState<unknown>(null);
+  const [exportingId, setExportingId] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const importFileInputRef = useRef<HTMLInputElement>(null);
   const formTour = useTour("agents-form");
+
+  async function exportAgent(agent: AgentDefinition) {
+    setExportingId(agent.id);
+    setError(null);
+    try {
+      const bundle = await fetchAgentExport(agent.id);
+      const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${slugifyFileName(agent.name)}.agent.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (requestError) {
+      setError(requestError);
+    } finally {
+      setExportingId(null);
+    }
+  }
+
+  async function onImportFilePicked(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setImporting(true);
+    setError(null);
+    try {
+      const text = await file.text();
+      const bundle = JSON.parse(text) as AgentExportBundle;
+      const created = await importAgentBundle(bundle);
+      setAgents((current) => [created, ...current]);
+      setExpandedAgentId(created.id);
+    } catch (requestError) {
+      setError(requestError instanceof SyntaxError ? new AgentFactoryApiError(400, "error.agentImportInvalid") : requestError);
+    } finally {
+      setImporting(false);
+    }
+  }
 
   const refreshIndexingJobs = useCallback(async (currentAgents: AgentDefinition[]) => {
     const jobs = await Promise.all(
@@ -346,7 +392,26 @@ export default function AgentsPage() {
           <h2>{t("agents.title")}</h2>
           <p>{t("agents.description")}</p>
         </div>
-        <span className="phase-badge">{t("agents.statusDraft")}</span>
+        <div className="intro-card-actions">
+          <input
+            ref={importFileInputRef}
+            type="file"
+            accept="application/json"
+            hidden
+            onChange={onImportFilePicked}
+            disabled={importing}
+          />
+          <button
+            type="button"
+            className="small-action"
+            onClick={() => importFileInputRef.current?.click()}
+            disabled={importing}
+            title={t("agents.importHint")}
+          >
+            {importing ? t("agents.importing") : t("agents.importAction")}
+          </button>
+          <span className="phase-badge">{t("agents.statusDraft")}</span>
+        </div>
       </section>
 
       {error ? <div className="alert error" role="alert"><strong>{t("operation.failedTitle")}</strong><span>{messageOf(error, t)}</span></div> : null}
@@ -690,6 +755,16 @@ export default function AgentsPage() {
                                     : t("agents.indexKnowledge")}
                               </button>
                             ) : null}
+                            <button
+                              className="icon-button"
+                              type="button"
+                              onClick={() => exportAgent(agent)}
+                              disabled={exportingId === agent.id}
+                              aria-label={t("agents.export", { name: agent.name })}
+                              title={t("agents.export", { name: agent.name })}
+                            >
+                              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" /></svg>
+                            </button>
                             <button className="icon-button" type="button" onClick={() => edit(agent)} disabled={saving && editingAgentId === agent.id} aria-label={t("agents.edit", { name: agent.name })} title={t("agents.edit", { name: agent.name })}>
                               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4l11-11a2.8 2.8 0 0 0-4-4L4 16v4Z" /><path d="M13.5 6.5l4 4" /></svg>
                             </button>
@@ -759,6 +834,15 @@ function FieldLimit({ value, max }: { value: string; max: number }) {
 function messageOf(error: unknown, t: Translate): string {
   if (error instanceof AgentFactoryApiError) return t(error.code, error.variables);
   return t("common.unexpectedError");
+}
+
+function slugifyFileName(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "agente";
 }
 
 function formatDate(value: string, locale: string): string {

@@ -472,6 +472,58 @@ export function publishAgent(id: string) {
   return apiFetch<AgentDefinition>(`/api/agent-factory/agents/${id}/publish`, { method: "POST" });
 }
 
+/**
+ * Paquete portable de un agente (config + todos sus despliegues), para
+ * mover manualmente la configuración entre entornos (p. ej. de pre a
+ * producción) sin tener que rehacerla dos veces. Las bases de conocimiento
+ * no viajan -- solo se listan sus nombres como referencia -- porque los
+ * documentos indexados viven en el storage propio de cada tenant.
+ */
+export type AgentExportDeployment = {
+  name: string;
+  channelType: DeploymentChannelType;
+  deploymentSlug: string;
+  welcomeMessage: string | null;
+  rateLimitPerMinute: number | null;
+  rateLimitPerDay: number | null;
+  allowedOrigins: string[];
+  theme: DeploymentTheme | null;
+};
+
+export type AgentExportBundle = {
+  exportVersion: number;
+  exportedAt: string;
+  agent: {
+    name: string;
+    description: string | null;
+    persona: string | null;
+    targetAudience: string | null;
+    tone: string | null;
+    responseLanguage: string | null;
+    instructions: string | null;
+    suggestedQuestions: string[];
+    assistantTexts: AssistantTexts;
+    suggestedQuestionsCount: number;
+    suggestedQuestionsOrder: SuggestedQuestionsOrder;
+    questionTopics: QuestionTopic[];
+    knowledgeBaseNames: string[];
+  };
+  deployments: AgentExportDeployment[];
+};
+
+export function fetchAgentExport(id: string) {
+  return apiFetch<AgentExportBundle>(`/api/agent-factory/agents/${id}/export`);
+}
+
+/** Crea un agente nuevo (y sus despliegues, todos en borrador) a partir de un paquete exportado. */
+export function importAgentBundle(bundle: AgentExportBundle) {
+  return apiFetch<AgentDefinition>("/api/agent-factory/agents/import", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(bundle)
+  });
+}
+
 export function createAgentIndexingJobs(id: string) {
   return apiFetch<CreateIndexingJobsResponse>(`/api/agent-factory/agents/${id}/indexing-jobs`, { method: "POST" });
 }
