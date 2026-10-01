@@ -144,8 +144,8 @@ export default function AppearancePage() {
     setAvatarUploading(true);
     setError(null);
     try {
-      const updated = await uploadDeploymentAvatar(id, file);
-      setDeployment(updated);
+      const { avatarUrl } = await uploadDeploymentAvatar(id, file);
+      setDeployment((prev) => (prev && prev.theme ? { ...prev, theme: { ...prev.theme, avatarUrl } } : prev));
     } catch (requestError) {
       setError(requestError);
     } finally {
@@ -157,8 +157,8 @@ export default function AppearancePage() {
     setAvatarUploading(true);
     setError(null);
     try {
-      const updated = await deleteDeploymentAvatar(id);
-      setDeployment(updated);
+      const { avatarUrl } = await deleteDeploymentAvatar(id);
+      setDeployment((prev) => (prev && prev.theme ? { ...prev, theme: { ...prev.theme, avatarUrl } } : prev));
     } catch (requestError) {
       setError(requestError);
     } finally {

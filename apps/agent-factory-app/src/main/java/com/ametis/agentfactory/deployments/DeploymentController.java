@@ -79,7 +79,7 @@ public class DeploymentController {
   }
 
   @PostMapping("/deployments/{deploymentId}/appearance/avatar")
-  public DeploymentResponse uploadAvatar(
+  public AvatarResponse uploadAvatar(
       @PathVariable UUID deploymentId,
       @RequestParam("file") MultipartFile file,
       JwtAuthenticationToken authentication) {
@@ -88,7 +88,7 @@ public class DeploymentController {
   }
 
   @DeleteMapping("/deployments/{deploymentId}/appearance/avatar")
-  public DeploymentResponse deleteAvatar(
+  public AvatarResponse deleteAvatar(
       @PathVariable UUID deploymentId,
       JwtAuthenticationToken authentication) {
     UUID tenantId = accessGuard.requireAccess(authentication, AccessGuard.DOCUMENTS_MANAGE);

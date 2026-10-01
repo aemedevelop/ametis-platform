@@ -185,7 +185,7 @@ public class DeploymentService {
   }
 
   @Transactional
-  public DeploymentResponse uploadAvatar(UUID tenantId, UUID deploymentId, MultipartFile file) {
+  public AvatarResponse uploadAvatar(UUID tenantId, UUID deploymentId, MultipartFile file) {
     AgentDeployment deployment = deploymentRepository.findByIdAndTenantId(deploymentId, tenantId)
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "error.deploymentNotFound"));
     validateAvatar(file);
@@ -204,12 +204,11 @@ public class DeploymentService {
           file.getBytes(),
           Map.of("deploymentId", deploymentId.toString(), "purpose", "avatar"));
       deployment.applyAvatar(stored.key());
-      AgentDefinition agent = agentRepository.findByIdAndTenantId(deployment.getAgentId(), tenantId).orElse(null);
-      DeploymentResponse response = toResponse(deploymentRepository.save(deployment), agent);
+      String avatarUrl = deploymentEndpoints.describe(deploymentRepository.save(deployment)).avatarUrl();
       if (previousKey != null && !previousKey.equals(stored.key())) {
         deleteAvatarObjectQuietly(tenantId, previousKey);
       }
-      return response;
+      return new AvatarResponse(avatarUrl);
     } catch (ResponseStatusException exception) {
       throw exception;
     } catch (Exception exception) {
@@ -218,7 +217,7 @@ public class DeploymentService {
   }
 
   @Transactional
-  public DeploymentResponse deleteAvatar(UUID tenantId, UUID deploymentId) {
+  public AvatarResponse deleteAvatar(UUID tenantId, UUID deploymentId) {
     AgentDeployment deployment = deploymentRepository.findByIdAndTenantId(deploymentId, tenantId)
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "error.deploymentNotFound"));
     String key = deployment.getThemeAvatarKey();
@@ -226,8 +225,8 @@ public class DeploymentService {
       deleteAvatarObjectQuietly(tenantId, key);
       deployment.applyAvatar(null);
     }
-    AgentDefinition agent = agentRepository.findByIdAndTenantId(deployment.getAgentId(), tenantId).orElse(null);
-    return toResponse(deploymentRepository.save(deployment), agent);
+    String avatarUrl = deploymentEndpoints.describe(deploymentRepository.save(deployment)).avatarUrl();
+    return new AvatarResponse(avatarUrl);
   }
 
   private void deleteAvatarObjectQuietly(UUID tenantId, String key) {

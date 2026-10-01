@@ -97,8 +97,14 @@ const WIDGET_CSS = `
   :host { all: initial; }
   * { box-sizing: border-box; font-family: var(--amw-font, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif); }
 
-  .root { position: fixed; right: 1.25rem; bottom: 1.25rem; z-index: 2147483000; display: flex; flex-direction: column; align-items: flex-end; gap: 0.75rem; }
+  /* pointer-events: none en .root -- en movil se ensancha a todo el ancho
+     (ver @media mas abajo) y, siendo position: fixed con z-index altisimo,
+     el hueco vacio de esa franja tapaba clics de la pagina del cliente que
+     quedaba debajo (p. ej. acordeones de FAQ). Los hijos visibles reactivan
+     pointer-events para seguir siendo clicables. */
+  .root { position: fixed; right: 1.25rem; bottom: 1.25rem; z-index: 2147483000; display: flex; flex-direction: column; align-items: flex-end; gap: 0.75rem; pointer-events: none; }
   .root.left { right: auto; left: 1.25rem; align-items: flex-start; }
+  .root > * { pointer-events: auto; }
 
   .bubble {
     position: relative;
@@ -249,6 +255,31 @@ type PreviewPayload = {
   agentName: string;
   deploymentName: string;
 };
+
+const VISITOR_ID_STORAGE_KEY = "ametis-widget-visitor-id";
+
+/**
+ * Identificador estable del visitante, para el módulo de analíticas
+ * (visitantes únicos/recurrentes) sin pedir login. Vive en el localStorage
+ * del sitio del CLIENTE que embebe el widget (no el de AMETIS), así que es
+ * anónimo y propio de ese dominio -- no identifica a la persona, solo
+ * distingue "mismo navegador volvió a preguntar" de "visitante nuevo". Si
+ * localStorage no está disponible (modo incógnito estricto, etc.) simplemente
+ * no se manda; la pregunta se sigue respondiendo igual.
+ */
+function getOrCreateVisitorId(): string | null {
+  try {
+    const existing = window.localStorage.getItem(VISITOR_ID_STORAGE_KEY);
+    if (existing) return existing;
+    const id = typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `v-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+    window.localStorage.setItem(VISITOR_ID_STORAGE_KEY, id);
+    return id;
+  } catch {
+    return null;
+  }
+}
 
 /** Aclara un color hex hacia blanco para el extremo del gradiente. */
 function lighten(hex: string, amount: number): string {
@@ -632,7 +663,11 @@ class AmetisWidget {
       const response = await fetch(`${this.endpoint}/${this.publicId}/query`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question })
+        body: JSON.stringify({
+          question,
+          visitorId: getOrCreateVisitorId(),
+          usedSuggestion: override !== undefined
+        })
       });
       loading.remove();
       if (!response.ok) throw new Error(String(response.status));

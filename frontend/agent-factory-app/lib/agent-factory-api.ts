@@ -532,6 +532,33 @@ export function fetchAgentIndexingJobs(id: string) {
   return apiFetch<AgentIndexingJob[]>(`/api/agent-factory/agents/${id}/indexing-jobs/latest`);
 }
 
+export type AgentAnalyticsDailyPoint = { date: string; count: number };
+export type AgentAnalyticsHourlyPoint = { hour: number; count: number };
+export type AgentAnalyticsTopQuestion = { question: string; count: number };
+
+export type AgentAnalytics = {
+  from: string;
+  to: string;
+  totalQuestions: number;
+  uniqueVisitors: number;
+  returningVisitors: number;
+  fallbackCount: number;
+  fallbackRate: number;
+  suggestionUsedCount: number;
+  byDay: AgentAnalyticsDailyPoint[];
+  byHour: AgentAnalyticsHourlyPoint[];
+  topQuestions: AgentAnalyticsTopQuestion[];
+  topFallbackQuestions: AgentAnalyticsTopQuestion[];
+};
+
+export function fetchAgentAnalytics(id: string, fromIso?: string, toIso?: string) {
+  const params = new URLSearchParams();
+  if (fromIso) params.set("from", fromIso);
+  if (toIso) params.set("to", toIso);
+  const query = params.toString();
+  return apiFetch<AgentAnalytics>(`/api/agent-factory/agents/${id}/analytics${query ? `?${query}` : ""}`);
+}
+
 export function testAgent(id: string, question: string) {
   return apiFetch<AgentTestResponse>(`/api/agent-factory/agents/${id}/test`, {
     method: "POST",
@@ -591,17 +618,19 @@ export function updateDeployment(id: string, input: {
   });
 }
 
+export type AvatarResponse = { avatarUrl: string | null };
+
 export function uploadDeploymentAvatar(id: string, file: File) {
   const form = new FormData();
   form.append("file", file);
-  return apiFetch<AgentDeployment>(`/api/agent-factory/deployments/${id}/appearance/avatar`, {
+  return apiFetch<AvatarResponse>(`/api/agent-factory/deployments/${id}/appearance/avatar`, {
     method: "POST",
     body: form
   });
 }
 
 export function deleteDeploymentAvatar(id: string) {
-  return apiFetch<AgentDeployment>(`/api/agent-factory/deployments/${id}/appearance/avatar`, {
+  return apiFetch<AvatarResponse>(`/api/agent-factory/deployments/${id}/appearance/avatar`, {
     method: "DELETE"
   });
 }

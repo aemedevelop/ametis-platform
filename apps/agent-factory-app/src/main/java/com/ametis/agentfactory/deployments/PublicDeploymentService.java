@@ -7,11 +7,14 @@ import com.ametis.agentfactory.agents.AgentRepository;
 import com.ametis.agentfactory.agents.AgentStatus;
 import com.ametis.agentfactory.agents.AmetisAiQueryResponse;
 import com.ametis.agentfactory.agents.AmetisAiRagClient;
+import com.ametis.agentfactory.analytics.AgentAnalyticsRecorder;
 import com.ametis.agentfactory.documents.RepositoryBinding;
 import com.ametis.agentfactory.documents.RepositoryBindingRepository;
 import com.ametis.agentfactory.storage.StorageProvider;
 import java.io.OutputStream;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -25,6 +28,8 @@ import org.springframework.web.server.ResponseStatusException;
  */
 @Service
 public class PublicDeploymentService {
+  private static final Logger LOGGER = LoggerFactory.getLogger(PublicDeploymentService.class);
+
   private final RepositoryBindingRepository repositoryBindingRepository;
   private final AgentDeploymentRepository deploymentRepository;
   private final AgentRepository agentRepository;
@@ -32,6 +37,7 @@ public class PublicDeploymentService {
   private final AmetisAiRagClient ragClient;
   private final StorageProvider storageProvider;
   private final DeploymentEndpoints endpoints;
+  private final AgentAnalyticsRecorder analyticsRecorder;
 
   public PublicDeploymentService(
       RepositoryBindingRepository repositoryBindingRepository,
@@ -40,7 +46,8 @@ public class PublicDeploymentService {
       AgentKnowledgeBaseRepository agentKnowledgeBaseRepository,
       AmetisAiRagClient ragClient,
       StorageProvider storageProvider,
-      DeploymentEndpoints endpoints) {
+      DeploymentEndpoints endpoints,
+      AgentAnalyticsRecorder analyticsRecorder) {
     this.repositoryBindingRepository = repositoryBindingRepository;
     this.deploymentRepository = deploymentRepository;
     this.agentRepository = agentRepository;
@@ -48,6 +55,7 @@ public class PublicDeploymentService {
     this.ragClient = ragClient;
     this.storageProvider = storageProvider;
     this.endpoints = endpoints;
+    this.analyticsRecorder = analyticsRecorder;
   }
 
   public PublicDeploymentInfoResponse info(String publicId, String origin) {
@@ -76,6 +84,11 @@ public class PublicDeploymentService {
   }
 
   public PublicQueryResponse query(String publicId, String origin, String question) {
+    return query(publicId, origin, question, null, false);
+  }
+
+  public PublicQueryResponse query(
+      String publicId, String origin, String question, String visitorId, boolean usedSuggestion) {
     ResolvedDeployment resolved = resolve(publicId, origin);
     List<AgentKnowledgeBase> links = agentKnowledgeBaseRepository
         .findAllByTenantIdAndAgentIdIn(resolved.binding().getTenantId(), List.of(resolved.agent().getId()));
@@ -92,7 +105,31 @@ public class PublicDeploymentService {
     AgentDefinition agent = resolved.agent();
     String answer = overrideAnswer(agent, response);
     List<String> suggestions = followUpPool(agent, response.matchedTopicId());
+    recordQueryEventQuietly(resolved, question, response, visitorId, usedSuggestion);
     return PublicQueryResponse.from(response, answer, suggestions);
+  }
+
+  /**
+   * Registra la pregunta para el módulo de analíticas. Nunca debe tumbar la
+   * respuesta al visitante -- si falla el guardado, se loguea y se sigue.
+   */
+  private void recordQueryEventQuietly(
+      ResolvedDeployment resolved, String question, AmetisAiQueryResponse response, String visitorId, boolean usedSuggestion) {
+    try {
+      analyticsRecorder.record(
+          resolved.deployment().getTenantId(),
+          resolved.agent().getId(),
+          resolved.deployment().getId(),
+          resolved.deployment().getChannelType(),
+          visitorId,
+          null,
+          question,
+          response.responseType(),
+          response.matchedTopicId(),
+          usedSuggestion);
+    } catch (Exception exception) {
+      LOGGER.warn("No se pudo registrar el evento de analítica para el despliegue {}", resolved.deployment().getId(), exception);
+    }
   }
 
   /**
@@ -157,16 +194,19 @@ public class PublicDeploymentService {
 
   /**
    * Resolución ligera para activos públicos sin datos sensibles (avatar, como
-   * {@code widget.js}): sin chequeo de {@code Origin}. Un {@code <img>} normal
-   * no manda cabecera Origin, así que exigirla dejaría el logo siempre roto —
-   * tanto en la vista previa del panel como en el propio widget del cliente.
+   * {@code widget.js}): sin chequeo de {@code Origin} ni de estado. Un
+   * {@code <img>} normal no manda cabecera Origin, así que exigirla dejaría
+   * el logo siempre roto -- tanto en la vista previa del panel como en el
+   * propio widget del cliente. Tampoco se exige {@code ACTIVE}: el gestor
+   * debe poder ver su logo en la vista previa antes de publicar el
+   * despliegue (el publicId no es adivinable y el avatar no es informacion
+   * sensible, a diferencia de {@link #resolve}, que si bloquea inactivos).
    */
   private AgentDeployment resolveForAsset(String publicId) {
     AgentDeployment deployment = deploymentRepository
         .findByPublicId(publicId == null ? "" : publicId.trim())
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "error.deploymentNotFound"));
-    if (deployment.getStatus() != DeploymentStatus.ACTIVE
-        || deployment.getChannelType() != DeploymentChannelType.WEB_CHAT) {
+    if (deployment.getChannelType() != DeploymentChannelType.WEB_CHAT) {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND, "error.deploymentNotFound");
     }
     return deployment;
