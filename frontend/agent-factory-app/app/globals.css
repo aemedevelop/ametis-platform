@@ -123,6 +123,57 @@ input:disabled { cursor: wait; opacity: .72; }
 .intro-card, .setup-card, .upload-card, .documents-card, .upload-queue, .loading-card { border: 1px solid var(--line); border-radius: 18px; background-image: var(--panel-bg); box-shadow: 0 12px 32px rgba(4,12,27,.14); backdrop-filter: blur(10px); }
 .intro-card { display: flex; justify-content: space-between; align-items: center; padding: 26px 28px; background: radial-gradient(900px 260px at 105% 0%, rgba(47,140,255,.16), transparent 58%), var(--panel-bg); }
 .intro-card-actions { display: flex; align-items: center; gap: 12px; }
+
+.analytics-range { display: inline-flex; gap: 6px; padding: 4px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface); width: fit-content; }
+.analytics-range button { border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-size: 12px; font-weight: 800; padding: 8px 14px; cursor: pointer; }
+.analytics-range button.active { background: var(--blue); color: #fff; }
+
+.analytics-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+.stat-card {
+  position: relative; display: grid; gap: 4px; padding: 18px 18px 16px; overflow: hidden;
+  border: 1px solid var(--line); border-radius: 14px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent, var(--blue)) 10%, var(--surface)), var(--surface) 60%);
+}
+.stat-card::before {
+  content: ""; position: absolute; inset: 0 0 auto 0; height: 3px;
+  background: var(--accent, var(--blue));
+}
+.stat-card.blue { --accent: var(--blue); }
+.stat-card.success { --accent: var(--success); }
+.stat-card.purple { --accent: #8b6bf2; }
+.stat-card.danger { --accent: var(--danger); }
+.stat-card.amber { --accent: #f5a524; }
+.stat-label { font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.stat-value { font-size: 26px; font-weight: 850; color: var(--accent, var(--ink)); font-variant-numeric: tabular-nums; }
+.stat-card small { color: var(--muted); font-size: 11px; }
+
+.analytics-panel { padding: 20px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); display: grid; gap: 10px; }
+.analytics-panel h3 { margin: 0; font-size: 15px; }
+
+.analytics-chart { width: 100%; }
+.analytics-tooltip {
+  display: grid; gap: 2px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--panel-bg); box-shadow: 0 12px 30px rgba(2,6,16,.35);
+}
+.analytics-tooltip strong { font-size: 12px; color: var(--ink); }
+.analytics-tooltip span { font-size: 13px; font-weight: 800; color: var(--blue); font-variant-numeric: tabular-nums; }
+
+.top-questions-list { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; counter-reset: question; }
+.top-questions-list li {
+  counter-increment: question;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-soft) 50%, transparent);
+}
+.top-questions-list li::before {
+  content: counter(question);
+  display: inline-grid; place-items: center; width: 20px; height: 20px; margin-right: 10px; flex: none;
+  border-radius: 999px; background: var(--blue-soft); color: var(--blue); font-size: 11px; font-weight: 800;
+}
+.top-questions-list li span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.top-questions-list li strong { flex: none; color: var(--ink); font-variant-numeric: tabular-nums; }
+.top-questions-list.fallback li::before { background: color-mix(in srgb, var(--danger) 16%, transparent); color: var(--danger); }
+.top-questions-list.fallback li strong { color: var(--danger); }
 .intro-card h2, .setup-card h2, .upload-card h2, .section-heading h2 { margin: 6px 0 7px; font-size: 24px; letter-spacing: -.025em; }
 .intro-card p, .setup-card p { max-width: 760px; margin: 0; color: var(--muted); font-size: 15px; line-height: 1.58; }
 .repository-pill { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; padding: 9px 12px; border-radius: 999px; font-size: 13px; font-weight: 700; }

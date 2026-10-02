@@ -17,6 +17,7 @@ const WORKSPACE_TOUR_STEPS: TourStep[] = [
   { selector: "[data-tour='shell-nav-knowledge']", titleKey: "tour.workspace.navKnowledge.title", descriptionKey: "tour.workspace.navKnowledge.description" },
   { selector: "[data-tour='shell-nav-agents']", titleKey: "tour.workspace.navAgents.title", descriptionKey: "tour.workspace.navAgents.description" },
   { selector: "[data-tour='shell-nav-deployments']", titleKey: "tour.workspace.navDeployments.title", descriptionKey: "tour.workspace.navDeployments.description" },
+  { selector: "[data-tour='shell-nav-analytics']", titleKey: "tour.workspace.navAnalytics.title", descriptionKey: "tour.workspace.navAnalytics.description" },
   { selector: "[data-tour='shell-profile-menu']", titleKey: "tour.workspace.profile.title", descriptionKey: "tour.workspace.profile.description" }
 ];
 
@@ -84,6 +85,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const isKnowledgeBasesActive = pathname.startsWith("/knowledge-bases");
   const isAgentsActive = pathname.startsWith("/agents");
   const isDeploymentsActive = pathname.startsWith("/deployments");
+  const isAnalyticsActive = pathname.startsWith("/analytics");
 
   return (
     <main className={`app-layout${sidebarCollapsed ? " sidebar-collapsed" : ""}`}>
@@ -112,6 +114,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Link data-tour="shell-nav-knowledge" className={`nav-item ${isKnowledgeBasesActive ? "active" : ""}`} href="/knowledge-bases">{t("navigation.knowledgeBases")}</Link>
           <Link data-tour="shell-nav-agents" className={`nav-item ${isAgentsActive ? "active" : ""}`} href="/agents">{t("navigation.agents")}</Link>
           <Link data-tour="shell-nav-deployments" className={`nav-item ${isDeploymentsActive ? "active" : ""}`} href="/deployments">{t("navigation.deployments")}</Link>
+          <Link data-tour="shell-nav-analytics" className={`nav-item ${isAnalyticsActive ? "active" : ""}`} href="/analytics">{t("navigation.analytics")}</Link>
         </nav>
       </aside>
       <section className="content-shell">

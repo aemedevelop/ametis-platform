@@ -727,13 +727,6 @@ export default function AgentsPage() {
                           ) : null}
                         </div>
                         <div className="knowledge-meta">
-                          <strong>{t("agents.knowledgeBaseCount", { count: agent.knowledgeBaseCount })}</strong>
-                          <span>{agent.knowledgeBaseNames.slice(0, 3).join(", ") || t("agents.noLinkedBases")}</span>
-                          {agent.status === "READY" ? (
-                            <small className={`indexing-status ${indexingStatus(agent, indexingJobsByAgent[agent.id]).toLowerCase()}`}>
-                              {indexingLabel(agent, indexingJobsByAgent[agent.id], t)}
-                            </small>
-                          ) : null}
                           <div className="item-actions">
                             {agent.status === "DRAFT" ? (
                               <button className="small-action" type="button" onClick={() => publish(agent)} disabled={publishingId === agent.id || agent.knowledgeBaseCount === 0}>
@@ -772,6 +765,13 @@ export default function AgentsPage() {
                               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" /></svg>
                             </button>
                           </div>
+                          <strong>{t("agents.knowledgeBaseCount", { count: agent.knowledgeBaseCount })}</strong>
+                          <span>{agent.knowledgeBaseNames.slice(0, 3).join(", ") || t("agents.noLinkedBases")}</span>
+                          {agent.status === "READY" ? (
+                            <small className={`indexing-status ${indexingStatus(agent, indexingJobsByAgent[agent.id]).toLowerCase()}`}>
+                              {indexingLabel(agent, indexingJobsByAgent[agent.id], t)}
+                            </small>
+                          ) : null}
                         </div>
                         {isAgentReadyToTest(agent, indexingJobsByAgent[agent.id]) ? (
                           <div className="agent-test-panel">

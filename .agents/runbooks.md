@@ -177,6 +177,42 @@ borrador/publicado + chat de prueba en vivo. Dos cosas se rompieron:
 Ninguno de los dos fue un bug del feature en si -- ambos son gotchas de
 infraestructura que ya quedaron documentados arriba para la proxima vez.
 
+## Incidente 2026-09-25/27: rag-service de produccion eliminado por completo
+
+Sintoma: el webchat real (produccion) responde siempre "No se pudo conectar
+con el servidor". Logs de `ametis-agent-factory-app`:
+```
+java.nio.channels.UnresolvedAddressException: null
+... I/O error on POST request for "http://rag-service:8000/tenants/.../query"
+```
+No es un 502/403 de Kong -- es que `agent-factory-app` no puede resolver el
+host `rag-service` porque **el contenedor no existe** (`docker ps -a | grep
+rag` no lo muestra en absoluto, ni corriendo ni caido).
+
+**Causa raiz**: `/opt/ametis-ai/docker/compose/rag` (produccion) y
+`/opt/ametis-ai-pre/docker/compose/rag` (pre) terminan en la misma carpeta
+`rag` -- Compose calcula el nombre de proyecto por defecto a partir de ese
+nombre de carpeta, asi que **ambos entornos compartian el mismo proyecto de
+Compose por defecto** aunque usan archivos distintos
+(`docker-compose.vps.yml` / `docker-compose.pre.yml`). Un `docker compose
+down` corrido en cualquiera de los dos directorios sin fijar el proyecto se
+lleva puestos los contenedores de AMBOS entornos -- eso fue lo que paso el
+2026-09-25 mientras se armaba `pre` (el rag-service de produccion desaparecio
+sin dejar rastro; el de pre se volvio a levantar despues, el de produccion
+no).
+
+**Arreglo de fondo (ya aplicado, 2026-09-27)**: se agrego una clave `name:`
+fija al inicio de ambos compose files (`ametis-ai-rag` en vps,
+`ametis-ai-rag-pre` en pre) -- Compose ya no puede confundir los dos
+proyectos sin importar desde que directorio se invoque.
+
+**Recuperacion manual** (si vuelve a faltar el contenedor):
+```bash
+cd /opt/ametis-ai/docker/compose/rag
+docker compose --env-file .env.vps -f docker-compose.vps.yml up -d --build
+docker exec ametis-agent-factory-app getent hosts rag-service   # confirma que ya resuelve
+```
+
 ## VPS Platform Start
 
 Run from `/opt/ametis-platform`:

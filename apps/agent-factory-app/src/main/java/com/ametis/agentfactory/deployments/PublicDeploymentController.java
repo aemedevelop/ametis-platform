@@ -42,7 +42,8 @@ public class PublicDeploymentController {
       @PathVariable String publicId,
       @Valid @RequestBody PublicQueryRequest request,
       @RequestHeader(value = "Origin", required = false) String origin) {
-    return publicDeploymentService.query(publicId, origin, request.question());
+    return publicDeploymentService.query(
+        publicId, origin, request.question(), request.visitorId(), Boolean.TRUE.equals(request.usedSuggestion()));
   }
 
   @GetMapping("/{publicId}/avatar")
