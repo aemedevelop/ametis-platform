@@ -94,9 +94,7 @@ public interface AgentAnalyticsHourlyRepository extends JpaRepository<AgentAnaly
 
   /**
    * Comparativa por despliegue del mismo agente (categoría 5 del plan de
-   * analíticas: distintos despliegues/canales de un mismo agente). Todavía no
-   * se muestra en el dashboard -- el dato ya está capturado, se conecta
-   * cuando se construya esa sección.
+   * analíticas: distintos despliegues/canales de un mismo agente).
    */
   @Query(
       value = """

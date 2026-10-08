@@ -3,14 +3,13 @@ package com.ametis.agentfactory.analytics;
 import com.ametis.agentfactory.deployments.DeploymentChannelType;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
-import java.util.Locale;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Punto único de escritura del módulo de analíticas: guarda el evento crudo
- * (auditoría/debug) y, en la misma operación, suma +1 en las tres tablas de
+ * (auditoría/debug) y, en la misma operación, suma +1 en las tablas de
  * resumen que sí lee el dashboard (ver {@link AgentAnalyticsService}). Así el
  * resumen siempre está al día sin necesidad de un job aparte que recalcule.
  */
@@ -20,16 +19,19 @@ public class AgentAnalyticsRecorder {
   private final AgentAnalyticsHourlyRepository hourlyRepository;
   private final AgentAnalyticsVisitorDayRepository visitorDayRepository;
   private final AgentAnalyticsQuestionDailyRepository questionDailyRepository;
+  private final AgentAnalyticsTopicDailyRepository topicDailyRepository;
 
   public AgentAnalyticsRecorder(
       AgentQueryEventRepository eventRepository,
       AgentAnalyticsHourlyRepository hourlyRepository,
       AgentAnalyticsVisitorDayRepository visitorDayRepository,
-      AgentAnalyticsQuestionDailyRepository questionDailyRepository) {
+      AgentAnalyticsQuestionDailyRepository questionDailyRepository,
+      AgentAnalyticsTopicDailyRepository topicDailyRepository) {
     this.eventRepository = eventRepository;
     this.hourlyRepository = hourlyRepository;
     this.visitorDayRepository = visitorDayRepository;
     this.questionDailyRepository = questionDailyRepository;
+    this.topicDailyRepository = topicDailyRepository;
   }
 
   @Transactional
@@ -59,12 +61,17 @@ public class AgentAnalyticsRecorder {
       visitorDayRepository.recordVisit(UUID.randomUUID(), tenantId, agentId, visitorId.trim(), day);
     }
 
+    // Vacío = no casó con ningún tema; también cuenta, para que el reparto
+    // por tema sume el total de preguntas.
+    topicDailyRepository.increment(
+        UUID.randomUUID(), tenantId, agentId, day, matchedTopicId == null ? "" : matchedTopicId.trim());
+
     String sample = question == null ? "" : question.trim();
     if (!sample.isEmpty()) {
       if (sample.length() > 500) {
         sample = sample.substring(0, 500);
       }
-      String key = sample.toLowerCase(Locale.ROOT);
+      String key = QuestionNormalizer.key(sample);
       questionDailyRepository.increment(UUID.randomUUID(), tenantId, agentId, day, key, sample, fallbackIncrement);
     }
   }

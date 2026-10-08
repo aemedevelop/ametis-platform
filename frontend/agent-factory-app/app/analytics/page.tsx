@@ -3,14 +3,14 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useLocale, useT } from "@/components/IntlProviderClient";
-import { AgentDefinition, AgentFactoryApiError, fetchAgents } from "@/lib/agent-factory-api";
+import { AgentFactoryApiError, AnalyticsAgent, fetchAnalyticsAgents } from "@/lib/agent-factory-api";
 
 type Translate = (key: string, vars?: Record<string, string | number>) => string;
 
 export default function AnalyticsPage() {
   const t = useT();
   const { locale } = useLocale();
-  const [agents, setAgents] = useState<AgentDefinition[]>([]);
+  const [agents, setAgents] = useState<AnalyticsAgent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
 
@@ -18,7 +18,7 @@ export default function AnalyticsPage() {
     setLoading(true);
     setError(null);
     try {
-      setAgents(await fetchAgents());
+      setAgents(await fetchAnalyticsAgents());
     } catch (requestError) {
       setError(requestError);
     } finally {
@@ -53,6 +53,7 @@ export default function AnalyticsPage() {
             {agents.map((agent) => (
               <article className="knowledge-item analytics-list-item" key={agent.id}>
                 <div>
+                  <span className="eyebrow analytics-business-label">{agent.businessName ?? t("analyticsList.noBusiness")}</span>
                   <span className={`agent-lifecycle-badge ${agent.status === "READY" ? "indexed" : "created-unindexed"}`}>
                     {t(`analyticsList.status.${agent.status.toLowerCase()}`)}
                   </span>

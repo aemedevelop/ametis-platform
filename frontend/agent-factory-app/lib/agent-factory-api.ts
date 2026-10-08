@@ -536,6 +536,27 @@ export type AgentAnalyticsDailyPoint = { date: string; count: number };
 export type AgentAnalyticsHourlyPoint = { hour: number; count: number };
 export type AgentAnalyticsTopQuestion = { question: string; count: number };
 
+export type AgentAnalyticsPeriodSummary = {
+  totalQuestions: number;
+  uniqueVisitors: number;
+  returningVisitors: number;
+  fallbackCount: number;
+  fallbackRate: number;
+  suggestionUsedCount: number;
+};
+/** `name`/`channelType` llegan en null si el despliegue ya no existe. */
+export type AgentAnalyticsDeploymentPoint = {
+  deploymentId: string;
+  name: string | null;
+  channelType: string | null;
+  totalQuestions: number;
+  fallbackCount: number;
+  fallbackRate: number;
+};
+
+/** `topicId` vacío = sin tema; `label` es null entonces y si el tema ya no existe en el agente. */
+export type AgentAnalyticsTopicPoint = { topicId: string; label: string | null; count: number };
+
 export type AgentAnalytics = {
   from: string;
   to: string;
@@ -545,11 +566,34 @@ export type AgentAnalytics = {
   fallbackCount: number;
   fallbackRate: number;
   suggestionUsedCount: number;
+  /** Mismos N días inmediatamente antes del rango pedido (fechas `YYYY-MM-DD`). */
+  previousFrom: string;
+  previousTo: string;
+  previous: AgentAnalyticsPeriodSummary;
   byDay: AgentAnalyticsDailyPoint[];
   byHour: AgentAnalyticsHourlyPoint[];
+  byDeployment: AgentAnalyticsDeploymentPoint[];
+  byTopic: AgentAnalyticsTopicPoint[];
   topQuestions: AgentAnalyticsTopQuestion[];
   topFallbackQuestions: AgentAnalyticsTopQuestion[];
 };
+
+/** Agente tal como lo lista Analíticas: de cualquier negocio del workspace. */
+export type AnalyticsAgent = {
+  id: string;
+  businessId: string;
+  businessName: string | null;
+  name: string;
+  description: string | null;
+  status: AgentDefinition["status"];
+  updatedAt: string;
+  knowledgeBaseCount: number;
+  knowledgeBaseNames: string[];
+};
+
+export function fetchAnalyticsAgents() {
+  return apiFetch<AnalyticsAgent[]>("/api/agent-factory/analytics/agents");
+}
 
 export function fetchAgentAnalytics(id: string, fromIso?: string, toIso?: string) {
   const params = new URLSearchParams();

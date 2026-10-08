@@ -1,9 +1,8 @@
 package com.ametis.agentfactory.analytics;
 
 import com.ametis.agentfactory.access.AccessGuard;
-import com.ametis.agentfactory.businesses.Business;
-import com.ametis.agentfactory.businesses.BusinessService;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -18,14 +17,20 @@ public class AgentAnalyticsController {
   private static final int DEFAULT_RANGE_DAYS = 30;
 
   private final AccessGuard accessGuard;
-  private final BusinessService businessService;
   private final AgentAnalyticsService analyticsService;
 
-  public AgentAnalyticsController(
-      AccessGuard accessGuard, BusinessService businessService, AgentAnalyticsService analyticsService) {
+  public AgentAnalyticsController(AccessGuard accessGuard, AgentAnalyticsService analyticsService) {
     this.accessGuard = accessGuard;
-    this.businessService = businessService;
     this.analyticsService = analyticsService;
+  }
+
+  // Ambos endpoints son a nivel de workspace (tenant): no exigen negocio
+  // activo, así el listado cruza todos los negocios y el detalle abre
+  // cualquier agente del workspace.
+  @GetMapping("/analytics/agents")
+  public List<AnalyticsAgentResponse> agents(JwtAuthenticationToken authentication) {
+    UUID tenantId = accessGuard.requireAccess(authentication, AccessGuard.DOCUMENTS_READ);
+    return analyticsService.listAgents(tenantId);
   }
 
   @GetMapping("/agents/{agentId}/analytics")
@@ -35,9 +40,8 @@ public class AgentAnalyticsController {
       @RequestParam(required = false) OffsetDateTime to,
       JwtAuthenticationToken authentication) {
     UUID tenantId = accessGuard.requireAccess(authentication, AccessGuard.DOCUMENTS_READ);
-    Business business = businessService.require(tenantId, accessGuard.requireBusinessId());
     OffsetDateTime rangeTo = to == null ? OffsetDateTime.now() : to;
     OffsetDateTime rangeFrom = from == null ? rangeTo.minusDays(DEFAULT_RANGE_DAYS) : from;
-    return analyticsService.overview(business, agentId, rangeFrom, rangeTo);
+    return analyticsService.overview(tenantId, agentId, rangeFrom, rangeTo);
   }
 }

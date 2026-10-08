@@ -36,9 +36,9 @@ public interface AgentAnalyticsQuestionDailyRepository extends JpaRepository<Age
   }
 
   /**
-   * Agrupa por {@code question_key} (normalizada) y suma entre días; usa la
-   * última muestra de texto original vista para mostrarla (mismo texto salvo
-   * mayúsculas/espacios, así que cualquiera sirve).
+   * Agrupa por {@code question_key} (ver {@link QuestionNormalizer}) y suma
+   * entre días; muestra una de las variantes originales del texto (iguales
+   * salvo mayúsculas, tildes, signos o espacios, así que cualquiera sirve).
    */
   @Query(
       value = """
