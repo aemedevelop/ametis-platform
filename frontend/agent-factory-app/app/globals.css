@@ -185,6 +185,7 @@ input:disabled { cursor: wait; opacity: .72; }
 .stat-label { font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
 .stat-value { font-size: 26px; font-weight: 850; color: var(--accent, var(--ink)); font-variant-numeric: tabular-nums; }
 .stat-card small { color: var(--muted); font-size: 11px; }
+.stat-card .stat-value small { margin-left: 4px; font-size: 14px; font-weight: 700; }
 .stat-card .stat-delta { margin-top: 4px; font-weight: 800; cursor: help; }
 .stat-card .stat-delta.good { color: var(--success); }
 .stat-card .stat-delta.bad { color: var(--danger); }
@@ -201,6 +202,9 @@ input:disabled { cursor: wait; opacity: .72; }
 .donut-center { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; pointer-events: none; }
 .donut-center strong { color: var(--ink); font-size: 26px; font-weight: 850; line-height: 1; font-variant-numeric: tabular-nums; }
 .donut-center span { margin-top: 4px; color: var(--muted); font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+/* Porciones con tooltip propio: cursor de mano, y la etiqueta del valor no intercepta el hover. */
+.donut-chart .recharts-pie-sector, .stacked-chart .recharts-bar-rectangle { cursor: pointer; }
+.donut-chart .recharts-label-list, .stacked-chart .recharts-label-list { pointer-events: none; }
 .chart-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 18px; margin: 4px 0 0; padding: 0; list-style: none; }
 .chart-legend li { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted); }
 .chart-legend i { flex: none; width: 10px; height: 10px; border-radius: 3px; }

@@ -3,7 +3,7 @@
 import { CSSProperties, ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, ComposedChart, Line, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, ComposedChart, LabelList, Line, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { useLocale, useT } from "@/components/IntlProviderClient";
 import { DateRange, DateRangePicker, resolveDateRange } from "@/components/date-range-picker";
 import { AgentAnalytics, AgentFactoryApiError, fetchAgentAnalytics, fetchAnalyticsAgents } from "@/lib/agent-factory-api";
@@ -81,8 +81,7 @@ export default function AgentAnalyticsPage() {
       channel: item.channelType ? t(`deployments.channel.${item.channelType.toLowerCase()}`) : null,
       known: item.totalQuestions - item.fallbackCount,
       unknown: item.fallbackCount,
-      total: item.totalQuestions,
-      rate: Math.round(item.fallbackRate * 100)
+      total: item.totalQuestions
     })),
     [data, t]
   );
@@ -159,8 +158,7 @@ export default function AgentAnalyticsPage() {
             </div>
             <div className="stat-card danger">
               <span className="stat-label">{t("analytics.fallbackRate")}</span>
-              <strong className="stat-value">{Math.round(data.fallbackRate * 100)}%</strong>
-              <small>{t("analytics.fallbackCount", { count: data.fallbackCount })}</small>
+              <strong className="stat-value">{data.fallbackCount} <small>{Math.round(data.fallbackRate * 100)}%</small></strong>
               <StatDelta
                 current={data.fallbackRate}
                 previous={data.previous.totalQuestions ? data.previous.fallbackRate : null}
@@ -247,21 +245,26 @@ export default function AgentAnalyticsPage() {
               <p className="section-description">{t("analytics.byDeploymentHint")}</p>
               {deploymentBars.length ? (
                 <>
-                  <div className="analytics-chart">
+                  <div className="analytics-chart stacked-chart">
                     <ResponsiveContainer width="100%" height={220}>
                       <BarChart data={deploymentBars} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                         <CartesianGrid stroke="var(--line)" vertical={false} />
                         <XAxis dataKey="label" tick={{ fill: "var(--muted)", fontSize: 11 }} axisLine={{ stroke: "var(--line)" }} tickLine={false} />
                         <YAxis allowDecimals={false} tick={{ fill: "var(--muted)", fontSize: 11 }} axisLine={false} tickLine={false} width={32} />
-                        <Tooltip content={<DeploymentTooltip />} cursor={{ fill: "var(--blue-soft)" }} />
-                        <Bar dataKey="known" stackId="questions" fill="var(--blue)" maxBarSize={56} />
-                        <Bar dataKey="unknown" stackId="questions" fill="var(--danger)" radius={[5, 5, 0, 0]} maxBarSize={56} />
+                        {/* shared={false}: el tooltip describe solo la porción bajo el cursor, no la barra entera. */}
+                        <Tooltip shared={false} content={<DeploymentTooltip />} cursor={{ fill: "var(--blue-soft)" }} />
+                        <Bar dataKey="known" name={t("analytics.withKnowledge")} stackId="questions" fill="var(--blue)" maxBarSize={56}>
+                          <LabelList dataKey="known" position="center" formatter={segmentLabel} fill="#fff" fontSize={12} fontWeight={800} />
+                        </Bar>
+                        <Bar dataKey="unknown" name={t("analytics.fallbackRate")} stackId="questions" fill="var(--danger)" radius={[5, 5, 0, 0]} maxBarSize={56}>
+                          <LabelList dataKey="unknown" position="center" formatter={segmentLabel} fill="#fff" fontSize={12} fontWeight={800} />
+                        </Bar>
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
                   <ul className="chart-legend">
-                    <li><i style={{ background: "var(--blue)" }} aria-hidden="true" /><span>{t("analytics.withKnowledge")}</span><strong>{data.totalQuestions - data.fallbackCount}</strong></li>
-                    <li><i style={{ background: "var(--danger)" }} aria-hidden="true" /><span>{t("analytics.fallbackRate")}</span><strong>{data.fallbackCount}</strong></li>
+                    <li><i style={{ background: "var(--blue)" }} aria-hidden="true" /><span>{t("analytics.withKnowledge")}</span></li>
+                    <li><i style={{ background: "var(--danger)" }} aria-hidden="true" /><span>{t("analytics.fallbackRate")}</span></li>
                   </ul>
                 </>
               ) : (
@@ -276,9 +279,10 @@ export default function AgentAnalyticsPage() {
                   <div className="analytics-chart donut-chart">
                     <ResponsiveContainer width="100%" height={220}>
                       <PieChart>
-                        <Tooltip content={<AnalyticsTooltip />} />
+                        <Tooltip content={<TopicTooltip />} />
                         <Pie data={topicSlices} dataKey="count" nameKey="label" innerRadius={62} outerRadius={98} paddingAngle={topicSlices.length > 1 ? 2 : 0} stroke="none">
                           {topicSlices.map((slice) => <Cell key={slice.key} fill={slice.color} />)}
+                          <LabelList dataKey="count" position="inside" fill="#fff" stroke="none" fontSize={12} fontWeight={800} />
                         </Pie>
                       </PieChart>
                     </ResponsiveContainer>
@@ -292,8 +296,6 @@ export default function AgentAnalyticsPage() {
                       <li key={slice.key}>
                         <i style={{ background: slice.color }} aria-hidden="true" />
                         <span>{slice.label}</span>
-                        <strong>{slice.count}</strong>
-                        <small>{slice.percent} %</small>
                       </li>
                     ))}
                   </ul>
@@ -415,17 +417,37 @@ function shareStyle(count: number, items: { count: number }[]): CSSProperties {
   return { "--share": `${(count / max) * 100}%` } as CSSProperties;
 }
 
-type DeploymentBar = { label: string; channel: string | null; known: number; unknown: number; total: number; rate: number };
+type DeploymentBar = { label: string; channel: string | null; known: number; unknown: number; total: number };
 
-function DeploymentTooltip({ active, payload }: { active?: boolean; payload?: { payload?: DeploymentBar }[] }) {
-  const t = useT();
-  const bar = payload?.[0]?.payload;
-  if (!active || !bar) return null;
+/** Valor dentro de cada porción de la barra; las porciones en 0 no llevan etiqueta. */
+function segmentLabel(value: unknown): string {
+  return value ? String(value) : "";
+}
+
+/** Tooltip de una sola porción (con o sin conocimiento) y el % que representa dentro de su despliegue. */
+function DeploymentTooltip({ active, payload }: { active?: boolean; payload?: { dataKey?: string | number; name?: string; value?: number; payload?: DeploymentBar }[] }) {
+  const segment = payload?.[0];
+  const bar = segment?.payload;
+  if (!active || !segment || !bar) return null;
+  const value = segment.value ?? 0;
+  const percent = bar.total ? Math.round((value / bar.total) * 100) : 0;
   return (
     <div className="analytics-tooltip">
       <strong>{bar.label}{bar.channel ? ` · ${bar.channel}` : ""}</strong>
-      <span>{bar.total}</span>
-      <small>{t("analytics.deploymentFallback", { rate: bar.rate })}</small>
+      <small>{segment.name}</small>
+      <span style={{ color: segment.dataKey === "unknown" ? "var(--danger)" : "var(--blue)" }}>{value} · {percent} %</span>
+    </div>
+  );
+}
+
+/** Tooltip de una porción del pastel: cantidad de preguntas del tema y el % que representa del total. */
+function TopicTooltip({ active, payload }: { active?: boolean; payload?: { payload?: { label: string; count: number; percent: number; color: string } }[] }) {
+  const slice = payload?.[0]?.payload;
+  if (!active || !slice) return null;
+  return (
+    <div className="analytics-tooltip">
+      <strong>{slice.label}</strong>
+      <span style={{ color: slice.color }}>{slice.count} · {slice.percent} %</span>
     </div>
   );
 }
