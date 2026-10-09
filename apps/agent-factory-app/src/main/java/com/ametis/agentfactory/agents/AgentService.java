@@ -174,6 +174,7 @@ public class AgentService {
     contextProfileRepository.deleteByAgentIdAndTenantId(agentId, tenantId);
     agentRepository.delete(agent);
     deleteSuggestionIndexQuietly(binding, agentId);
+    deleteRagDataQuietly(binding, business, agentId);
   }
 
   @Transactional
@@ -410,6 +411,16 @@ public class AgentService {
       ragClient.deleteSuggestionIndex(binding.getRepositoryNamespace(), agentId);
     } catch (RuntimeException exception) {
       LOGGER.warn("No se pudo borrar el indice de preguntas sugeridas | agent={}", agentId, exception);
+    }
+  }
+
+  // Best-effort: si el RAG falla, los vectores quedan huérfanos pero aislados
+  // (el filtro agent_id ya no casa con ningún agente).
+  private void deleteRagDataQuietly(RepositoryBinding binding, Business business, UUID agentId) {
+    try {
+      ragClient.deleteAgent(binding.getRepositoryNamespace(), business.getId().toString(), agentId);
+    } catch (RuntimeException exception) {
+      LOGGER.warn("No se pudieron borrar en el RAG los datos del agente | agent={}", agentId, exception);
     }
   }
 }

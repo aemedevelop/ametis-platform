@@ -406,7 +406,7 @@ export function uploadKnowledgeBaseDocument(knowledgeBaseId: string, file: File)
 }
 
 export async function deleteKnowledgeBaseDocument(knowledgeBaseId: string, storageObjectKey: string): Promise<void> {
-  await authenticatedFetch(`/api/agent-factory/knowledge-bases/${knowledgeBaseId}/documents/${storageObjectKey}`, {
+  await authenticatedFetch(`/api/agent-factory/knowledge-bases/${knowledgeBaseId}/documents?key=${encodeURIComponent(storageObjectKey)}`, {
     method: "DELETE"
   });
 }
@@ -416,7 +416,7 @@ export async function downloadKnowledgeBaseDocument(
   document: StoredDocument
 ): Promise<void> {
   const response = await authenticatedFetch(
-    `/api/agent-factory/knowledge-bases/${knowledgeBaseId}/documents/${document.storageObjectKey}/download`
+    `/api/agent-factory/knowledge-bases/${knowledgeBaseId}/documents/download?key=${encodeURIComponent(document.storageObjectKey)}`
   );
   if (!response.ok) throw new AgentFactoryApiError(response.status, "error.downloadFailed");
   const blob = await response.blob();

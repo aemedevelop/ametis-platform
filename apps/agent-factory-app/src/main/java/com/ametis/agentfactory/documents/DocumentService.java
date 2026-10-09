@@ -77,8 +77,9 @@ public class DocumentService {
         asset.retry(originalName, mimeType, content.length, userId);
       }
       assetRepository.save(asset);
+      StorageProvider.StoredObject stored = null;
       try {
-        StorageProvider.StoredObject stored = storageProvider.putObject(
+        stored = storageProvider.putObject(
             tenantId,
             ready.getDocumentsLocator(),
             originalName,
@@ -94,6 +95,15 @@ public class DocumentService {
         assetRepository.save(asset);
         return fromStoredObject(stored, asset);
       } catch (Exception exception) {
+        // Si el objeto llegó a subirse pero no se pudo registrar, se retira: si
+        // no, aparecería en el listado pese a que la subida respondió con error.
+        if (stored != null) {
+          try {
+            storageProvider.deleteObject(tenantId, stored.key());
+          } catch (Exception cleanupException) {
+            LOGGER.warn("No se pudo retirar el objeto huérfano {}", stored.key(), cleanupException);
+          }
+        }
         asset.failed();
         assetRepository.save(asset);
         throw exception;

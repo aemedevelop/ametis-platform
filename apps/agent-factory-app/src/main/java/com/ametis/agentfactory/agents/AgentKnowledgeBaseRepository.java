@@ -7,5 +7,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface AgentKnowledgeBaseRepository extends JpaRepository<AgentKnowledgeBase, UUID> {
   List<AgentKnowledgeBase> findAllByTenantIdAndAgentIdIn(UUID tenantId, Collection<UUID> agentIds);
+  boolean existsByKnowledgeBaseId(UUID knowledgeBaseId);
   void deleteAllByTenantIdAndAgentId(UUID tenantId, UUID agentId);
 }

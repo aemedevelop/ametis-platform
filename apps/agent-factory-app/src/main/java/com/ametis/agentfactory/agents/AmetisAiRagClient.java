@@ -103,6 +103,48 @@ public class AmetisAiRagClient {
         .toBodilessEntity();
   }
 
+  /**
+   * Borra en el RAG los datos de un agente: sus filas sincronizadas y los
+   * vectores de Qdrant con ese {@code agent_id}.
+   */
+  public void deleteAgent(String repositoryNamespace, String businessId, UUID agentId) {
+    if (!enabled) {
+      return;
+    }
+    restClient.delete()
+        .uri(uriBuilder -> uriBuilder
+            .path("/agents/{agentId}")
+            .queryParam("tenant_id", repositoryNamespace)
+            .queryParam("business_id", businessId)
+            .build(agentId.toString()))
+        .retrieve()
+        .onStatus(HttpStatusCode::isError, (request, response) -> {
+          throw new ResponseStatusException(response.getStatusCode(), "error.agentRagDeleteFailed");
+        })
+        .toBodilessEntity();
+  }
+
+  /**
+   * Borra en el RAG los datos de una base de conocimiento: sus filas y los
+   * vectores de Qdrant con ese {@code knowledge_base_id} (de todos los agentes).
+   */
+  public void deleteKnowledgeBase(String repositoryNamespace, String businessId, UUID knowledgeBaseId) {
+    if (!enabled) {
+      return;
+    }
+    restClient.delete()
+        .uri(uriBuilder -> uriBuilder
+            .path("/knowledge-bases/{knowledgeBaseId}")
+            .queryParam("tenant_id", repositoryNamespace)
+            .queryParam("business_id", businessId)
+            .build(knowledgeBaseId.toString()))
+        .retrieve()
+        .onStatus(HttpStatusCode::isError, (request, response) -> {
+          throw new ResponseStatusException(response.getStatusCode(), "error.knowledgeBaseRagDeleteFailed");
+        })
+        .toBodilessEntity();
+  }
+
   public AmetisAiCreateIndexingJobsResponse createIndexingJobs(
       String repositoryNamespace,
       String businessId,

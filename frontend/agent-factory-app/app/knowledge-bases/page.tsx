@@ -123,10 +123,11 @@ export default function KnowledgeBasesPage() {
       await deleteKnowledgeBase(baseToDelete.id);
       setKnowledgeBases((current) => current.filter((item) => item.id !== baseToDelete.id));
       setExpandedBaseId((current) => (current === baseToDelete.id ? null : current));
-      setBaseToDelete(null);
     } catch (requestError) {
       setError(requestError);
     } finally {
+      // También al fallar: el aviso de error queda tapado por el diálogo.
+      setBaseToDelete(null);
       setDeletingId(null);
     }
   }
@@ -140,20 +141,44 @@ export default function KnowledgeBasesPage() {
   }
 
   async function onFilePicked(baseId: string, event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
+    // Se copia antes de limpiar el input: `files` es una lista viva y se vacía con él.
+    const files = Array.from(event.target.files ?? []);
     event.target.value = "";
-    if (!file) return;
+    if (!files.length) return;
     setUploadingBaseId(baseId);
     setError(null);
+    // De uno en uno; si alguno falla se sigue con el resto.
+    let uploaded = 0;
+    const failures: { name: string; error: unknown }[] = [];
+    for (const file of files) {
+      try {
+        await uploadKnowledgeBaseDocument(baseId, file);
+        uploaded += 1;
+      } catch (requestError) {
+        failures.push({ name: file.name, error: requestError });
+      }
+    }
+    // Un solo archivo: su error tal cual. Varios: resumen con cuántos subieron
+    // y cuáles no, porque el error suelto no dice a qué archivo corresponde.
+    let firstError: unknown = failures[0]?.error ?? null;
+    if (failures.length && files.length > 1) {
+      firstError = new AgentFactoryApiError(207, "error.uploadPartial", {
+        uploaded,
+        total: files.length,
+        failed: failures.map((failure) => `“${failure.name}”: ${messageOf(failure.error, t)}`).join(" · ")
+      });
+    }
     try {
-      await uploadKnowledgeBaseDocument(baseId, file);
-      await loadDocuments(baseId);
-      setKnowledgeBases((current) =>
-        current.map((item) => (item.id === baseId ? { ...item, documentCount: item.documentCount + 1 } : item))
-      );
+      if (uploaded) {
+        await loadDocuments(baseId);
+        setKnowledgeBases((current) =>
+          current.map((item) => (item.id === baseId ? { ...item, documentCount: item.documentCount + uploaded } : item))
+        );
+      }
     } catch (requestError) {
-      setError(requestError);
+      firstError ??= requestError;
     } finally {
+      if (firstError) setError(firstError);
       setUploadingBaseId(null);
     }
   }
@@ -172,10 +197,10 @@ export default function KnowledgeBasesPage() {
       setKnowledgeBases((current) =>
         current.map((item) => (item.id === baseId ? { ...item, documentCount: Math.max(0, item.documentCount - 1) } : item))
       );
-      setDocumentToDelete(null);
     } catch (requestError) {
       setError(requestError);
     } finally {
+      setDocumentToDelete(null);
       setBusyFileId(null);
     }
   }
@@ -284,6 +309,7 @@ export default function KnowledgeBasesPage() {
                             <input
                               ref={fileInputRef}
                               type="file"
+                              multiple
                               hidden
                               id={`kb-file-${base.id}`}
                               onChange={(event) => onFilePicked(base.id, event)}
@@ -349,7 +375,7 @@ export default function KnowledgeBasesPage() {
             <p id="delete-document-description">{t("knowledge.deleteDocumentDialog.description", { name: documentToDelete.document.name })}</p>
             <div className="confirmation-actions">
               <button className="secondary-button" type="button" onClick={() => setDocumentToDelete(null)} disabled={!!busyFileId}>{t("common.cancel")}</button>
-              <button className="danger-button" type="button" onClick={removeDocument} disabled={!!busyFileId}>{busyFileId ? t("knowledge.deleting") : t("knowledge.deleteAction")}</button>
+              <button className="danger-button" type="button" onClick={removeDocument} disabled={!!busyFileId}>{busyFileId ? t("knowledge.deleting") : t("knowledge.deleteDocumentDialog.action")}</button>
             </div>
           </section>
         </div>

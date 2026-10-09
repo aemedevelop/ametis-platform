@@ -20,6 +20,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
@@ -73,10 +74,12 @@ public class KnowledgeBaseDocumentController {
     return ResponseEntity.status(HttpStatus.CREATED).body(response);
   }
 
-  @GetMapping("/knowledge-bases/{knowledgeBaseId}/documents/{storageObjectKey}/download")
+  // La clave va como query param y no en la ruta: en MinIO lleva "/" y un
+  // {pathVariable} no los captura (la petición acababa en 404).
+  @GetMapping("/knowledge-bases/{knowledgeBaseId}/documents/download")
   public ResponseEntity<byte[]> download(
       @PathVariable UUID knowledgeBaseId,
-      @PathVariable String storageObjectKey,
+      @RequestParam("key") String storageObjectKey,
       JwtAuthenticationToken authentication) {
     Context context = context(authentication, AccessGuard.DOCUMENTS_READ, knowledgeBaseId);
     ByteArrayOutputStream output = new ByteArrayOutputStream();
@@ -91,10 +94,10 @@ public class KnowledgeBaseDocumentController {
         .body(output.toByteArray());
   }
 
-  @DeleteMapping("/knowledge-bases/{knowledgeBaseId}/documents/{storageObjectKey}")
+  @DeleteMapping("/knowledge-bases/{knowledgeBaseId}/documents")
   public ResponseEntity<Void> delete(
       @PathVariable UUID knowledgeBaseId,
-      @PathVariable String storageObjectKey,
+      @RequestParam("key") String storageObjectKey,
       JwtAuthenticationToken authentication) {
     Context context = context(authentication, AccessGuard.DOCUMENTS_MANAGE, knowledgeBaseId);
     documentService.delete(context.business(), context.base(), storageObjectKey);

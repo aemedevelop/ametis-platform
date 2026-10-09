@@ -27,7 +27,7 @@ public class DocumentAsset {
   @Column(nullable = false)
   private UUID repositoryBindingId;
 
-  @Column(unique = true, length = 160)
+  @Column(unique = true, length = 1024)
   private String storageObjectKey;
 
   @Column(nullable = false)
