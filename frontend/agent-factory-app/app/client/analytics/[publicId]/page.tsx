@@ -19,6 +19,20 @@ import {
  * Analíticas de un agente para su cliente final. Vive fuera de la carcasa y
  * de la sesión de la plataforma: se entra con el usuario y contraseña que
  * definió el consultor al publicar el acceso.
+ *
+ * Flujo:
+ *  1. El consultor publica el acceso en /analytics/[id] (botón de compartir)
+ *     y entrega al cliente esta URL: /client/analytics/{publicId}.
+ *  2. Sin sesión guardada se muestra <ClientLogin>; el login devuelve un token
+ *     de 8 h que se guarda en sessionStorage (solo esta pestaña).
+ *  3. Con sesión se pinta el mismo <AnalyticsDashboard> que ve el consultor,
+ *     pero cargando los datos por los endpoints públicos con ese token.
+ *  4. Si el backend responde 401/404 (sesión caducada, contraseña cambiada,
+ *     acceso despublicado, agente eliminado o backend reiniciado) se borra la
+ *     sesión y se vuelve al login con el motivo.
+ *
+ * SessionGuard y AppShell excluyen /client/*: esta página no debe depender de
+ * la sesión del consultor. Probar siempre el enlace en una ventana privada.
  */
 export default function ClientAnalyticsPage() {
   const t = useT();

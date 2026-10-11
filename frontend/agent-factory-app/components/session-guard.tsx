@@ -9,7 +9,15 @@ import { useT } from "@/components/IntlProviderClient";
 export function SessionGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const t = useT();
-  // /client/* tiene su propio acceso (usuario y contraseña del agente), ajeno a esta sesión.
+  // Rutas que este guardián NO protege:
+  //  - /auth/*   -> las propias pantallas de login/registro.
+  //  - /client/* -> zona del cliente final (analíticas de su agente). El cliente
+  //    no es usuario de la plataforma: entra con el usuario y contraseña que el
+  //    consultor definió al publicar el acceso, y esa sesión es propia (ver
+  //    lib/client-analytics-api.ts). Si aquí se le exigiera sesión de consultor,
+  //    un navegador sin ella acabaría redirigido a /auth/login -- fallo que no
+  //    se ve al probar desde un navegador donde el consultor ya tiene sesión.
+  // AppShell aplica la misma exclusión para no pintar el menú de la app.
   const isPublicPath = pathname.startsWith("/auth/") || pathname.startsWith("/client/");
   const [ready, setReady] = useState(isPublicPath);
 
@@ -44,7 +52,7 @@ export function SessionGuard({ children }: { children: React.ReactNode }) {
       window.location.replace(`/auth/login?redirect=${encodeURIComponent(pathname)}`);
     }
 
-    if (pathname.startsWith("/auth/")) {
+    if (isPublicPath) {
       return;
     }
     setReady(false);
@@ -52,7 +60,7 @@ export function SessionGuard({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [pathname]);
+  }, [pathname, isPublicPath]);
 
   if (!ready && !isPublicPath) return <main className="center-screen" role="status">{t("common.loadingSession")}</main>;
   return children;

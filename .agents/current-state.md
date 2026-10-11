@@ -1,6 +1,15 @@
 # Current State
 
-Last updated: 2026-09-14
+Last updated: 2026-10-11
+
+## 2026-10-11 — Analytics: export, client access, tour
+
+- **Export**: Excel (`GET /agents/{id}/analytics/export`, Apache POI) and PDF (print stylesheet) from the analytics dashboard.
+- **Client access**: the consultant publishes an agent's analytics with a username/password; the end client logs in at `/client/analytics/{publicId}` without a platform account. Migration **V29** (`agent_analytics_access`). Full flow in `architecture.md` → "Client Analytics Access"; rationale in `decisions.md`.
+- Dashboard extracted to `components/analytics-dashboard.tsx` (shared by the consultant and client pages); guided tour `analytics-dashboard` and styled tooltips on the header icon buttons.
+- `AGENT_FACTORY_ANALYTICS_SESSION_SECRET` exists but is intentionally left empty in all environments.
+- Not verified end to end in a browser by the agent that built it; unit tests cover the access service and the exporter (`AgentAnalytics*Test`).
+- Knowledge-base and agent deletion now also delete their vectors in the RAG (`DELETE /knowledge-bases/{id}`, `DELETE /agents/{id}` in `ametis-ai`), best-effort.
 
 ## 2026-09-14 — Storage abstraction (Drive/MinIO) + widget avatar
 

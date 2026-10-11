@@ -56,6 +56,24 @@ Tenant (Core, = workspace)
 ALLOW = authenticated AND tenant_membership AND role_permission AND plan_feature
 ```
 
+## Client Analytics Access (end client, no platform account)
+
+The consultant can publish one agent's analytics to its end client. The client is **not** a Keycloak user and never gets a platform session: it logs in with a username/password the consultant typed, scoped to that single agent, read-only. See `decisions.md` → "Client analytics access" for why.
+
+- **Data**: `agent_analytics_access` (V29), one row per agent (`agent_id` UNIQUE, `ON DELETE CASCADE` from `agents`): `public_id` (opaque, URL-safe, immutable — changing the password does not change the link), `username`, `password_hash` (BCrypt), `published`, `failed_attempts`, `locked_until`, `last_access_at`.
+- **Consultant side** (JWT, normal `AccessGuard`): `GET|POST /api/agent-factory/agents/{agentId}/analytics/access` (`AgentAnalyticsController` → `AgentAnalyticsAccessService`). Password is required on first save; empty afterwards = keep current. UI: share button on `/analytics/[id]` → `ClientAccessDialog`, which shows the link `{origin}/client/analytics/{publicId}`.
+- **Client side** (no JWT, under the already-public `/api/agent-factory/public/**`): `PublicAnalyticsController`
+  - `POST /public/analytics/{publicId}/login` `{username, password}` → `{token, expiresAt, agentName}`
+  - `GET /public/analytics/{publicId}/overview?from&to` and `/export?from&to&lang` — same `AgentAnalyticsService.overview` / `AgentAnalyticsExporter` the consultant uses.
+- **Session token**: own format, `base64url("{accessId}.{exp}") + "." + base64url(HMAC-SHA256)` (`AnalyticsAccessTokens`), 8 h. It travels in the **`X-Analytics-Session`** header, *not* `Authorization`: the resource server would try to validate a bearer token as a Keycloak JWT and answer 401 even on a `permitAll` route. The header is whitelisted in the public CORS config (`SecurityConfig`), which also exposes `Content-Disposition` for the export filename.
+  - The password hash is part of the HMAC input → changing the password invalidates open sessions.
+  - Signing secret: `AGENT_FACTORY_ANALYTICS_SESSION_SECRET`. **Left empty on purpose in every environment**: a random secret is generated per boot, so client sessions end on backend restart (the client just logs in again). Set it only if sessions must survive restarts or the backend runs with more than one replica.
+- **Validity**: no expiry. Access works while the row is `published` and the agent exists (a `DRAFT` agent still counts — editing an agent must not cut the client off). Unpublishing, deleting the agent, or changing the password cuts it immediately. Unknown / unpublished `publicId` → 404 `error.analyticsAccessNotFound`.
+- **Lockout**: 5 failed logins lock the access for 15 min (429 `error.analyticsAccessLocked`). The credential is shared per agent, so anyone holding the link can trigger the lock; accepted trade-off. `login` is deliberately not `@Transactional` so the failed-attempt counter is persisted even though the request ends in an error.
+- **Frontend** (`frontend/agent-factory-app`): page `app/client/analytics/[publicId]/page.tsx`, API in `lib/client-analytics-api.ts` (session kept in `sessionStorage`, per tab, keyed by `publicId`). The dashboard itself is `components/analytics-dashboard.tsx`, shared by the consultant page and the client page — only the data-loading callbacks differ; the guided tour (`withTour`) is consultant-only.
+  - **`/client/*` is outside the platform session**: `SessionGuard` and `AppShell` both skip it (same treatment as `/auth/*`). If `SessionGuard` does not skip it, a visitor without a consultant session is redirected to `/auth/login` — this was a real bug, invisible when testing in a browser that already has a consultant session. **Always test the client link in a private window.**
+- **Export**: `GET /agents/{agentId}/analytics/export` (consultant) and the public `/export` produce the same `.xlsx` (Apache POI, one sheet per dashboard block, labels in `es`/`en` inside `AgentAnalyticsExporter` — the backend has no general i18n). PDF is the page itself printed (`@media print` in `globals.css`; the PDF button first applies the `print-layout` class so Recharts redraws at paper width).
+
 ## Self-Service Registration & Onboarding
 
 - `POST /v1/auth/register` (Core): creates the Keycloak user + Core profile, then `RegistrationProvisioningService.provisionInitialWorkspace()` creates a tenant with the user as `OWNER` and grants access to `core.registration.default-product-code` (now `agent-factory`).
