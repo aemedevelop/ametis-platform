@@ -416,6 +416,11 @@ tbody tr:last-child td { border-bottom: 0; }
 .icon-button:disabled { cursor: wait; opacity: .55; }
 .icon-button.spinning svg { animation: spin .8s linear infinite; }
 .icon-button.danger { color: var(--danger); }
+/* Tooltip de los botones de icono: mismo aspecto que .field-help, debajo del
+   botón y alineado a su derecha para no salirse de la tarjeta. */
+.icon-button[data-tooltip] { position: relative; }
+.icon-button[data-tooltip]::after { position: absolute; z-index: 30; top: calc(100% + 8px); right: 0; width: max-content; max-width: 260px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel-bg); color: var(--ink); box-shadow: 0 14px 36px rgba(0,0,0,.24); content: attr(data-tooltip); font-size: 12px; font-weight: 650; letter-spacing: 0; line-height: 1.45; opacity: 0; pointer-events: none; text-transform: none; transform: translateY(-4px); transition: opacity .16s ease, transform .16s ease; white-space: normal; }
+.icon-button[data-tooltip]:hover::after, .icon-button[data-tooltip]:focus-visible::after { opacity: 1; transform: translateY(0); }
 .icon-button.danger:hover { border-color: color-mix(in srgb, var(--danger) 55%, var(--line)); background: color-mix(in srgb, var(--danger) 12%, transparent); }
 .icon-button.publish { color: var(--success); border-color: color-mix(in srgb, var(--success) 36%, var(--line)); }
 .icon-button.publish:hover { border-color: color-mix(in srgb, var(--success) 55%, var(--line)); background: color-mix(in srgb, var(--success) 14%, transparent); }
@@ -824,3 +829,48 @@ tbody tr:last-child td { border-bottom: 0; }
 .tour-actions .primary-button, .tour-actions .secondary-button { padding: 8px 16px; font-size: 13px; }
 .tour-actions .link-button { background: none; border: 0; padding: 8px 4px; color: var(--muted); font-size: 13px; cursor: pointer; text-decoration: underline; }
 .tour-actions .link-button:hover { color: var(--ink); }
+
+/* Acceso del cliente a las analíticas: diálogo del consultor y login del cliente. */
+.client-access-dialog { display: grid; gap: 14px; width: min(520px, 100%); }
+.client-access-dialog h2 { margin: 0; }
+.client-access-dialog .confirmation-actions { margin-top: 6px; }
+.password-input { position: relative; }
+.form-field .password-input input { padding-right: 44px; }
+.password-input button { position: absolute; top: 50%; right: 6px; display: inline-grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 8px; background: none; color: var(--muted); cursor: pointer; transform: translateY(-50%); }
+.password-input button:hover { background: var(--blue-soft); color: var(--blue); }
+.password-input button:focus-visible { outline: 3px solid #2f6ed5; outline-offset: 1px; }
+.password-input svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
+.client-access-url { display: flex; gap: 8px; }
+.client-access-url input { flex: 1; min-width: 0; }
+.client-login { display: grid; gap: 14px; width: min(400px, calc(100% - 32px)); padding: 32px; border: 1px solid var(--line); border-radius: 18px; background: var(--panel-bg); color: var(--ink); box-shadow: 0 28px 80px rgba(0,0,0,.28); }
+.client-login h1 { margin: 10px 0 0; font-size: 22px; letter-spacing: -.025em; }
+.client-login p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
+.client-login .brand-mark { color: #fff; }
+
+.print-brand { display: none; }
+:root.print-layout .print-brand { display: flex; }
+.print-brand .brand-mark { color: #fff; }
+
+/* Exportar a PDF = imprimir la vista de analíticas: solo el contenido, sin la
+   carcasa de la app ni los controles, con el tema que esté activo. */
+@media print {
+  /* Sin margen de página el navegador no imprime su cabecera/pie (URL, fecha);
+     el margen visual lo pone .content-shell. */
+  @page { margin: 0; }
+  html { background: var(--bg); }
+  html, body, .stat-card, .analytics-panel, .intro-card, .chart-legend i, .top-questions-list li { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .sidebar, .sidebar-toggle, .topbar, .intro-card-actions, .tour-help-button, .segmented-control, .analytics-panel-toggle .agent-toggle-icon { display: none !important; }
+  .print-brand { display: flex; }
+  .print-brand .brand-mark { box-shadow: none; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .app-layout, .app-layout.sidebar-collapsed { display: block; min-height: 0; }
+  .content-shell { width: 186mm; margin: 0 auto; padding: 12mm 0; box-sizing: content-box; }
+  .page-grid { max-width: none; }
+  .stat-card, .analytics-panel, .intro-card { break-inside: avoid; box-shadow: none; }
+  /* Igual que en pantalla: los dos paneles a la par aunque el papel sea estrecho. */
+  .analytics-panel-row { grid-template-columns: repeat(2, minmax(0, 1fr)); break-inside: avoid; }
+}
+
+/* Justo antes de imprimir la página adopta el ancho del papel (clase puesta
+   por el botón de PDF) para que las gráficas se redibujen a ese tamaño: el
+   navegador no las vuelve a medir al imprimir. */
+:root.print-layout .content-shell { width: 186mm; margin: 0 auto; padding: 12mm 0; box-sizing: content-box; }

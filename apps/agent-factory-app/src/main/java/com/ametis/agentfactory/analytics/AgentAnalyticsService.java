@@ -112,6 +112,12 @@ public class AgentAnalyticsService {
         .toList();
   }
 
+  public String agentName(UUID tenantId, UUID agentId) {
+    return agentRepository.findByIdAndTenantId(agentId, tenantId)
+        .map(AgentDefinition::getName)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "error.agentNotFound"));
+  }
+
   public AgentAnalyticsResponse overview(UUID tenantId, UUID agentId, OffsetDateTime from, OffsetDateTime to) {
     AgentDefinition agent = agentRepository.findByIdAndTenantId(agentId, tenantId)
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "error.agentNotFound"));

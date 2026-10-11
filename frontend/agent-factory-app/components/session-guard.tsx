@@ -9,7 +9,9 @@ import { useT } from "@/components/IntlProviderClient";
 export function SessionGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const t = useT();
-  const [ready, setReady] = useState(pathname.startsWith("/auth/"));
+  // /client/* tiene su propio acceso (usuario y contraseña del agente), ajeno a esta sesión.
+  const isPublicPath = pathname.startsWith("/auth/") || pathname.startsWith("/client/");
+  const [ready, setReady] = useState(isPublicPath);
 
   useEffect(() => {
     let cancelled = false;
@@ -52,6 +54,6 @@ export function SessionGuard({ children }: { children: React.ReactNode }) {
     };
   }, [pathname]);
 
-  if (!ready) return <main className="center-screen" role="status">{t("common.loadingSession")}</main>;
+  if (!ready && !isPublicPath) return <main className="center-screen" role="status">{t("common.loadingSession")}</main>;
   return children;
 }

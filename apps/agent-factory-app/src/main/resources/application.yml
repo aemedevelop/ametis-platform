@@ -59,6 +59,8 @@ agent-factory:
     token-encryption-key: ${AGENT_FACTORY_GOOGLE_TOKEN_ENCRYPTION_KEY:}
     root-folder-id: ${AGENT_FACTORY_GOOGLE_ROOT_FOLDER_ID:}
     application-name: ${AGENT_FACTORY_GOOGLE_APPLICATION_NAME:AMETIS Agent Factory}
+  analytics-access:
+    session-secret: ${AGENT_FACTORY_ANALYTICS_SESSION_SECRET:}
   documents:
     max-file-size-bytes: ${AGENT_FACTORY_MAX_FILE_SIZE_BYTES:26214400}
   storage:

@@ -61,7 +61,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return () => document.removeEventListener("mousedown", closeProfileMenu);
   }, []);
 
-  if (pathname.startsWith("/auth/") || pathname === "/onboarding") return children;
+  // /client/* es la zona del cliente final: sin carcasa ni sesión de la plataforma.
+  if (pathname.startsWith("/auth/") || pathname.startsWith("/client/") || pathname === "/onboarding") return children;
 
   function signOut() {
     clearSession();

@@ -603,6 +603,48 @@ export function fetchAgentAnalytics(id: string, fromIso?: string, toIso?: string
   return apiFetch<AgentAnalytics>(`/api/agent-factory/agents/${id}/analytics${query ? `?${query}` : ""}`);
 }
 
+/** Guarda el cuerpo de una respuesta como archivo, con el nombre que indique Content-Disposition. */
+export async function saveResponseAsFile(response: Response, fallbackName: string): Promise<void> {
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const encodedName = /filename\*=UTF-8''([^;]+)/i.exec(disposition)?.[1];
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const anchor = window.document.createElement("a");
+  anchor.href = url;
+  anchor.download = encodedName ? decodeURIComponent(encodedName) : fallbackName;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+/** Descarga el Excel con el mismo contenido del dashboard para ese rango. */
+export async function exportAgentAnalytics(id: string, fromIso: string, toIso: string, lang: string): Promise<void> {
+  const params = new URLSearchParams({ from: fromIso, to: toIso, lang });
+  const response = await authenticatedFetch(`/api/agent-factory/agents/${id}/analytics/export?${params}`);
+  if (!response.ok) throw new AgentFactoryApiError(response.status, "error.analyticsExportFailed");
+  await saveResponseAsFile(response, "analytics.xlsx");
+}
+
+/** Acceso del cliente final a las analíticas de un agente. `publicId` es null hasta que se configura por primera vez. */
+export type AnalyticsAccess = {
+  published: boolean;
+  username: string;
+  publicId: string | null;
+  lastAccessAt: string | null;
+};
+
+export function fetchAnalyticsAccess(agentId: string) {
+  return apiFetch<AnalyticsAccess>(`/api/agent-factory/agents/${agentId}/analytics/access`);
+}
+
+/** `password` vacío conserva la actual (es obligatoria la primera vez). */
+export function saveAnalyticsAccess(agentId: string, access: { published: boolean; username: string; password: string }) {
+  return apiFetch<AnalyticsAccess>(`/api/agent-factory/agents/${agentId}/analytics/access`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(access)
+  });
+}
+
 export function testAgent(id: string, question: string) {
   return apiFetch<AgentTestResponse>(`/api/agent-factory/agents/${id}/test`, {
     method: "POST",
