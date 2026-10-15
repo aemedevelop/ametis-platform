@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
@@ -102,5 +103,17 @@ public class KnowledgeBaseDocumentController {
     Context context = context(authentication, AccessGuard.DOCUMENTS_MANAGE, knowledgeBaseId);
     documentService.delete(context.business(), context.base(), storageObjectKey);
     return ResponseEntity.noContent().build();
+  }
+
+  public record BatchDeleteRequest(boolean all, List<String> keys) {}
+
+  // POST y no DELETE con cuerpo: muchos proxies descartan el body de un DELETE.
+  @PostMapping("/knowledge-bases/{knowledgeBaseId}/documents/batch-delete")
+  public DocumentService.BatchDeleteResult batchDelete(
+      @PathVariable UUID knowledgeBaseId,
+      @RequestBody BatchDeleteRequest request,
+      JwtAuthenticationToken authentication) {
+    Context context = context(authentication, AccessGuard.DOCUMENTS_MANAGE, knowledgeBaseId);
+    return documentService.deleteMany(context.business(), context.base(), request.all(), request.keys());
   }
 }

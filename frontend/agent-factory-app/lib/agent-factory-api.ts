@@ -411,6 +411,20 @@ export async function deleteKnowledgeBaseDocument(knowledgeBaseId: string, stora
   });
 }
 
+export type BatchDeleteResult = { deleted: string[]; failed: string[] };
+
+// `all: true` borra todo el contenido de la base; si no, solo `keys`.
+export function batchDeleteKnowledgeBaseDocuments(
+  knowledgeBaseId: string,
+  input: { all: true } | { all?: false; keys: string[] }
+) {
+  return apiFetch<BatchDeleteResult>(`/api/agent-factory/knowledge-bases/${knowledgeBaseId}/documents/batch-delete`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  });
+}
+
 export async function downloadKnowledgeBaseDocument(
   knowledgeBaseId: string,
   document: StoredDocument

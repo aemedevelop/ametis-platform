@@ -9,6 +9,7 @@ import java.io.OutputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
@@ -179,6 +180,50 @@ public class DocumentService {
     }
   }
 
+  /**
+   * Borrado en lote: con {@code all} se borra todo lo que hay en el contenedor
+   * de la base (ignorando {@code keys}); si no, solo las claves indicadas. Cada
+   * documento se borra por separado y un fallo no detiene al resto.
+   */
+  public BatchDeleteResult deleteMany(Business business, KnowledgeBase base, boolean all, List<String> keys) {
+    KnowledgeBase ready = requireKbRepository(business, base);
+    UUID tenantId = business.getTenantId();
+    List<String> targets;
+    if (all) {
+      try {
+        targets = storageProvider.listObjects(tenantId, ready.getDocumentsLocator()).stream()
+            .map(StorageProvider.StoredObject::key)
+            .toList();
+      } catch (Exception exception) {
+        throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "error.storageListingFailed", exception);
+      }
+    } else {
+      if (keys == null || keys.isEmpty()) {
+        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "error.batchDeleteEmpty");
+      }
+      targets = keys.stream().distinct().toList();
+    }
+    List<String> deleted = new ArrayList<>();
+    List<String> failed = new ArrayList<>();
+    for (String key : targets) {
+      try {
+        if (!all) {
+          requireOwnedByContainer(storageProvider.getObject(tenantId, key), ready.getDocumentsLocator());
+        }
+        storageProvider.deleteObject(tenantId, key);
+        assetRepository.findByKnowledgeBaseIdAndStorageObjectKey(ready.getId(), key).ifPresent(asset -> {
+          asset.deleted();
+          assetRepository.save(asset);
+        });
+        deleted.add(key);
+      } catch (Exception exception) {
+        LOGGER.warn("Batch delete failed for knowledge base {} and object {}", ready.getId(), key, exception);
+        failed.add(key);
+      }
+    }
+    return new BatchDeleteResult(deleted, failed);
+  }
+
   private void requireOwnedByContainer(StorageProvider.StoredObject object, String documentsLocator) {
     if (object.containerKeys() == null || !object.containerKeys().contains(documentsLocator)) {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Document not found");
@@ -248,4 +293,6 @@ public class DocumentService {
   }
 
   public record DownloadDescriptor(String name, String mimeType) {}
+
+  public record BatchDeleteResult(List<String> deleted, List<String> failed) {}
 }
