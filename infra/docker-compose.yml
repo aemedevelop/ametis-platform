@@ -145,6 +145,9 @@ services:
       KONG_PROXY_ERROR_LOG: /dev/stderr
       KONG_ADMIN_ERROR_LOG: /dev/stderr
       KONG_ADMIN_LISTEN: 0.0.0.0:8001
+      # Kong Manager (consola web). El navegador llama a la Admin API publicada.
+      KONG_ADMIN_GUI_LISTEN: 0.0.0.0:8002
+      KONG_ADMIN_GUI_API_URL: ${KONG_ADMIN_GUI_API_URL:-http://localhost:8441}
       KONG_PROXY_LISTEN: 0.0.0.0:8000, 0.0.0.0:8443 ssl http2
       KONG_DNS_RESOLVER: 127.0.0.11
       # TTL corto: si core-api/agent-factory-app se recrean (redeploy o
@@ -156,6 +159,8 @@ services:
       - "${KONG_PROXY_PORT:-8440}:8000"
       - "${KONG_PROXY_TLS_PORT:-8443}:8443"
       - "${KONG_ADMIN_PORT:-8441}:8001"
+      # Solo localhost: la consola no tiene autenticación.
+      - "127.0.0.1:${KONG_MANAGER_PORT:-8442}:8002"
     volumes:
       - ./kong/kong.yml:/usr/local/kong/declarative/kong.yml:ro
     networks:

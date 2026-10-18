@@ -216,7 +216,8 @@ public class AuthService {
         toStringValue(tokenPayload.getOrDefault("token_type", "Bearer")),
         toLongValue(tokenPayload.get("expires_in")),
         toLongValue(tokenPayload.get("refresh_expires_in")),
-        toStringValue(tokenPayload.get("scope")));
+        toStringValue(tokenPayload.get("scope")),
+        toStringValue(tokenPayload.get("id_token")));
   }
 
   private String getPasswordGrantToken(

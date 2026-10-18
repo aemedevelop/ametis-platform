@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
-import { clearSession, getAuthToken } from "@/lib/session";
+import { clearSession, getAuthToken, getIdToken } from "@/lib/session";
+import { buildLogoutUrl } from "@/lib/oidc-pkce";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { useT } from "@/components/IntlProviderClient";
 import { ThemeSwitcher } from "@/components/theme-switcher";
@@ -65,9 +66,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   if (pathname.startsWith("/auth/") || pathname.startsWith("/client/") || pathname === "/onboarding") return children;
 
   function signOut() {
+    // Se lee antes de limpiar: clearSession también lo borra.
+    const idToken = getIdToken();
     clearSession();
     setProfileMenuOpen(false);
     setProfile(null);
+    if (idToken) {
+      // Sesión SSO: hay que cerrarla también en Keycloak, que vuelve a /auth/login.
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? window.location.origin;
+      window.location.assign(buildLogoutUrl({
+        authUrl: process.env.NEXT_PUBLIC_KEYCLOAK_AUTH_URL ?? "http://localhost:8081/realms/ametis/protocol/openid-connect/auth",
+        idToken,
+        postLogoutRedirectUri: `${appUrl}/auth/login`
+      }));
+      return;
+    }
     router.push("/auth/login");
   }
 

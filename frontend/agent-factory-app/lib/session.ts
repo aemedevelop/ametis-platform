@@ -1,6 +1,7 @@
 export type SessionTokens = {
   accessToken: string;
   refreshToken?: string | null;
+  idToken?: string | null;
 };
 
 export function getAuthToken(): string | null {
@@ -19,8 +20,15 @@ export function storeSessionTokens(tokens: SessionTokens): void {
   const cleanupStorage = storage === window.localStorage ? window.sessionStorage : window.localStorage;
   cleanupStorage.removeItem("core_access_token");
   cleanupStorage.removeItem("core_refresh_token");
+  cleanupStorage.removeItem("core_id_token");
   storage.setItem("core_access_token", tokens.accessToken);
   if (tokens.refreshToken) storage.setItem("core_refresh_token", tokens.refreshToken);
+  if (tokens.idToken) storage.setItem("core_id_token", tokens.idToken);
+}
+
+export function getIdToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return window.localStorage.getItem("core_id_token") || window.sessionStorage.getItem("core_id_token");
 }
 
 export type AuthMode = "sso" | "password";
@@ -81,6 +89,7 @@ export function clearSession(): void {
   for (const storage of [window.localStorage, window.sessionStorage]) {
     storage.removeItem("core_access_token");
     storage.removeItem("core_refresh_token");
+    storage.removeItem("core_id_token");
     storage.removeItem("core_auth_mode");
     storage.removeItem("active_tenant_id");
     storage.removeItem("active_business_id");

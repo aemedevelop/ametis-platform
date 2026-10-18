@@ -6,5 +6,7 @@ public record AuthLoginResponse(
     String tokenType,
     Long expiresIn,
     Long refreshExpiresIn,
-    String scope) {
+    String scope,
+    // Necesario como id_token_hint para cerrar la sesión SSO en Keycloak.
+    String idToken) {
 }
