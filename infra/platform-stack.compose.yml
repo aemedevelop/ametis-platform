@@ -5,6 +5,7 @@ services:
       dockerfile: Dockerfile
     image: ametis/agent-factory-app:${IMAGE_TAG:-0.1.0}
     container_name: ${CONTAINER_PREFIX:-ametis}-agent-factory-app
+    restart: ${RESTART_POLICY:-unless-stopped}
     depends_on:
       keycloak:
         condition: service_started
@@ -59,6 +60,7 @@ services:
         NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: ${HUB_KEYCLOAK_CLIENT_ID:-ametis-hub-web}
     image: ametis/hub-web:${IMAGE_TAG:-0.1.0}
     container_name: ${CONTAINER_PREFIX:-ametis}-hub-web
+    restart: ${RESTART_POLICY:-unless-stopped}
     environment:
       NEXT_PUBLIC_API_BASE_URL: ${HUB_API_BASE_URL:-http://localhost:8000}
       NEXT_PUBLIC_CHAT_API_URL: ${CHAT_API_URL:-/api/rag-chat}
@@ -90,6 +92,7 @@ services:
         NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: ${AGENT_FACTORY_KEYCLOAK_CLIENT_ID:-agent-factory-web}
     image: ametis/agent-factory-web:${IMAGE_TAG:-0.1.0}
     container_name: ${CONTAINER_PREFIX:-ametis}-agent-factory-web
+    restart: ${RESTART_POLICY:-unless-stopped}
     ports:
       - "${AGENT_FACTORY_WEB_PORT:-3200}:3200"
     networks:

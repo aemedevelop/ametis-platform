@@ -133,6 +133,24 @@ docker restart ametis-pre-kong   # o ametis-kong en produccion
 `agent-factory-app` (en pre o en produccion), reiniciar tambien el `kong` de
 ese mismo entorno.
 
+Mitigacion en codigo (2026-10-18): `KONG_DNS_VALID_TTL`/`KONG_DNS_STALE_TTL`
+a 10s en `infra/docker-compose.yml`, para que Kong vuelva a resolver la IP
+solo. Hasta confirmarlo en pre, seguir reiniciando Kong tras los redeploys.
+
+### Reinicio del VPS: politica de reinicio (2026-10-18)
+
+El 2026-10-18 el VPS se reinicio (actualizacion de kernel) y ningun
+contenedor de `ametis-platform` volvio a arrancar: los compose no tenian
+`restart:`. Ahora todos los servicios usan `restart: ${RESTART_POLICY:-unless-stopped}`;
+`.env.vps`/`.env.pre` -> `unless-stopped`, `.env.local` -> `no`.
+
+Para aplicarlo a contenedores ya creados sin recrearlos:
+```bash
+docker ps -a --format '{{.Names}}' | grep -iE '^ametis' | xargs -r docker update --restart unless-stopped
+```
+Verificar tras un reinicio: `uptime -s`, `last -x reboot shutdown | head`,
+`docker inspect <c> --format '{{.HostConfig.RestartPolicy.Name}} exit={{.State.ExitCode}}'`.
+
 ### Gotcha: despliegue de prueba fijo (`workspace-test`) con Origin viejo -> 403 en el widget
 
 El despliegue interno `workspace-test` (usado por el toggle "Probar chat en
