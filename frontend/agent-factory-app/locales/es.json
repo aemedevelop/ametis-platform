@@ -479,6 +479,8 @@
   "analytics.access.saved": "Acceso guardado.",
   "clientAnalytics.loginTitle": "Analíticas de tu agente",
   "clientAnalytics.loginDescription": "Introduce el usuario y la contraseña que te han facilitado.",
+  "clientAnalytics.invalidLinkTitle": "Enlace no válido",
+  "clientAnalytics.invalidLinkDescription": "Esta dirección no corresponde a ningún panel. Usa el enlace completo que te han facilitado.",
   "clientAnalytics.signIn": "Entrar",
   "clientAnalytics.signingIn": "Entrando…",
   "clientAnalytics.signOut": "Salir",

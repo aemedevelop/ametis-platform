@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { clearSession, getAuthToken, getIdToken } from "@/lib/session";
 import { buildLogoutUrl } from "@/lib/oidc-pkce";
+import { isPublicPath } from "@/lib/public-paths";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { useT } from "@/components/IntlProviderClient";
 import { ThemeSwitcher } from "@/components/theme-switcher";
@@ -63,7 +64,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, []);
 
   // /client/* es la zona del cliente final: sin carcasa ni sesión de la plataforma.
-  if (pathname.startsWith("/auth/") || pathname.startsWith("/client/") || pathname === "/onboarding") return children;
+  if (isPublicPath(pathname) || pathname === "/onboarding") return children;
 
   function signOut() {
     // Se lee antes de limpiar: clearSession también lo borra.

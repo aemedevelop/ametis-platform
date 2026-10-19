@@ -479,6 +479,8 @@
   "analytics.access.saved": "Access saved.",
   "clientAnalytics.loginTitle": "Your agent’s analytics",
   "clientAnalytics.loginDescription": "Enter the username and password you were given.",
+  "clientAnalytics.invalidLinkTitle": "Invalid link",
+  "clientAnalytics.invalidLinkDescription": "This address does not match any dashboard. Use the full link you were given.",
   "clientAnalytics.signIn": "Sign in",
   "clientAnalytics.signingIn": "Signing in…",
   "clientAnalytics.signOut": "Sign out",

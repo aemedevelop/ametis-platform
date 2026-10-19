@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { refreshSession } from "@/lib/auth-client";
 import { clearSession, getAuthToken, getRefreshToken, isAuthTokenExpired, storeSessionTokens } from "@/lib/session";
 import { useT } from "@/components/IntlProviderClient";
+import { isPublicPath } from "@/lib/public-paths";
 
 export function SessionGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -18,8 +19,8 @@ export function SessionGuard({ children }: { children: React.ReactNode }) {
   //    un navegador sin ella acabaría redirigido a /auth/login -- fallo que no
   //    se ve al probar desde un navegador donde el consultor ya tiene sesión.
   // AppShell aplica la misma exclusión para no pintar el menú de la app.
-  const isPublicPath = pathname.startsWith("/auth/") || pathname.startsWith("/client/");
-  const [ready, setReady] = useState(isPublicPath);
+  const isPublic = isPublicPath(pathname);
+  const [ready, setReady] = useState(isPublic);
 
   useEffect(() => {
     let cancelled = false;
@@ -52,7 +53,7 @@ export function SessionGuard({ children }: { children: React.ReactNode }) {
       window.location.replace(`/auth/login?redirect=${encodeURIComponent(pathname)}`);
     }
 
-    if (isPublicPath) {
+    if (isPublic) {
       return;
     }
     setReady(false);
@@ -60,8 +61,8 @@ export function SessionGuard({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [pathname, isPublicPath]);
+  }, [pathname, isPublic]);
 
-  if (!ready && !isPublicPath) return <main className="center-screen" role="status">{t("common.loadingSession")}</main>;
+  if (!ready && !isPublic) return <main className="center-screen" role="status">{t("common.loadingSession")}</main>;
   return children;
 }

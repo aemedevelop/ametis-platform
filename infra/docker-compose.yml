@@ -158,8 +158,9 @@ services:
     ports:
       - "${KONG_PROXY_PORT:-8440}:8000"
       - "${KONG_PROXY_TLS_PORT:-8443}:8443"
-      - "${KONG_ADMIN_PORT:-8441}:8001"
-      # Solo localhost: la consola no tiene autenticación.
+      # Admin API y consola solo en 127.0.0.1: no tienen autenticación. En el
+      # VPS se accede por túnel SSH, nunca desde Internet.
+      - "127.0.0.1:${KONG_ADMIN_PORT:-8441}:8001"
       - "127.0.0.1:${KONG_MANAGER_PORT:-8442}:8002"
     volumes:
       - ./kong/kong.yml:/usr/local/kong/declarative/kong.yml:ro
