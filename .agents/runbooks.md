@@ -61,27 +61,6 @@ docker logs ametis-agent-factory-app --tail 160
 docker logs ametis-kong --tail 120
 ```
 
-## Core DB bootstrap — required once per brand-new Postgres
-
-`core-api` has no embedded Flyway (`ddl-auto: none`, unlike `agent-factory-app`
-which migrates itself automatically). The `core` schema (`users`, `tenants`,
-`roles`, `plans`, etc.) only exists after manually running `db/apply-db-config.ps1`
-against that Postgres — a one-time bootstrap per environment, not per deploy.
-Skipping it produces `relation "core.users" does not exist` the first time
-someone tries to log in / onboard.
-
-Run once, right after a fresh Postgres is created for any new environment
-(local, pre, a future prod-on-another-host):
-
-```powershell
-.\db\apply-db-config.ps1 -ContainerName ametis-pre-postgres
-```
-
-(swap `-ContainerName` for whichever Postgres container the new environment
-uses; defaults to `ametis-postgres`). Needs `pwsh`/PowerShell with Docker CLI
-access to that container — if run from Windows against a remote VPS
-container, needs a Docker context or SSH session with Docker available.
-
 ## VPS Platform Start
 
 Run from `/opt/ametis-platform`:

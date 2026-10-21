@@ -3,31 +3,57 @@ package com.ametis.agentfactory.deployments;
 import com.ametis.agentfactory.agents.AgentDefinition;
 import com.ametis.agentfactory.agents.AgentRepository;
 import com.ametis.agentfactory.agents.AgentStatus;
+import com.ametis.agentfactory.documents.RepositoryBinding;
+import com.ametis.agentfactory.documents.RepositoryBindingRepository;
+import com.ametis.agentfactory.storage.StorageProvider;
 import java.text.Normalizer;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class DeploymentService {
+  private static final long MAX_AVATAR_BYTES = 2 * 1024 * 1024;
+  private static final Set<String> SUPPORTED_AVATAR_TYPES =
+      Set.of("image/png", "image/jpeg", "image/webp", "image/svg+xml");
+
+  /**
+   * Slug reservado del despliegue de prueba interno: uno por tenant, fijo,
+   * autoaprovisionado. No es seleccionable al crear un despliegue normal
+   * (ver {@link #normalizeSlug}).
+   */
+  static final String WORKSPACE_TEST_SLUG = "workspace-test";
+
   private final AgentDeploymentRepository deploymentRepository;
   private final AgentRepository agentRepository;
   private final DeploymentEndpoints deploymentEndpoints;
+  private final StorageProvider storageProvider;
+  private final RepositoryBindingRepository repositoryBindingRepository;
+  private final String platformWebOrigin;
 
   public DeploymentService(
       AgentDeploymentRepository deploymentRepository,
       AgentRepository agentRepository,
-      DeploymentEndpoints deploymentEndpoints) {
+      DeploymentEndpoints deploymentEndpoints,
+      StorageProvider storageProvider,
+      RepositoryBindingRepository repositoryBindingRepository,
+      @Value("${agent-factory.public.web-app-origin:}") String platformWebOrigin) {
     this.deploymentRepository = deploymentRepository;
     this.agentRepository = agentRepository;
     this.deploymentEndpoints = deploymentEndpoints;
+    this.storageProvider = storageProvider;
+    this.repositoryBindingRepository = repositoryBindingRepository;
+    this.platformWebOrigin = platformWebOrigin == null ? "" : platformWebOrigin.trim();
   }
 
   private DeploymentResponse toResponse(AgentDeployment deployment, AgentDefinition agent) {
@@ -71,6 +97,60 @@ public class DeploymentService {
     return toResponse(deploymentRepository.save(deployment), agent);
   }
 
+  /** Todos los despliegues de un agente, listos para exportarse (ver {@link AgentDeploymentExport}). */
+  public List<AgentDeploymentExport> exportForAgent(UUID tenantId, UUID agentId) {
+    return deploymentRepository.findAllByTenantIdAndAgentId(tenantId, agentId).stream()
+        .map(AgentDeploymentExport::from)
+        .toList();
+  }
+
+  /**
+   * Recrea un despliegue exportado bajo un agente nuevo (import entre
+   * entornos). Nace SIEMPRE en borrador -- aunque en el origen estuviera
+   * publicado, hay que revisar orígenes/slug antes de exponerlo de verdad en
+   * el entorno de destino -- y con un slug único (le agrega un sufijo si el
+   * de origen ya está en uso). No requiere que el agente esté publicado: el
+   * despliegue puede quedar configurado a la espera de que se termine de
+   * indexar el conocimiento.
+   */
+  @Transactional
+  public void importDeployment(UUID tenantId, UUID userId, UUID agentId, AgentDeploymentExport item) {
+    String name = requireText(item.name(), "error.deploymentNameRequired");
+    // El slug de origen puede venir vacío o ser el reservado "workspace-test"
+    // (p. ej. si se exportó por error el despliegue de prueba fijo). A
+    // diferencia del alta manual, un import no debe abortar por esto -- se
+    // genera un slug propio a partir del nombre en su lugar.
+    String baseSlug;
+    try {
+      baseSlug = normalizeSlug(item.deploymentSlug());
+    } catch (ResponseStatusException ex) {
+      baseSlug = normalizeSlug(name + "-importado");
+    }
+    String slug = baseSlug;
+    int suffix = 2;
+    while (deploymentRepository.existsByTenantIdAndDeploymentSlugIgnoreCase(tenantId, slug)) {
+      slug = baseSlug + "-" + suffix;
+      suffix++;
+    }
+    DeploymentChannelType channelType = item.channelType() == null ? DeploymentChannelType.WEB_CHAT : item.channelType();
+    AgentDeployment deployment = AgentDeployment.create(
+        tenantId,
+        agentId,
+        name,
+        channelType,
+        slug,
+        null,
+        cleanOptional(item.welcomeMessage()),
+        item.rateLimitPerMinute(),
+        item.rateLimitPerDay(),
+        DeploymentOrigins.normalize(item.allowedOrigins()),
+        userId);
+    if (item.theme() != null) {
+      deployment.applyAppearance(item.theme());
+    }
+    deploymentRepository.save(deployment);
+  }
+
   @Transactional
   public DeploymentResponse update(UUID tenantId, UUID deploymentId, DeploymentRequest request) {
     AgentDeployment deployment = deploymentRepository.findByIdAndTenantId(deploymentId, tenantId)
@@ -102,6 +182,72 @@ public class DeploymentService {
     deployment.applyAppearance(theme);
     AgentDefinition agent = agentRepository.findByIdAndTenantId(deployment.getAgentId(), tenantId).orElse(null);
     return toResponse(deploymentRepository.save(deployment), agent);
+  }
+
+  @Transactional
+  public AvatarResponse uploadAvatar(UUID tenantId, UUID deploymentId, MultipartFile file) {
+    AgentDeployment deployment = deploymentRepository.findByIdAndTenantId(deploymentId, tenantId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "error.deploymentNotFound"));
+    validateAvatar(file);
+    RepositoryBinding binding = repositoryBindingRepository.findByTenantId(tenantId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "error.repositoryNotActive"));
+    String previousKey = deployment.getThemeAvatarKey();
+    try {
+      String container = storageProvider.provisionContainer(
+          tenantId, binding.getWorkspaceLocator(), "branding", Map.of("purpose", "branding"));
+      String mimeType = file.getContentType() == null ? "application/octet-stream" : file.getContentType();
+      StorageProvider.StoredObject stored = storageProvider.putObject(
+          tenantId,
+          container,
+          "avatar-" + deploymentId,
+          mimeType,
+          file.getBytes(),
+          Map.of("deploymentId", deploymentId.toString(), "purpose", "avatar"));
+      deployment.applyAvatar(stored.key());
+      String avatarUrl = deploymentEndpoints.describe(deploymentRepository.save(deployment)).avatarUrl();
+      if (previousKey != null && !previousKey.equals(stored.key())) {
+        deleteAvatarObjectQuietly(tenantId, previousKey);
+      }
+      return new AvatarResponse(avatarUrl);
+    } catch (ResponseStatusException exception) {
+      throw exception;
+    } catch (Exception exception) {
+      throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "error.storageUploadFailed", exception);
+    }
+  }
+
+  @Transactional
+  public AvatarResponse deleteAvatar(UUID tenantId, UUID deploymentId) {
+    AgentDeployment deployment = deploymentRepository.findByIdAndTenantId(deploymentId, tenantId)
+        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "error.deploymentNotFound"));
+    String key = deployment.getThemeAvatarKey();
+    if (key != null) {
+      deleteAvatarObjectQuietly(tenantId, key);
+      deployment.applyAvatar(null);
+    }
+    String avatarUrl = deploymentEndpoints.describe(deploymentRepository.save(deployment)).avatarUrl();
+    return new AvatarResponse(avatarUrl);
+  }
+
+  private void deleteAvatarObjectQuietly(UUID tenantId, String key) {
+    try {
+      storageProvider.deleteObject(tenantId, key);
+    } catch (Exception ignored) {
+      // El objeto viejo puede haber desaparecido ya; no bloquea la operación.
+    }
+  }
+
+  private void validateAvatar(MultipartFile file) {
+    if (file == null || file.isEmpty()) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "error.deploymentAvatarRequired");
+    }
+    if (file.getSize() > MAX_AVATAR_BYTES) {
+      throw new ResponseStatusException(HttpStatus.PAYLOAD_TOO_LARGE, "error.deploymentAvatarTooLarge");
+    }
+    String type = file.getContentType() == null ? "" : file.getContentType().toLowerCase(Locale.ROOT);
+    if (!SUPPORTED_AVATAR_TYPES.contains(type)) {
+      throw new ResponseStatusException(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "error.deploymentAvatarUnsupportedType");
+    }
   }
 
   @Transactional
@@ -151,6 +297,83 @@ public class DeploymentService {
     if (normalized.isBlank()) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "error.deploymentSlugRequired");
     }
+    if (normalized.equals(WORKSPACE_TEST_SLUG)) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "error.deploymentSlugReserved");
+    }
     return normalized.substring(0, Math.min(normalized.length(), 80));
+  }
+
+  /**
+   * Devuelve el despliegue de prueba fijo del workspace (uno por tenant,
+   * siempre el mismo {@code publicId}), creándolo la primera vez que se pide.
+   * Se sirve por el mismo camino público que cualquier despliegue real -- la
+   * única diferencia es que sus "orígenes permitidos" ya incluyen el propio
+   * dominio de la plataforma, para que el widget cargado dentro de la propia
+   * app pase el chequeo de {@code Origin} sin trato especial. Nace publicado
+   * (no en borrador) porque su único propósito es responder de verdad.
+   *
+   * <p>Si se indica {@code requestedAgentId} (el agente que el usuario tiene
+   * seleccionado en ese momento en el formulario de alta/edición), el
+   * despliegue se reapunta a ese agente en caliente -- así el widget, con el
+   * mismo {@code publicId} de siempre, siempre conversa con el agente que se
+   * está probando en el formulario.
+   */
+  @Transactional
+  public DeploymentResponse getOrCreateWorkspaceTestDeployment(UUID tenantId, UUID userId, UUID requestedAgentId) {
+    AgentDeployment existing = deploymentRepository
+        .findByTenantIdAndDeploymentSlugIgnoreCase(tenantId, WORKSPACE_TEST_SLUG)
+        .orElse(null);
+
+    AgentDefinition agent;
+    if (requestedAgentId != null) {
+      agent = requireReadyAgent(tenantId, requestedAgentId);
+    } else if (existing != null) {
+      agent = agentRepository.findByIdAndTenantId(existing.getAgentId(), tenantId).orElse(null);
+    } else {
+      agent = agentRepository
+          .findFirstByTenantIdAndStatusOrderByUpdatedAtDesc(tenantId, AgentStatus.READY)
+          .orElseThrow(() -> new ResponseStatusException(HttpStatus.CONFLICT, "error.workspaceTestRequiresReadyAgent"));
+    }
+
+    if (existing != null) {
+      boolean changed = false;
+      if (agent != null && !existing.getAgentId().equals(agent.getId())) {
+        existing.repointAgent(agent.getId());
+        changed = true;
+      }
+      // El origen permitido se resincroniza en cada uso (no solo al crear):
+      // si AGENT_FACTORY_WEB_URL cambió (o no estaba bien puesta la primera
+      // vez que se creó este despliegue), lo corrige solo en vez de dejar el
+      // widget respondiendo 403 para siempre.
+      if (!platformWebOrigin.isBlank()) {
+        String expectedOrigins = DeploymentOrigins.normalize(List.of(platformWebOrigin));
+        if (!expectedOrigins.equals(existing.getAllowedOrigins())) {
+          existing.resyncAllowedOrigins(expectedOrigins);
+          changed = true;
+        }
+      }
+      if (changed) {
+        existing = deploymentRepository.save(existing);
+      }
+      return toResponse(existing, agent);
+    }
+
+    if (platformWebOrigin.isBlank()) {
+      throw new ResponseStatusException(HttpStatus.CONFLICT, "error.workspaceTestOriginNotConfigured");
+    }
+    AgentDeployment deployment = AgentDeployment.create(
+        tenantId,
+        agent.getId(),
+        "Chat de prueba del workspace",
+        DeploymentChannelType.WEB_CHAT,
+        WORKSPACE_TEST_SLUG,
+        null,
+        null,
+        null,
+        null,
+        DeploymentOrigins.normalize(List.of(platformWebOrigin)),
+        userId);
+    deployment.activate();
+    return toResponse(deploymentRepository.save(deployment), agent);
   }
 }

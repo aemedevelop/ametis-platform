@@ -4,6 +4,7 @@ import { ChangeEvent, FormEvent, useCallback, useEffect, useRef, useState } from
 import { useLocale, useT } from "@/components/IntlProviderClient";
 import {
   AgentFactoryApiError,
+  batchDeleteKnowledgeBaseDocuments,
   createKnowledgeBase,
   deleteKnowledgeBase,
   deleteKnowledgeBaseDocument,
@@ -16,8 +17,14 @@ import {
   updateKnowledgeBase,
   uploadKnowledgeBaseDocument
 } from "@/lib/agent-factory-api";
+import { GuidedTour, TourHelpButton, useTour, type TourStep } from "@/components/guided-tour";
 
 type Translate = (key: string, vars?: Record<string, string | number>) => string;
+
+const KNOWLEDGE_FORM_TOUR_STEPS: TourStep[] = [
+  { selector: "[data-tour='kb-field-name']", titleKey: "tour.knowledge.name.title", descriptionKey: "tour.knowledge.name.description" },
+  { selector: "[data-tour='kb-field-description']", titleKey: "tour.knowledge.description.title", descriptionKey: "tour.knowledge.description.description" }
+];
 
 export default function KnowledgeBasesPage() {
   const t = useT();
@@ -35,7 +42,13 @@ export default function KnowledgeBasesPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [busyFileId, setBusyFileId] = useState<string | null>(null);
   const [baseToDelete, setBaseToDelete] = useState<KnowledgeBase | null>(null);
+  const [documentToDelete, setDocumentToDelete] = useState<{ baseId: string; document: StoredDocument } | null>(null);
+  // Selección de la base desplegada; solo hay una abierta a la vez.
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  const [bulkDeleteBaseId, setBulkDeleteBaseId] = useState<string | null>(null);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
   const [error, setError] = useState<unknown>(null);
+  const formTour = useTour("knowledge-form");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -115,15 +128,17 @@ export default function KnowledgeBasesPage() {
       await deleteKnowledgeBase(baseToDelete.id);
       setKnowledgeBases((current) => current.filter((item) => item.id !== baseToDelete.id));
       setExpandedBaseId((current) => (current === baseToDelete.id ? null : current));
-      setBaseToDelete(null);
     } catch (requestError) {
       setError(requestError);
     } finally {
+      // También al fallar: el aviso de error queda tapado por el diálogo.
+      setBaseToDelete(null);
       setDeletingId(null);
     }
   }
 
   function toggleBase(baseId: string) {
+    setSelectedKeys(new Set());
     setExpandedBaseId((current) => {
       const next = current === baseId ? null : baseId;
       if (next && !documentsByBase[next]) loadDocuments(next);
@@ -132,45 +147,129 @@ export default function KnowledgeBasesPage() {
   }
 
   async function onFilePicked(baseId: string, event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
+    // Se copia antes de limpiar el input: `files` es una lista viva y se vacía con él.
+    const files = Array.from(event.target.files ?? []);
     event.target.value = "";
-    if (!file) return;
+    if (!files.length) return;
     setUploadingBaseId(baseId);
     setError(null);
+    // De uno en uno; si alguno falla se sigue con el resto.
+    let uploaded = 0;
+    const failures: { name: string; error: unknown }[] = [];
+    for (const file of files) {
+      try {
+        await uploadKnowledgeBaseDocument(baseId, file);
+        uploaded += 1;
+      } catch (requestError) {
+        failures.push({ name: file.name, error: requestError });
+      }
+    }
+    // Un solo archivo: su error tal cual. Varios: resumen con cuántos subieron
+    // y cuáles no, porque el error suelto no dice a qué archivo corresponde.
+    let firstError: unknown = failures[0]?.error ?? null;
+    if (failures.length && files.length > 1) {
+      firstError = new AgentFactoryApiError(207, "error.uploadPartial", {
+        uploaded,
+        total: files.length,
+        failed: failures.map((failure) => `“${failure.name}”: ${messageOf(failure.error, t)}`).join(" · ")
+      });
+    }
     try {
-      await uploadKnowledgeBaseDocument(baseId, file);
-      await loadDocuments(baseId);
-      setKnowledgeBases((current) =>
-        current.map((item) => (item.id === baseId ? { ...item, documentCount: item.documentCount + 1 } : item))
-      );
+      if (uploaded) {
+        await loadDocuments(baseId);
+        setKnowledgeBases((current) =>
+          current.map((item) => (item.id === baseId ? { ...item, documentCount: item.documentCount + uploaded } : item))
+        );
+      }
     } catch (requestError) {
-      setError(requestError);
+      firstError ??= requestError;
     } finally {
+      if (firstError) setError(firstError);
       setUploadingBaseId(null);
     }
   }
 
-  async function removeDocument(baseId: string, document: StoredDocument) {
-    setBusyFileId(document.driveFileId);
+  async function removeDocument() {
+    if (!documentToDelete) return;
+    const { baseId, document } = documentToDelete;
+    setBusyFileId(document.storageObjectKey);
     setError(null);
     try {
-      await deleteKnowledgeBaseDocument(baseId, document.driveFileId);
+      await deleteKnowledgeBaseDocument(baseId, document.storageObjectKey);
       setDocumentsByBase((current) => ({
         ...current,
-        [baseId]: (current[baseId] ?? []).filter((item) => item.driveFileId !== document.driveFileId)
+        [baseId]: (current[baseId] ?? []).filter((item) => item.storageObjectKey !== document.storageObjectKey)
       }));
+      setSelectedKeys((current) => {
+        const next = new Set(current);
+        next.delete(document.storageObjectKey);
+        return next;
+      });
       setKnowledgeBases((current) =>
         current.map((item) => (item.id === baseId ? { ...item, documentCount: Math.max(0, item.documentCount - 1) } : item))
       );
     } catch (requestError) {
       setError(requestError);
     } finally {
+      setDocumentToDelete(null);
       setBusyFileId(null);
     }
   }
 
+  function toggleSelected(key: string) {
+    setSelectedKeys((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  function toggleSelectAll(docs: StoredDocument[]) {
+    setSelectedKeys((current) =>
+      current.size === docs.length ? new Set() : new Set(docs.map((document) => document.storageObjectKey))
+    );
+  }
+
+  async function removeSelectedDocuments() {
+    if (!bulkDeleteBaseId) return;
+    const baseId = bulkDeleteBaseId;
+    const docs = documentsByBase[baseId] ?? [];
+    const keys = Array.from(selectedKeys);
+    setBulkDeleting(true);
+    setError(null);
+    try {
+      // Si está todo marcado se pide el borrado completo de la base.
+      const result = await batchDeleteKnowledgeBaseDocuments(
+        baseId,
+        keys.length === docs.length ? { all: true } : { keys }
+      );
+      const deleted = new Set(result.deleted);
+      setDocumentsByBase((current) => ({
+        ...current,
+        [baseId]: (current[baseId] ?? []).filter((item) => !deleted.has(item.storageObjectKey))
+      }));
+      setKnowledgeBases((current) =>
+        current.map((item) => (item.id === baseId ? { ...item, documentCount: Math.max(0, item.documentCount - deleted.size) } : item))
+      );
+      // Quedan marcados solo los que fallaron, para poder reintentar.
+      setSelectedKeys(new Set(result.failed));
+      if (result.failed.length) {
+        setError(new AgentFactoryApiError(207, "error.batchDeletePartial", {
+          deleted: result.deleted.length,
+          total: result.deleted.length + result.failed.length
+        }));
+      }
+    } catch (requestError) {
+      setError(requestError);
+    } finally {
+      setBulkDeleteBaseId(null);
+      setBulkDeleting(false);
+    }
+  }
+
   async function download(baseId: string, document: StoredDocument) {
-    setBusyFileId(document.driveFileId);
+    setBusyFileId(document.storageObjectKey);
     try {
       await downloadKnowledgeBaseDocument(baseId, document);
     } catch (requestError) {
@@ -200,20 +299,24 @@ export default function KnowledgeBasesPage() {
         <form className="knowledge-form" onSubmit={submit}>
           <div>
             <span className="eyebrow">{t(editingId ? "knowledge.editEyebrow" : "knowledge.createEyebrow")}</span>
-            <h2>{t(editingId ? "knowledge.editTitle" : "knowledge.createTitle")}</h2>
+            <div className="section-heading-inline">
+              <h2>{t(editingId ? "knowledge.editTitle" : "knowledge.createTitle")}</h2>
+              <TourHelpButton onClick={formTour.restart} label={t("tour.knowledge.helpButton")} />
+            </div>
             <p>{t("knowledge.createDescription")}</p>
           </div>
-          <label className="form-field">
-            <span>{t("knowledge.nameLabel")}</span>
-            <input value={name} onChange={(event) => setName(event.target.value)} placeholder={t("knowledge.namePlaceholder")} maxLength={120} />
+          <label className="form-field" data-tour="kb-field-name">
+            <span className="field-label">{t("knowledge.nameLabel")} <span className="req" aria-hidden="true">*</span></span>
+            <input value={name} onChange={(event) => setName(event.target.value)} placeholder={t("knowledge.namePlaceholder")} maxLength={120} required aria-required="true" />
           </label>
-          <label className="form-field">
+          <label className="form-field" data-tour="kb-field-description">
             <span className="field-label">
               {t("knowledge.descriptionLabel")}
               <span className="field-help" tabIndex={0} aria-label={t("knowledge.descriptionPlaceholder")} title={t("knowledge.descriptionPlaceholder")}>?</span>
             </span>
             <textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder={t("knowledge.descriptionPlaceholder")} maxLength={1000} />
           </label>
+          <p className="form-required-note">{t("common.requiredFields")}</p>
           <div className="form-actions">
             {editingId ? <button className="secondary-button" type="button" onClick={resetForm} disabled={saving}>{t("common.cancel")}</button> : null}
             <button className="primary-button" type="submit" disabled={saving || !name.trim()}>
@@ -264,11 +367,31 @@ export default function KnowledgeBasesPage() {
                     {expanded ? (
                       <div className="base-expanded-panel" id={`base-panel-${base.id}`}>
                         <div className="base-docs-toolbar">
-                          <strong>{t("knowledge.documentsLabel")}</strong>
+                          {docs.length ? (
+                            <label className="base-doc-check">
+                              <input
+                                type="checkbox"
+                                checked={selectedKeys.size === docs.length}
+                                ref={(input) => { if (input) input.indeterminate = selectedKeys.size > 0 && selectedKeys.size < docs.length; }}
+                                onChange={() => toggleSelectAll(docs)}
+                                disabled={bulkDeleting}
+                                aria-label={t("knowledge.selectAll")}
+                              />
+                              <strong>{t("knowledge.documentsLabel")}</strong>
+                            </label>
+                          ) : (
+                            <strong>{t("knowledge.documentsLabel")}</strong>
+                          )}
                           <div className="item-actions">
+                            {selectedKeys.size ? (
+                              <button className="small-action danger" type="button" onClick={() => setBulkDeleteBaseId(base.id)} disabled={bulkDeleting}>
+                                {t(selectedKeys.size === docs.length ? "knowledge.deleteAllDocuments" : "knowledge.deleteSelected", { count: selectedKeys.size })}
+                              </button>
+                            ) : null}
                             <input
                               ref={fileInputRef}
                               type="file"
+                              multiple
                               hidden
                               id={`kb-file-${base.id}`}
                               onChange={(event) => onFilePicked(base.id, event)}
@@ -287,14 +410,23 @@ export default function KnowledgeBasesPage() {
                         {docs.length ? (
                           <ul className="base-docs-list">
                             {docs.map((document) => (
-                              <li key={document.driveFileId}>
-                                <span>
-                                  <strong>{document.name}</strong>
-                                  <small>{formatBytes(document.sizeBytes, locale, t)} · {t(`knowledge.docStatus.${document.status.toLowerCase()}`)}</small>
-                                </span>
+                              <li key={document.storageObjectKey}>
+                                <label className="base-doc-check">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedKeys.has(document.storageObjectKey)}
+                                    onChange={() => toggleSelected(document.storageObjectKey)}
+                                    disabled={bulkDeleting}
+                                    aria-label={t("knowledge.selectDocument", { name: document.name })}
+                                  />
+                                  <span>
+                                    <strong>{document.name}</strong>
+                                    <small>{formatBytes(document.sizeBytes, locale, t)} · {t(`knowledge.docStatus.${document.status.toLowerCase()}`)}</small>
+                                  </span>
+                                </label>
                                 <span className="item-actions">
-                                  <button className="link-button" type="button" onClick={() => download(base.id, document)} disabled={busyFileId === document.driveFileId}>{t("knowledge.download")}</button>
-                                  <button className="link-button" type="button" onClick={() => removeDocument(base.id, document)} disabled={busyFileId === document.driveFileId}>{t("knowledge.removeDocument")}</button>
+                                  <button className="link-button" type="button" onClick={() => download(base.id, document)} disabled={busyFileId === document.storageObjectKey}>{t("knowledge.download")}</button>
+                                  <button className="link-button" type="button" onClick={() => setDocumentToDelete({ baseId: base.id, document })} disabled={busyFileId === document.storageObjectKey}>{t("knowledge.removeDocument")}</button>
                                 </span>
                               </li>
                             ))}
@@ -326,6 +458,33 @@ export default function KnowledgeBasesPage() {
           </section>
         </div>
       ) : null}
+      {documentToDelete ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busyFileId) setDocumentToDelete(null); }}>
+          <section className="confirmation-dialog" role="alertdialog" aria-modal="true" aria-labelledby="delete-document-title" aria-describedby="delete-document-description">
+            <span className="confirmation-icon" aria-hidden="true">!</span>
+            <h2 id="delete-document-title">{t("knowledge.deleteDocumentDialog.title")}</h2>
+            <p id="delete-document-description">{t("knowledge.deleteDocumentDialog.description", { name: documentToDelete.document.name })}</p>
+            <div className="confirmation-actions">
+              <button className="secondary-button" type="button" onClick={() => setDocumentToDelete(null)} disabled={!!busyFileId}>{t("common.cancel")}</button>
+              <button className="danger-button" type="button" onClick={removeDocument} disabled={!!busyFileId}>{busyFileId ? t("knowledge.deleting") : t("knowledge.deleteDocumentDialog.action")}</button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+      {bulkDeleteBaseId ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !bulkDeleting) setBulkDeleteBaseId(null); }}>
+          <section className="confirmation-dialog" role="alertdialog" aria-modal="true" aria-labelledby="bulk-delete-title" aria-describedby="bulk-delete-description">
+            <span className="confirmation-icon" aria-hidden="true">!</span>
+            <h2 id="bulk-delete-title">{t("knowledge.bulkDeleteDialog.title", { count: selectedKeys.size })}</h2>
+            <p id="bulk-delete-description">{t("knowledge.bulkDeleteDialog.description", { count: selectedKeys.size })}</p>
+            <div className="confirmation-actions">
+              <button className="secondary-button" type="button" onClick={() => setBulkDeleteBaseId(null)} disabled={bulkDeleting}>{t("common.cancel")}</button>
+              <button className="danger-button" type="button" onClick={removeSelectedDocuments} disabled={bulkDeleting}>{bulkDeleting ? t("knowledge.deleting") : t("knowledge.bulkDeleteDialog.action", { count: selectedKeys.size })}</button>
+            </div>
+          </section>
+        </div>
+      ) : null}
+      <GuidedTour open={formTour.open} steps={KNOWLEDGE_FORM_TOUR_STEPS} onClose={formTour.close} />
     </div>
   );
 }

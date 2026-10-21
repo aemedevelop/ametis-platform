@@ -4,7 +4,7 @@ import java.time.OffsetDateTime;
 import java.util.UUID;
 
 public record DocumentResponse(
-    String driveFileId,
+    String storageObjectKey,
     String name,
     String mimeType,
     long sizeBytes,

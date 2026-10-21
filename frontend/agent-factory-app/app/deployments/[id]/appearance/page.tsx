@@ -1,16 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useT } from "@/components/IntlProviderClient";
 import {
   AgentDeployment,
   AgentFactoryApiError,
+  DeploymentBubbleAnimation,
   DeploymentFont,
   DeploymentPosition,
+  deleteDeploymentAvatar,
   fetchDeployments,
-  updateDeploymentAppearance
+  updateDeploymentAppearance,
+  uploadDeploymentAvatar
 } from "@/lib/agent-factory-api";
 
 type Translate = (key: string, vars?: Record<string, string | number>) => string;
@@ -19,9 +22,14 @@ const DEFAULT_COLOR = "#1e3a8a";
 const PALETTE = ["#1e3a8a", "#0369a1", "#0f766e", "#4d7c0f", "#b45309", "#be123c", "#7c3aed", "#334155"];
 const FONTS: DeploymentFont[] = ["system", "humanist", "serif", "mono"];
 const POSITIONS: DeploymentPosition[] = ["bottom-right", "bottom-left"];
+const BUBBLE_ANIMATIONS: DeploymentBubbleAnimation[] = ["bounce", "float", "ring", "none"];
 
 const WIDGET_SRC = `${process.env.NEXT_PUBLIC_AGENT_FACTORY_API_BASE_URL ?? "http://localhost:8440"}/api/agent-factory/public/widget.js`;
 
+// Maqueta puramente visual: no apunta a un despliegue real. El origen/las
+// demás validaciones del canal no lo permitirían sin réplicas de config solo
+// para esto, así que el tema se previsualiza en caliente vía postMessage y
+// las preguntas no se responden de verdad (comportamiento esperado).
 const IFRAME_DOC = `<!doctype html><html><head><meta charset="utf-8"><style>
   html,body{margin:0;height:100%;background:#eef2f8;font-family:system-ui,sans-serif}
   .hint{position:absolute;inset:0;display:grid;place-items:center;color:#94a3b8;font-size:13px}
@@ -48,6 +56,8 @@ export default function AppearancePage() {
   const [position, setPosition] = useState<DeploymentPosition | "">("");
   const [title, setTitle] = useState("");
   const [subtitle, setSubtitle] = useState("");
+  const [bubbleAnimation, setBubbleAnimation] = useState<DeploymentBubbleAnimation | "">("");
+  const [avatarUploading, setAvatarUploading] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -61,6 +71,7 @@ export default function AppearancePage() {
         setPosition((found.theme.position ?? "") as DeploymentPosition | "");
         setTitle(found.theme.title ?? "");
         setSubtitle(found.theme.subtitle ?? "");
+        setBubbleAnimation((found.theme.bubbleAnimation ?? "") as DeploymentBubbleAnimation | "");
       }
     } catch (requestError) {
       setError(requestError);
@@ -79,12 +90,14 @@ export default function AppearancePage() {
       font: font || null,
       position: position || null,
       title: title.trim() || null,
-      subtitle: subtitle.trim() || null
+      subtitle: subtitle.trim() || null,
+      avatarUrl: deployment?.theme?.avatarUrl ?? null,
+      bubbleAnimation: bubbleAnimation || null
     },
     welcomeMessage: deployment?.welcomeMessage ?? "Hola 👋 ¿En qué puedo ayudarte?",
     agentName: deployment?.agentName ?? "Asistente",
     deploymentName: deployment?.name ?? ""
-  }), [color, font, position, title, subtitle, deployment]);
+  }), [color, font, position, title, subtitle, bubbleAnimation, deployment]);
 
   const postPreview = useCallback(() => {
     iframeRef.current?.contentWindow?.postMessage({ type: "ametis-preview", payload: previewPayload }, "*");
@@ -112,7 +125,8 @@ export default function AppearancePage() {
         font: font || undefined,
         position: position || undefined,
         title: title.trim() || undefined,
-        subtitle: subtitle.trim() || undefined
+        subtitle: subtitle.trim() || undefined,
+        bubbleAnimation: bubbleAnimation || undefined
       });
       setDeployment(updated);
       setSavedAt(Date.now());
@@ -123,12 +137,42 @@ export default function AppearancePage() {
     }
   }
 
+  async function onAvatarPicked(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setAvatarUploading(true);
+    setError(null);
+    try {
+      const { avatarUrl } = await uploadDeploymentAvatar(id, file);
+      setDeployment((prev) => (prev && prev.theme ? { ...prev, theme: { ...prev.theme, avatarUrl } } : prev));
+    } catch (requestError) {
+      setError(requestError);
+    } finally {
+      setAvatarUploading(false);
+    }
+  }
+
+  async function removeAvatar() {
+    setAvatarUploading(true);
+    setError(null);
+    try {
+      const { avatarUrl } = await deleteDeploymentAvatar(id);
+      setDeployment((prev) => (prev && prev.theme ? { ...prev, theme: { ...prev.theme, avatarUrl } } : prev));
+    } catch (requestError) {
+      setError(requestError);
+    } finally {
+      setAvatarUploading(false);
+    }
+  }
+
   function reset() {
     setColor("");
     setFont("");
     setPosition("");
     setTitle("");
     setSubtitle("");
+    setBubbleAnimation("");
   }
 
   if (loading) {
@@ -160,6 +204,36 @@ export default function AppearancePage() {
 
       <section className="appearance-layout">
         <div className="appearance-controls">
+          <div className="form-field">
+            <span className="field-label">{t("appearance.avatarLabel")}</span>
+            <small className="field-hint">{t("appearance.avatarHint")}</small>
+            <div className="avatar-picker">
+              {deployment.theme?.avatarUrl ? (
+                <img className="avatar-preview" src={deployment.theme.avatarUrl} alt="" />
+              ) : (
+                <span className="avatar-preview empty" aria-hidden="true">{deployment.agentName.charAt(0).toUpperCase()}</span>
+              )}
+              <div className="avatar-picker-actions">
+                <label className="small-action" htmlFor="avatar-file">
+                  {avatarUploading ? t("appearance.avatarUploading") : t("appearance.avatarUpload")}
+                </label>
+                <input
+                  id="avatar-file"
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                  hidden
+                  onChange={onAvatarPicked}
+                  disabled={avatarUploading}
+                />
+                {deployment.theme?.avatarUrl ? (
+                  <button type="button" className="link-button" onClick={removeAvatar} disabled={avatarUploading}>
+                    {t("appearance.avatarRemove")}
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          </div>
+
           <div className="form-field">
             <span className="field-label">{t("appearance.colorLabel")}</span>
             <div className="swatch-row">
@@ -206,12 +280,33 @@ export default function AppearancePage() {
             <input value={subtitle} onChange={(event) => setSubtitle(event.target.value)} placeholder={t("appearance.subtitlePlaceholder")} maxLength={160} />
           </label>
 
+          <div className="form-field">
+            <span className="field-label">{t("appearance.bubbleAnimationLabel")}</span>
+            <small className="field-hint">{t("appearance.bubbleAnimationHint")}</small>
+            <div className="bubble-anim-options">
+              {BUBBLE_ANIMATIONS.map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  className={`bubble-anim-option ${(bubbleAnimation || "bounce") === option ? "selected" : ""}`}
+                  onClick={() => setBubbleAnimation(option)}
+                >
+                  <span className={`bubble-anim-demo anim-${option}`} aria-hidden="true">
+                    <svg viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" /></svg>
+                  </span>
+                  <span>{t(`appearance.bubbleAnimation.${option}`)}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="form-actions">
             <button className="secondary-button" type="button" onClick={reset} disabled={saving}>{t("appearance.reset")}</button>
             <button className="primary-button" type="button" onClick={save} disabled={saving}>
               {saving ? t("appearance.saving") : t("appearance.save")}
             </button>
           </div>
+          <Link className="small-action appearance-bottom-back" href="/deployments">{t("appearance.back")}</Link>
         </div>
 
         <div className="appearance-preview">
@@ -221,6 +316,10 @@ export default function AppearancePage() {
               <button type="button" className={device === "desktop" ? "active" : ""} onClick={() => setDevice("desktop")}>{t("appearance.previewDesktop")}</button>
               <button type="button" className={device === "mobile" ? "active" : ""} onClick={() => setDevice("mobile")}>{t("appearance.previewMobile")}</button>
             </div>
+          </div>
+          <div className="alert warning compact" role="status">
+            <span aria-hidden="true">⚠️</span>
+            <span>{t("appearance.previewDisclaimer")}</span>
           </div>
           <div className={`preview-stage ${device}`}>
             <iframe ref={iframeRef} title={t("appearance.previewLabel")} srcDoc={IFRAME_DOC} />

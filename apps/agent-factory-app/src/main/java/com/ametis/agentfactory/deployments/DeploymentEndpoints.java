@@ -27,7 +27,15 @@ public class DeploymentEndpoints {
         ? "<script src=\"" + widgetUrl + "\" data-deployment=\"" + deployment.getPublicId()
             + "\" data-endpoint=\"" + baseUrl + "\" async></script>"
         : null;
-    return new DeploymentEndpointInfo(deployment.getPublicId(), endpointUrl, queryUrl, embedSnippet);
+    // El object key en el storage es siempre "avatar-{deploymentId}" (se
+    // sobrescribe en cada subida), así que la URL no cambia solo por subir
+    // una imagen nueva. Sin un parámetro de versión, el navegador la sigue
+    // sirviendo desde caché (el endpoint manda Cache-Control de 30 min) hasta
+    // que se refresca a la fuerza. updatedAt cambia en cada applyAvatar().
+    String avatarUrl = deployment.getThemeAvatarKey() == null || deployment.getThemeAvatarKey().isBlank()
+        ? null
+        : endpointUrl + "/avatar?v=" + deployment.getUpdatedAt().toInstant().toEpochMilli();
+    return new DeploymentEndpointInfo(deployment.getPublicId(), endpointUrl, queryUrl, embedSnippet, avatarUrl);
   }
 
   private static String trimTrailingSlash(String value) {
@@ -39,5 +47,5 @@ public class DeploymentEndpoints {
   }
 
   public record DeploymentEndpointInfo(
-      String publicId, String endpointUrl, String queryUrl, String embedSnippet) {}
+      String publicId, String endpointUrl, String queryUrl, String embedSnippet, String avatarUrl) {}
 }

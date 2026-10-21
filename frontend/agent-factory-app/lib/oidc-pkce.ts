@@ -35,6 +35,20 @@ export async function buildAuthorizationRequest(params: {
   return url.toString();
 }
 
+// Cierre de sesión iniciado por el cliente (RP-initiated logout): termina la
+// sesión SSO de Keycloak. Sin esto, el siguiente login entra directo con la
+// cookie de Keycloak aunque se hayan borrado los tokens locales.
+export function buildLogoutUrl(params: {
+  authUrl: string;
+  idToken: string;
+  postLogoutRedirectUri: string;
+}): string {
+  const url = new URL(params.authUrl.replace(/\/auth$/, "/logout"));
+  url.searchParams.set("id_token_hint", params.idToken);
+  url.searchParams.set("post_logout_redirect_uri", params.postLogoutRedirectUri);
+  return url.toString();
+}
+
 export function consumeState(state: string): OidcStatePayload | null {
   const key = `${PKCE_STATE_PREFIX}${state}`;
   const raw = window.sessionStorage.getItem(key);

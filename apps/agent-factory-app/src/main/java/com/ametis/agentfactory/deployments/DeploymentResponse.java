@@ -47,7 +47,7 @@ public record DeploymentResponse(
         deployment.getRateLimitPerMinute(),
         deployment.getRateLimitPerDay(),
         DeploymentOrigins.parse(deployment.getAllowedOrigins()),
-        DeploymentTheme.from(deployment),
+        DeploymentTheme.from(deployment, endpoints.avatarUrl()),
         deployment.getCreatedAt(),
         deployment.getUpdatedAt());
   }

@@ -3,6 +3,9 @@
   "enabled": true,
   "displayName": "AMETIS",
   "registrationAllowed": false,
+  "accessTokenLifespan": 3600,
+  "ssoSessionIdleTimeout": 86400,
+  "ssoSessionMaxLifespan": 864000,
   "resetPasswordAllowed": true,
   "rememberMe": true,
   "loginWithEmailAllowed": true,
@@ -93,7 +96,8 @@
         "http://localhost:3200"
       ],
       "attributes": {
-        "pkce.code.challenge.method": "S256"
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:3200/auth/login"
       }
     }
   ],

@@ -60,7 +60,8 @@ public class SecurityConfig {
     CorsConfiguration publicConfiguration = new CorsConfiguration();
     publicConfiguration.setAllowedOriginPatterns(List.of("*"));
     publicConfiguration.setAllowedMethods(List.of("GET", "POST", "OPTIONS"));
-    publicConfiguration.setAllowedHeaders(List.of("Content-Type", "X-Api-Key", "Authorization"));
+    publicConfiguration.setAllowedHeaders(List.of("Content-Type", "X-Api-Key", "Authorization", "X-Analytics-Session"));
+    publicConfiguration.setExposedHeaders(List.of("Content-Disposition"));
     publicConfiguration.setAllowCredentials(false);
 
     UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

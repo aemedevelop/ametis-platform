@@ -32,7 +32,7 @@ export type DriveConnection = {
 };
 
 export type StoredDocument = {
-  driveFileId: string;
+  storageObjectKey: string;
   name: string;
   mimeType: string;
   sizeBytes: number;
@@ -136,6 +136,7 @@ export type DeploymentStatus = "ACTIVE" | "INACTIVE";
 
 export type DeploymentFont = "system" | "serif" | "mono" | "humanist";
 export type DeploymentPosition = "bottom-right" | "bottom-left";
+export type DeploymentBubbleAnimation = "none" | "bounce" | "float" | "ring";
 
 export type DeploymentTheme = {
   primaryColor: string | null;
@@ -143,6 +144,8 @@ export type DeploymentTheme = {
   position: DeploymentPosition | null;
   title: string | null;
   subtitle: string | null;
+  avatarUrl: string | null;
+  bubbleAnimation: DeploymentBubbleAnimation | null;
 };
 
 export type AgentDeployment = {
@@ -402,9 +405,23 @@ export function uploadKnowledgeBaseDocument(knowledgeBaseId: string, file: File)
   });
 }
 
-export async function deleteKnowledgeBaseDocument(knowledgeBaseId: string, driveFileId: string): Promise<void> {
-  await authenticatedFetch(`/api/agent-factory/knowledge-bases/${knowledgeBaseId}/documents/${driveFileId}`, {
+export async function deleteKnowledgeBaseDocument(knowledgeBaseId: string, storageObjectKey: string): Promise<void> {
+  await authenticatedFetch(`/api/agent-factory/knowledge-bases/${knowledgeBaseId}/documents?key=${encodeURIComponent(storageObjectKey)}`, {
     method: "DELETE"
+  });
+}
+
+export type BatchDeleteResult = { deleted: string[]; failed: string[] };
+
+// `all: true` borra todo el contenido de la base; si no, solo `keys`.
+export function batchDeleteKnowledgeBaseDocuments(
+  knowledgeBaseId: string,
+  input: { all: true } | { all?: false; keys: string[] }
+) {
+  return apiFetch<BatchDeleteResult>(`/api/agent-factory/knowledge-bases/${knowledgeBaseId}/documents/batch-delete`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
   });
 }
 
@@ -413,7 +430,7 @@ export async function downloadKnowledgeBaseDocument(
   document: StoredDocument
 ): Promise<void> {
   const response = await authenticatedFetch(
-    `/api/agent-factory/knowledge-bases/${knowledgeBaseId}/documents/${document.driveFileId}/download`
+    `/api/agent-factory/knowledge-bases/${knowledgeBaseId}/documents/download?key=${encodeURIComponent(document.storageObjectKey)}`
   );
   if (!response.ok) throw new AgentFactoryApiError(response.status, "error.downloadFailed");
   const blob = await response.blob();
@@ -469,12 +486,177 @@ export function publishAgent(id: string) {
   return apiFetch<AgentDefinition>(`/api/agent-factory/agents/${id}/publish`, { method: "POST" });
 }
 
+/**
+ * Paquete portable de un agente (config + todos sus despliegues), para
+ * mover manualmente la configuración entre entornos (p. ej. de pre a
+ * producción) sin tener que rehacerla dos veces. Las bases de conocimiento
+ * no viajan -- solo se listan sus nombres como referencia -- porque los
+ * documentos indexados viven en el storage propio de cada tenant.
+ */
+export type AgentExportDeployment = {
+  name: string;
+  channelType: DeploymentChannelType;
+  deploymentSlug: string;
+  welcomeMessage: string | null;
+  rateLimitPerMinute: number | null;
+  rateLimitPerDay: number | null;
+  allowedOrigins: string[];
+  theme: DeploymentTheme | null;
+};
+
+export type AgentExportBundle = {
+  exportVersion: number;
+  exportedAt: string;
+  agent: {
+    name: string;
+    description: string | null;
+    persona: string | null;
+    targetAudience: string | null;
+    tone: string | null;
+    responseLanguage: string | null;
+    instructions: string | null;
+    suggestedQuestions: string[];
+    assistantTexts: AssistantTexts;
+    suggestedQuestionsCount: number;
+    suggestedQuestionsOrder: SuggestedQuestionsOrder;
+    questionTopics: QuestionTopic[];
+    knowledgeBaseNames: string[];
+  };
+  deployments: AgentExportDeployment[];
+};
+
+export function fetchAgentExport(id: string) {
+  return apiFetch<AgentExportBundle>(`/api/agent-factory/agents/${id}/export`);
+}
+
+/** Crea un agente nuevo (y sus despliegues, todos en borrador) a partir de un paquete exportado. */
+export function importAgentBundle(bundle: AgentExportBundle) {
+  return apiFetch<AgentDefinition>("/api/agent-factory/agents/import", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(bundle)
+  });
+}
+
 export function createAgentIndexingJobs(id: string) {
   return apiFetch<CreateIndexingJobsResponse>(`/api/agent-factory/agents/${id}/indexing-jobs`, { method: "POST" });
 }
 
 export function fetchAgentIndexingJobs(id: string) {
   return apiFetch<AgentIndexingJob[]>(`/api/agent-factory/agents/${id}/indexing-jobs/latest`);
+}
+
+export type AgentAnalyticsDailyPoint = { date: string; count: number };
+export type AgentAnalyticsHourlyPoint = { hour: number; count: number };
+export type AgentAnalyticsTopQuestion = { question: string; count: number };
+
+export type AgentAnalyticsPeriodSummary = {
+  totalQuestions: number;
+  uniqueVisitors: number;
+  returningVisitors: number;
+  fallbackCount: number;
+  fallbackRate: number;
+  suggestionUsedCount: number;
+};
+/** `name`/`channelType` llegan en null si el despliegue ya no existe. */
+export type AgentAnalyticsDeploymentPoint = {
+  deploymentId: string;
+  name: string | null;
+  channelType: string | null;
+  totalQuestions: number;
+  fallbackCount: number;
+  fallbackRate: number;
+};
+
+/** `topicId` vacío = sin tema; `label` es null entonces y si el tema ya no existe en el agente. */
+export type AgentAnalyticsTopicPoint = { topicId: string; label: string | null; count: number };
+
+export type AgentAnalytics = {
+  from: string;
+  to: string;
+  totalQuestions: number;
+  uniqueVisitors: number;
+  returningVisitors: number;
+  fallbackCount: number;
+  fallbackRate: number;
+  suggestionUsedCount: number;
+  /** Mismos N días inmediatamente antes del rango pedido (fechas `YYYY-MM-DD`). */
+  previousFrom: string;
+  previousTo: string;
+  previous: AgentAnalyticsPeriodSummary;
+  byDay: AgentAnalyticsDailyPoint[];
+  byHour: AgentAnalyticsHourlyPoint[];
+  byDeployment: AgentAnalyticsDeploymentPoint[];
+  byTopic: AgentAnalyticsTopicPoint[];
+  topQuestions: AgentAnalyticsTopQuestion[];
+  topFallbackQuestions: AgentAnalyticsTopQuestion[];
+};
+
+/** Agente tal como lo lista Analíticas: de cualquier negocio del workspace. */
+export type AnalyticsAgent = {
+  id: string;
+  businessId: string;
+  businessName: string | null;
+  name: string;
+  description: string | null;
+  status: AgentDefinition["status"];
+  updatedAt: string;
+  knowledgeBaseCount: number;
+  knowledgeBaseNames: string[];
+};
+
+export function fetchAnalyticsAgents() {
+  return apiFetch<AnalyticsAgent[]>("/api/agent-factory/analytics/agents");
+}
+
+export function fetchAgentAnalytics(id: string, fromIso?: string, toIso?: string) {
+  const params = new URLSearchParams();
+  if (fromIso) params.set("from", fromIso);
+  if (toIso) params.set("to", toIso);
+  const query = params.toString();
+  return apiFetch<AgentAnalytics>(`/api/agent-factory/agents/${id}/analytics${query ? `?${query}` : ""}`);
+}
+
+/** Guarda el cuerpo de una respuesta como archivo, con el nombre que indique Content-Disposition. */
+export async function saveResponseAsFile(response: Response, fallbackName: string): Promise<void> {
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const encodedName = /filename\*=UTF-8''([^;]+)/i.exec(disposition)?.[1];
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const anchor = window.document.createElement("a");
+  anchor.href = url;
+  anchor.download = encodedName ? decodeURIComponent(encodedName) : fallbackName;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+/** Descarga el Excel con el mismo contenido del dashboard para ese rango. */
+export async function exportAgentAnalytics(id: string, fromIso: string, toIso: string, lang: string): Promise<void> {
+  const params = new URLSearchParams({ from: fromIso, to: toIso, lang });
+  const response = await authenticatedFetch(`/api/agent-factory/agents/${id}/analytics/export?${params}`);
+  if (!response.ok) throw new AgentFactoryApiError(response.status, "error.analyticsExportFailed");
+  await saveResponseAsFile(response, "analytics.xlsx");
+}
+
+/** Acceso del cliente final a las analíticas de un agente. `publicId` es null hasta que se configura por primera vez. */
+export type AnalyticsAccess = {
+  published: boolean;
+  username: string;
+  publicId: string | null;
+  lastAccessAt: string | null;
+};
+
+export function fetchAnalyticsAccess(agentId: string) {
+  return apiFetch<AnalyticsAccess>(`/api/agent-factory/agents/${agentId}/analytics/access`);
+}
+
+/** `password` vacío conserva la actual (es obligatoria la primera vez). */
+export function saveAnalyticsAccess(agentId: string, access: { published: boolean; username: string; password: string }) {
+  return apiFetch<AnalyticsAccess>(`/api/agent-factory/agents/${agentId}/analytics/access`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(access)
+  });
 }
 
 export function testAgent(id: string, question: string) {
@@ -487,6 +669,15 @@ export function testAgent(id: string, question: string) {
 
 export function fetchDeployments() {
   return apiFetch<AgentDeployment[]>("/api/agent-factory/deployments");
+}
+
+/**
+ * Despliegue de prueba fijo del workspace (uno por tenant); se autocrea la
+ * primera vez que se pide. Si se pasa `agentId`, se reapunta a ese agente.
+ */
+export function fetchWorkspaceTestDeployment(agentId?: string) {
+  const query = agentId ? `?agentId=${encodeURIComponent(agentId)}` : "";
+  return apiFetch<AgentDeployment>(`/api/agent-factory/deployments/workspace-test${query}`);
 }
 
 export function createDeployment(input: {
@@ -527,6 +718,23 @@ export function updateDeployment(id: string, input: {
   });
 }
 
+export type AvatarResponse = { avatarUrl: string | null };
+
+export function uploadDeploymentAvatar(id: string, file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  return apiFetch<AvatarResponse>(`/api/agent-factory/deployments/${id}/appearance/avatar`, {
+    method: "POST",
+    body: form
+  });
+}
+
+export function deleteDeploymentAvatar(id: string) {
+  return apiFetch<AvatarResponse>(`/api/agent-factory/deployments/${id}/appearance/avatar`, {
+    method: "DELETE"
+  });
+}
+
 export function regenerateDeploymentPublicId(id: string) {
   return apiFetch<AgentDeployment>(`/api/agent-factory/deployments/${id}/public-id`, { method: "POST" });
 }
@@ -537,6 +745,7 @@ export function updateDeploymentAppearance(id: string, theme: {
   position?: DeploymentPosition;
   title?: string;
   subtitle?: string;
+  bubbleAnimation?: DeploymentBubbleAnimation;
 }) {
   return apiFetch<AgentDeployment>(`/api/agent-factory/deployments/${id}/appearance`, {
     method: "PATCH",

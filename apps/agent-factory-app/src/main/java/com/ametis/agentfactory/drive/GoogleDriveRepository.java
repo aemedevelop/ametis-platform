@@ -196,7 +196,7 @@ public class GoogleDriveRepository {
     return value.replace("\\", "\\\\").replace("'", "\\'");
   }
 
-  public record ProvisionedFolders(String namespace, String workspaceFolderId, String documentsFolderId) {}
+  public record ProvisionedFolders(String namespace, String workspaceLocator, String documentsLocator) {}
 
   private static final class DriveOperationException extends RuntimeException {
     private DriveOperationException(IOException cause) {

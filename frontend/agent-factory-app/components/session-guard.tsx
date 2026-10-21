@@ -5,11 +5,22 @@ import { usePathname } from "next/navigation";
 import { refreshSession } from "@/lib/auth-client";
 import { clearSession, getAuthToken, getRefreshToken, isAuthTokenExpired, storeSessionTokens } from "@/lib/session";
 import { useT } from "@/components/IntlProviderClient";
+import { isPublicPath } from "@/lib/public-paths";
 
 export function SessionGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const t = useT();
-  const [ready, setReady] = useState(pathname.startsWith("/auth/"));
+  // Rutas que este guardián NO protege:
+  //  - /auth/*   -> las propias pantallas de login/registro.
+  //  - /client/* -> zona del cliente final (analíticas de su agente). El cliente
+  //    no es usuario de la plataforma: entra con el usuario y contraseña que el
+  //    consultor definió al publicar el acceso, y esa sesión es propia (ver
+  //    lib/client-analytics-api.ts). Si aquí se le exigiera sesión de consultor,
+  //    un navegador sin ella acabaría redirigido a /auth/login -- fallo que no
+  //    se ve al probar desde un navegador donde el consultor ya tiene sesión.
+  // AppShell aplica la misma exclusión para no pintar el menú de la app.
+  const isPublic = isPublicPath(pathname);
+  const [ready, setReady] = useState(isPublic);
 
   useEffect(() => {
     let cancelled = false;
@@ -42,7 +53,7 @@ export function SessionGuard({ children }: { children: React.ReactNode }) {
       window.location.replace(`/auth/login?redirect=${encodeURIComponent(pathname)}`);
     }
 
-    if (pathname.startsWith("/auth/")) {
+    if (isPublic) {
       return;
     }
     setReady(false);
@@ -50,8 +61,8 @@ export function SessionGuard({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [pathname]);
+  }, [pathname, isPublic]);
 
-  if (!ready) return <main className="center-screen" role="status">{t("common.loadingSession")}</main>;
+  if (!ready && !isPublic) return <main className="center-screen" role="status">{t("common.loadingSession")}</main>;
   return children;
 }

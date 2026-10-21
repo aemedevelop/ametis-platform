@@ -6,4 +6,4 @@ public record AmetisAiKnowledgeBaseSyncPayload(
     UUID id,
     String name,
     int documentCount,
-    String documentsFolderId) {}
+    String documentsLocator) {}

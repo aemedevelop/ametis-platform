@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface AgentDeploymentRepository extends JpaRepository<AgentDeployment, UUID> {
   List<AgentDeployment> findAllByTenantIdOrderByUpdatedAtDesc(UUID tenantId);
+  List<AgentDeployment> findAllByTenantIdAndAgentId(UUID tenantId, UUID agentId);
   Optional<AgentDeployment> findByIdAndTenantId(UUID id, UUID tenantId);
   Optional<AgentDeployment> findByTenantIdAndDeploymentSlugIgnoreCase(UUID tenantId, String deploymentSlug);
   Optional<AgentDeployment> findByPublicId(String publicId);

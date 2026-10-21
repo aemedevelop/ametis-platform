@@ -19,7 +19,9 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
@@ -73,15 +75,17 @@ public class KnowledgeBaseDocumentController {
     return ResponseEntity.status(HttpStatus.CREATED).body(response);
   }
 
-  @GetMapping("/knowledge-bases/{knowledgeBaseId}/documents/{driveFileId}/download")
+  // La clave va como query param y no en la ruta: en MinIO lleva "/" y un
+  // {pathVariable} no los captura (la petición acababa en 404).
+  @GetMapping("/knowledge-bases/{knowledgeBaseId}/documents/download")
   public ResponseEntity<byte[]> download(
       @PathVariable UUID knowledgeBaseId,
-      @PathVariable String driveFileId,
+      @RequestParam("key") String storageObjectKey,
       JwtAuthenticationToken authentication) {
     Context context = context(authentication, AccessGuard.DOCUMENTS_READ, knowledgeBaseId);
     ByteArrayOutputStream output = new ByteArrayOutputStream();
     DocumentService.DownloadDescriptor descriptor = documentService.download(
-        context.business(), context.base(), driveFileId, output);
+        context.business(), context.base(), storageObjectKey, output);
     ContentDisposition disposition = ContentDisposition.attachment()
         .filename(descriptor.name(), StandardCharsets.UTF_8)
         .build();
@@ -91,13 +95,25 @@ public class KnowledgeBaseDocumentController {
         .body(output.toByteArray());
   }
 
-  @DeleteMapping("/knowledge-bases/{knowledgeBaseId}/documents/{driveFileId}")
+  @DeleteMapping("/knowledge-bases/{knowledgeBaseId}/documents")
   public ResponseEntity<Void> delete(
       @PathVariable UUID knowledgeBaseId,
-      @PathVariable String driveFileId,
+      @RequestParam("key") String storageObjectKey,
       JwtAuthenticationToken authentication) {
     Context context = context(authentication, AccessGuard.DOCUMENTS_MANAGE, knowledgeBaseId);
-    documentService.delete(context.business(), context.base(), driveFileId);
+    documentService.delete(context.business(), context.base(), storageObjectKey);
     return ResponseEntity.noContent().build();
+  }
+
+  public record BatchDeleteRequest(boolean all, List<String> keys) {}
+
+  // POST y no DELETE con cuerpo: muchos proxies descartan el body de un DELETE.
+  @PostMapping("/knowledge-bases/{knowledgeBaseId}/documents/batch-delete")
+  public DocumentService.BatchDeleteResult batchDelete(
+      @PathVariable UUID knowledgeBaseId,
+      @RequestBody BatchDeleteRequest request,
+      JwtAuthenticationToken authentication) {
+    Context context = context(authentication, AccessGuard.DOCUMENTS_MANAGE, knowledgeBaseId);
+    return documentService.deleteMany(context.business(), context.base(), request.all(), request.keys());
   }
 }

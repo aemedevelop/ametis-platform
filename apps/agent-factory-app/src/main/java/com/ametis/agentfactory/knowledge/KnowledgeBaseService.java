@@ -1,5 +1,7 @@
 package com.ametis.agentfactory.knowledge;
 
+import com.ametis.agentfactory.agents.AgentKnowledgeBaseRepository;
+import com.ametis.agentfactory.agents.AmetisAiRagClient;
 import com.ametis.agentfactory.businesses.Business;
 import com.ametis.agentfactory.documents.DocumentAsset;
 import com.ametis.agentfactory.documents.DocumentAssetRepository;
@@ -7,7 +9,7 @@ import com.ametis.agentfactory.documents.DocumentStatus;
 import com.ametis.agentfactory.documents.RepositoryBinding;
 import com.ametis.agentfactory.documents.RepositoryProvisioningService;
 import com.ametis.agentfactory.documents.RepositoryStatus;
-import com.ametis.agentfactory.drive.GoogleDriveRepository;
+import com.ametis.agentfactory.storage.StorageProvider;
 import jakarta.transaction.Transactional;
 import java.util.List;
 import java.util.Map;
@@ -27,19 +29,25 @@ public class KnowledgeBaseService {
   private final KnowledgeBaseRepository knowledgeBaseRepository;
   private final KnowledgeBaseRepositoryProvisioningService knowledgeBaseProvisioning;
   private final DocumentAssetRepository documentAssetRepository;
-  private final GoogleDriveRepository googleDriveRepository;
+  private final AgentKnowledgeBaseRepository agentKnowledgeBaseRepository;
+  private final AmetisAiRagClient ragClient;
+  private final StorageProvider storageProvider;
 
   public KnowledgeBaseService(
       RepositoryProvisioningService provisioningService,
       KnowledgeBaseRepository knowledgeBaseRepository,
       KnowledgeBaseRepositoryProvisioningService knowledgeBaseProvisioning,
       DocumentAssetRepository documentAssetRepository,
-      GoogleDriveRepository googleDriveRepository) {
+      AgentKnowledgeBaseRepository agentKnowledgeBaseRepository,
+      AmetisAiRagClient ragClient,
+      StorageProvider storageProvider) {
+    this.agentKnowledgeBaseRepository = agentKnowledgeBaseRepository;
+    this.ragClient = ragClient;
     this.provisioningService = provisioningService;
     this.knowledgeBaseRepository = knowledgeBaseRepository;
     this.knowledgeBaseProvisioning = knowledgeBaseProvisioning;
     this.documentAssetRepository = documentAssetRepository;
-    this.googleDriveRepository = googleDriveRepository;
+    this.storageProvider = storageProvider;
   }
 
   public List<KnowledgeBaseResponse> list(Business business) {
@@ -87,15 +95,29 @@ public class KnowledgeBaseService {
   public void delete(Business business, UUID knowledgeBaseId) {
     requireActiveRepository(business.getTenantId());
     KnowledgeBase base = requireBase(business, knowledgeBaseId);
-    if (base.getDocumentsFolderId() != null) {
+    if (agentKnowledgeBaseRepository.existsByKnowledgeBaseId(knowledgeBaseId)) {
+      throw new ResponseStatusException(HttpStatus.CONFLICT, "error.knowledgeBaseInUse");
+    }
+    documentAssetRepository.deleteAllByKnowledgeBaseId(knowledgeBaseId);
+    knowledgeBaseRepository.delete(base);
+    // El almacenamiento se borra al final y tras el flush: si la BD rechaza el
+    // borrado, los archivos siguen intactos (borrarlos no se puede deshacer).
+    knowledgeBaseRepository.flush();
+    if (base.getDocumentsLocator() != null) {
       try {
-        googleDriveRepository.trash(business.getTenantId(), base.getDocumentsFolderId());
+        storageProvider.deleteContainer(business.getTenantId(), base.getDocumentsLocator());
       } catch (Exception exception) {
         LOGGER.warn("No se pudo enviar a la papelera la carpeta de la base {}", knowledgeBaseId, exception);
       }
     }
-    documentAssetRepository.deleteAllByKnowledgeBaseId(knowledgeBaseId);
-    knowledgeBaseRepository.delete(base);
+    // Best-effort: si el RAG falla, los vectores quedan huérfanos pero aislados
+    // (ningún agente consulta ya esta base).
+    try {
+      RepositoryBinding binding = provisioningService.find(business.getTenantId());
+      ragClient.deleteKnowledgeBase(binding.getRepositoryNamespace(), business.getId().toString(), knowledgeBaseId);
+    } catch (Exception exception) {
+      LOGGER.warn("No se pudieron borrar en el RAG los vectores de la base {}", knowledgeBaseId, exception);
+    }
   }
 
   private void tryProvision(Business business, KnowledgeBase base) {

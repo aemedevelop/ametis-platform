@@ -79,6 +79,13 @@ public class AgentDeployment {
   @Column(length = 160)
   private String themeSubtitle;
 
+  @Column(length = 300)
+  private String themeAvatarKey;
+
+  /** Estilo de animación de la burbuja flotante cerrada: none|bounce|float|ring. */
+  @Column(length = 20)
+  private String themeBubbleAnimation;
+
   private UUID createdBy;
 
   @Column(nullable = false)
@@ -109,7 +116,9 @@ public class AgentDeployment {
     deployment.name = name;
     deployment.channelType = channelType;
     deployment.deploymentSlug = deploymentSlug;
-    deployment.status = DeploymentStatus.ACTIVE;
+    // Nace en borrador: el usuario configura todo (orígenes, apariencia,
+    // límites) y publica de forma explícita con el switch en el listado.
+    deployment.status = DeploymentStatus.INACTIVE;
     deployment.apiKey = apiKey;
     deployment.welcomeMessage = welcomeMessage;
     deployment.rateLimitPerMinute = rateLimitPerMinute;
@@ -152,6 +161,7 @@ public class AgentDeployment {
     this.themePosition = normalize(theme == null ? null : theme.position());
     this.themeTitle = normalize(theme == null ? null : theme.title());
     this.themeSubtitle = normalize(theme == null ? null : theme.subtitle());
+    this.themeBubbleAnimation = normalize(theme == null ? null : theme.bubbleAnimation());
     updatedAt = OffsetDateTime.now();
   }
 
@@ -161,6 +171,41 @@ public class AgentDeployment {
     }
     String trimmed = value.trim();
     return trimmed.isEmpty() ? null : trimmed;
+  }
+
+  /**
+   * Fuerza el estado a publicado inmediatamente tras crear. Solo lo usa el
+   * aprovisionamiento del despliegue de prueba fijo del workspace: como su
+   * único propósito es servir el widget real dentro de la propia app, no
+   * tiene sentido que nazca en borrador esperando publicación manual.
+   */
+  void activate() {
+    status = DeploymentStatus.ACTIVE;
+    updatedAt = OffsetDateTime.now();
+  }
+
+  /**
+   * Reapunta el despliegue de prueba fijo a otro agente (p. ej. el que el
+   * usuario tiene seleccionado en ese momento en el formulario de alta). El
+   * {@code publicId} no cambia, así que el widget ya cargado en pantalla
+   * sigue funcionando sin recargar el script.
+   */
+  void repointAgent(UUID agentId) {
+    this.agentId = agentId;
+    updatedAt = OffsetDateTime.now();
+  }
+
+  /**
+   * Sincroniza los orígenes permitidos del despliegue de prueba fijo con el
+   * origen actual de la plataforma. Sin esto, si el despliegue se llegó a
+   * crear antes de que {@code AGENT_FACTORY_WEB_URL} estuviera bien
+   * configurado (o si cambia de dominio más adelante), se quedaría para
+   * siempre con el origen viejo guardado y el widget dejaría de responder
+   * (403 por chequeo de Origin) sin que se note por qué.
+   */
+  void resyncAllowedOrigins(String allowedOrigins) {
+    this.allowedOrigins = allowedOrigins;
+    updatedAt = OffsetDateTime.now();
   }
 
   /** Rota el identificador público (p. ej. si se filtró el que estaba en uso). */
@@ -193,6 +238,13 @@ public class AgentDeployment {
   public String getThemePosition() { return themePosition; }
   public String getThemeTitle() { return themeTitle; }
   public String getThemeSubtitle() { return themeSubtitle; }
+  public String getThemeAvatarKey() { return themeAvatarKey; }
+  public String getThemeBubbleAnimation() { return themeBubbleAnimation; }
+
+  public void applyAvatar(String avatarKey) {
+    this.themeAvatarKey = avatarKey;
+    updatedAt = OffsetDateTime.now();
+  }
   public UUID getCreatedBy() { return createdBy; }
   public OffsetDateTime getCreatedAt() { return createdAt; }
   public OffsetDateTime getUpdatedAt() { return updatedAt; }

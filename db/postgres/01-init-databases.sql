@@ -1,22 +1,12 @@
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT FROM pg_database WHERE datname = 'keycloak_db') THEN
-    EXECUTE 'CREATE DATABASE keycloak_db';
-  END IF;
-  IF NOT EXISTS (SELECT FROM pg_database WHERE datname = 'core_db') THEN
-    EXECUTE 'CREATE DATABASE core_db';
-  END IF;
-  IF NOT EXISTS (SELECT FROM pg_database WHERE datname = 'newsletter_db') THEN
-    EXECUTE 'CREATE DATABASE newsletter_db';
-  END IF;
-  IF NOT EXISTS (SELECT FROM pg_database WHERE datname = 'agent_factory_db') THEN
-    EXECUTE 'CREATE DATABASE agent_factory_db';
-  END IF;
-  IF NOT EXISTS (SELECT FROM pg_database WHERE datname = 'ametis_ai_db') THEN
-    EXECUTE 'CREATE DATABASE ametis_ai_db';
-  END IF;
-END
-$$;
+-- CREATE DATABASE no puede ejecutarse dentro de un bloque DO/transacción
+-- (limitacion de Postgres, no del entorno). Este script solo lo ejecuta
+-- docker-entrypoint-initdb.d la primera vez, sobre un volumen de datos
+-- vacio -- las bases nunca existen ya, así que no hace falta IF NOT EXISTS.
+CREATE DATABASE keycloak_db;
+CREATE DATABASE core_db;
+CREATE DATABASE newsletter_db;
+CREATE DATABASE agent_factory_db;
+CREATE DATABASE ametis_ai_db;
 
 DO $$
 BEGIN

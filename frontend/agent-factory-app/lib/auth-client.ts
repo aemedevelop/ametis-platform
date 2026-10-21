@@ -6,6 +6,7 @@ export type AuthTokenResponse = {
   expiresIn?: number | null;
   tokenType?: string | null;
   refreshExpiresIn?: number | null;
+  idToken?: string | null;
 };
 
 export type RegisterAccountPayload = {

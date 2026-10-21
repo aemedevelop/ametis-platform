@@ -1,10 +1,11 @@
 package com.ametis.agentfactory.documents;
 
 import com.ametis.agentfactory.access.CorePlatformClient;
-import com.ametis.agentfactory.drive.GoogleDriveRepository;
+import com.ametis.agentfactory.storage.StorageProvider;
 import java.text.Normalizer;
 import java.util.Locale;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -12,13 +13,16 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class RepositoryProvisioningService {
   private final RepositoryBindingRepository bindingRepository;
-  private final GoogleDriveRepository googleDriveRepository;
+  private final StorageProvider storageProvider;
+  private final String storageProviderName;
 
   public RepositoryProvisioningService(
       RepositoryBindingRepository bindingRepository,
-      GoogleDriveRepository googleDriveRepository) {
+      StorageProvider storageProvider,
+      @Value("${agent-factory.storage.provider:drive}") String storageProviderName) {
     this.bindingRepository = bindingRepository;
-    this.googleDriveRepository = googleDriveRepository;
+    this.storageProvider = storageProvider;
+    this.storageProviderName = storageProviderName;
   }
 
   public RepositoryBinding find(UUID tenantId) {
@@ -36,25 +40,25 @@ public class RepositoryProvisioningService {
         : buildNamespace(requestedNamespace, requestedNamespace, tenant.id());
     ensureNamespaceAvailable(namespace, tenant.id());
     RepositoryBinding binding = bindingRepository.findByTenantId(tenant.id())
-        .orElseGet(() -> RepositoryBinding.provisioning(tenant.id(), namespace));
+        .orElseGet(() -> RepositoryBinding.provisioning(tenant.id(), namespace, storageProviderName));
     if (binding.getStatus() == RepositoryStatus.ACTIVE) {
       return binding;
     }
     binding.markProvisioning();
     bindingRepository.save(binding);
     try {
-      GoogleDriveRepository.ProvisionedFolders folders = googleDriveRepository.provision(
+      StorageProvider.ProvisionedWorkspace workspace = storageProvider.provisionWorkspace(
           tenant.id(),
           tenant.id().toString(),
           normalizeSlug(tenant.slug(), tenant.name()),
           namespace,
           tenant.name());
-      binding.activate(folders.namespace(), folders.workspaceFolderId(), folders.documentsFolderId());
+      binding.activate(workspace.namespace(), workspace.workspaceLocator(), workspace.documentsLocator(), workspace.bucketName());
       return bindingRepository.save(binding);
     } catch (Exception exception) {
       binding.fail(rootMessage(exception));
       bindingRepository.save(binding);
-      throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Google Drive provisioning failed", exception);
+      throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Storage provisioning failed", exception);
     }
   }
 
@@ -65,19 +69,19 @@ public class RepositoryProvisioningService {
     String namespace = buildNamespace(requestedNamespace, requestedNamespace, tenant.id());
     ensureNamespaceAvailable(namespace, tenant.id());
     RepositoryBinding binding = find(tenant.id());
-    if (binding.getStatus() != RepositoryStatus.ACTIVE || binding.getWorkspaceFolderId() == null) {
+    if (binding.getStatus() != RepositoryStatus.ACTIVE || binding.getWorkspaceLocator() == null) {
       throw new ResponseStatusException(HttpStatus.CONFLICT, "error.repositoryNotActive");
     }
     if (namespace.equals(binding.getRepositoryNamespace())) {
       return binding;
     }
     try {
-      googleDriveRepository.renameWorkspaceFolder(
-          tenant.id(), binding.getWorkspaceFolderId(), tenant.id().toString(), namespace, tenant.name());
+      storageProvider.renameWorkspace(
+          tenant.id(), binding.getWorkspaceLocator(), tenant.id().toString(), namespace, tenant.name());
       binding.renameNamespace(namespace);
       return bindingRepository.save(binding);
     } catch (Exception exception) {
-      throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Google Drive namespace update failed", exception);
+      throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Storage namespace update failed", exception);
     }
   }
 

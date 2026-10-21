@@ -1,9 +1,10 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { ChangeEvent, FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useLocale, useT } from "@/components/IntlProviderClient";
 import {
   AgentDefinition,
+  AgentExportBundle,
   AgentFactoryApiError,
   AgentIndexingJob,
   AssistantTextKey,
@@ -14,17 +15,34 @@ import {
   createAgent,
   createAgentIndexingJobs,
   deleteAgent,
+  fetchAgentExport,
   fetchAgentIndexingJobs,
   fetchAgents,
   fetchKnowledgeBases,
   fetchRepository,
+  importAgentBundle,
   KnowledgeBase,
   publishAgent,
   testAgent,
   updateAgent
 } from "@/lib/agent-factory-api";
+import { GuidedTour, TourHelpButton, useTour, type TourStep } from "@/components/guided-tour";
 
 type Translate = (key: string, vars?: Record<string, string | number>) => string;
+
+const AGENT_FORM_TOUR_STEPS: TourStep[] = [
+  { selector: "[data-tour='agent-field-name']", titleKey: "tour.agents.name.title", descriptionKey: "tour.agents.name.description" },
+  { selector: "[data-tour='agent-field-description']", titleKey: "tour.agents.description.title", descriptionKey: "tour.agents.description.description" },
+  { selector: "[data-tour='agent-field-persona']", titleKey: "tour.agents.persona.title", descriptionKey: "tour.agents.persona.description" },
+  { selector: "[data-tour='agent-field-audience']", titleKey: "tour.agents.audience.title", descriptionKey: "tour.agents.audience.description" },
+  { selector: "[data-tour='agent-field-tone']", titleKey: "tour.agents.tone.title", descriptionKey: "tour.agents.tone.description" },
+  { selector: "[data-tour='agent-field-language']", titleKey: "tour.agents.language.title", descriptionKey: "tour.agents.language.description" },
+  { selector: "[data-tour='agent-field-instructions']", titleKey: "tour.agents.instructions.title", descriptionKey: "tour.agents.instructions.description" },
+  { selector: "[data-tour='agent-field-suggested']", titleKey: "tour.agents.suggested.title", descriptionKey: "tour.agents.suggested.description" },
+  { selector: "[data-tour='agent-field-topics']", titleKey: "tour.agents.topics.title", descriptionKey: "tour.agents.topics.description" },
+  { selector: "[data-tour='agent-field-assistant-texts']", titleKey: "tour.agents.assistantTexts.title", descriptionKey: "tour.agents.assistantTexts.description" },
+  { selector: "[data-tour='agent-field-knowledge-bases']", titleKey: "tour.agents.knowledgeBases.title", descriptionKey: "tour.agents.knowledgeBases.description" }
+];
 
 const AGENT_FIELD_LIMITS = {
   name: 80,
@@ -92,6 +110,50 @@ export default function AgentsPage() {
   const [testQuestions, setTestQuestions] = useState<Record<string, string>>({});
   const [testResponses, setTestResponses] = useState<Record<string, AgentTestResponse>>({});
   const [error, setError] = useState<unknown>(null);
+  const [exportingId, setExportingId] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const importFileInputRef = useRef<HTMLInputElement>(null);
+  const formTour = useTour("agents-form");
+
+  async function exportAgent(agent: AgentDefinition) {
+    setExportingId(agent.id);
+    setError(null);
+    try {
+      const bundle = await fetchAgentExport(agent.id);
+      const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${slugifyFileName(agent.name)}.agent.json`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (requestError) {
+      setError(requestError);
+    } finally {
+      setExportingId(null);
+    }
+  }
+
+  async function onImportFilePicked(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setImporting(true);
+    setError(null);
+    try {
+      const text = await file.text();
+      const bundle = JSON.parse(text) as AgentExportBundle;
+      const created = await importAgentBundle(bundle);
+      setAgents((current) => [created, ...current]);
+      setExpandedAgentId(created.id);
+    } catch (requestError) {
+      setError(requestError instanceof SyntaxError ? new AgentFactoryApiError(400, "error.agentImportInvalid") : requestError);
+    } finally {
+      setImporting(false);
+    }
+  }
 
   const refreshIndexingJobs = useCallback(async (currentAgents: AgentDefinition[]) => {
     const jobs = await Promise.all(
@@ -330,7 +392,26 @@ export default function AgentsPage() {
           <h2>{t("agents.title")}</h2>
           <p>{t("agents.description")}</p>
         </div>
-        <span className="phase-badge">{t("agents.statusDraft")}</span>
+        <div className="intro-card-actions">
+          <input
+            ref={importFileInputRef}
+            type="file"
+            accept="application/json"
+            hidden
+            onChange={onImportFilePicked}
+            disabled={importing}
+          />
+          <button
+            type="button"
+            className="small-action"
+            onClick={() => importFileInputRef.current?.click()}
+            disabled={importing}
+            title={t("agents.importHint")}
+          >
+            {importing ? t("agents.importing") : t("agents.importAction")}
+          </button>
+          <span className="phase-badge">{t("agents.statusDraft")}</span>
+        </div>
       </section>
 
       {error ? <div className="alert error" role="alert"><strong>{t("operation.failedTitle")}</strong><span>{messageOf(error, t)}</span></div> : null}
@@ -339,18 +420,21 @@ export default function AgentsPage() {
         <form className="knowledge-form" onSubmit={submit}>
           <div>
             <span className="eyebrow">{t("agents.createEyebrow")}</span>
-            <h2>{t(editingAgentId ? "agents.editTitle" : "agents.createTitle")}</h2>
+            <div className="section-heading-inline">
+              <h2>{t(editingAgentId ? "agents.editTitle" : "agents.createTitle")}</h2>
+              <TourHelpButton onClick={formTour.restart} label={t("tour.agents.helpButton")} />
+            </div>
             <p>{t(editingAgentId ? "agents.editDescription" : "agents.createDescription")}</p>
           </div>
-          <label className="form-field">
+          <label className="form-field" data-tour="agent-field-name">
             <span className="field-label">
-              {t("agents.nameLabel")}
+              {t("agents.nameLabel")} <span className="req" aria-hidden="true">*</span>
               <span className="field-help" tabIndex={0} aria-label={t("agents.namePlaceholder")} title={t("agents.namePlaceholder")}>?</span>
             </span>
-            <input value={name} onChange={(event) => setName(event.target.value)} placeholder={t("agents.namePlaceholder")} maxLength={AGENT_FIELD_LIMITS.name} />
+            <input value={name} onChange={(event) => setName(event.target.value)} placeholder={t("agents.namePlaceholder")} maxLength={AGENT_FIELD_LIMITS.name} required aria-required="true" />
             <FieldLimit value={name} max={AGENT_FIELD_LIMITS.name} />
           </label>
-          <label className="form-field">
+          <label className="form-field" data-tour="agent-field-description">
             <span className="field-label">
               {t("agents.descriptionLabel")}
               <span className="field-help" tabIndex={0} aria-label={t("agents.descriptionPlaceholder")} title={t("agents.descriptionPlaceholder")}>?</span>
@@ -358,24 +442,24 @@ export default function AgentsPage() {
             <textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder={t("agents.descriptionPlaceholder")} maxLength={AGENT_FIELD_LIMITS.description} />
             <FieldLimit value={description} max={AGENT_FIELD_LIMITS.description} />
           </label>
-          <label className="form-field">
+          <label className="form-field" data-tour="agent-field-persona">
             <span className="field-label">
-              {t("agents.personaLabel")}
+              {t("agents.personaLabel")} <span className="req" aria-hidden="true">*</span>
               <span className="field-help" tabIndex={0} aria-label={t("agents.personaHelp")} title={t("agents.personaHelp")}>?</span>
             </span>
-            <textarea value={persona} onChange={(event) => setPersona(event.target.value)} placeholder={t("agents.personaPlaceholder")} maxLength={AGENT_FIELD_LIMITS.persona} />
+            <textarea value={persona} onChange={(event) => setPersona(event.target.value)} placeholder={t("agents.personaPlaceholder")} maxLength={AGENT_FIELD_LIMITS.persona} required aria-required="true" />
             <FieldLimit value={persona} max={AGENT_FIELD_LIMITS.persona} />
           </label>
-          <label className="form-field">
+          <label className="form-field" data-tour="agent-field-audience">
             <span className="field-label">
-              {t("agents.targetAudienceLabel")}
+              {t("agents.targetAudienceLabel")} <span className="req" aria-hidden="true">*</span>
               <span className="field-help" tabIndex={0} aria-label={t("agents.targetAudienceHelp")} title={t("agents.targetAudienceHelp")}>?</span>
             </span>
-            <input value={targetAudience} onChange={(event) => setTargetAudience(event.target.value)} placeholder={t("agents.targetAudiencePlaceholder")} maxLength={AGENT_FIELD_LIMITS.targetAudience} />
+            <input value={targetAudience} onChange={(event) => setTargetAudience(event.target.value)} placeholder={t("agents.targetAudiencePlaceholder")} maxLength={AGENT_FIELD_LIMITS.targetAudience} required aria-required="true" />
             <FieldLimit value={targetAudience} max={AGENT_FIELD_LIMITS.targetAudience} />
           </label>
           <div className="form-split">
-            <label className="form-field">
+            <label className="form-field" data-tour="agent-field-tone">
               <span className="field-label">
                 {t("agents.toneLabel")}
                 <span className="field-help" tabIndex={0} aria-label={t("agents.toneHelp")} title={t("agents.toneHelp")}>?</span>
@@ -386,7 +470,7 @@ export default function AgentsPage() {
                 ))}
               </select>
             </label>
-            <label className="form-field">
+            <label className="form-field" data-tour="agent-field-language">
               <span className="field-label">
                 {t("agents.responseLanguageLabel")}
                 <span className="field-help" tabIndex={0} aria-label={t("agents.responseLanguageHelp")} title={t("agents.responseLanguageHelp")}>?</span>
@@ -398,7 +482,7 @@ export default function AgentsPage() {
               </select>
             </label>
           </div>
-          <label className="form-field">
+          <label className="form-field" data-tour="agent-field-instructions">
             <span className="field-label">
               {t("agents.instructionsLabel")}
               <span className="field-help" tabIndex={0} aria-label={t("agents.instructionsPlaceholder")} title={t("agents.instructionsPlaceholder")}>?</span>
@@ -407,7 +491,7 @@ export default function AgentsPage() {
             <FieldLimit value={instructions} max={AGENT_FIELD_LIMITS.instructions} />
           </label>
 
-          <div className="form-field">
+          <div className="form-field" data-tour="agent-field-suggested">
             <span className="field-label">
               {t("agents.suggestedQuestionsLabel")}
               <span className="field-help" tabIndex={0} aria-label={t("agents.suggestedQuestionsHelp")} title={t("agents.suggestedQuestionsHelp")}>?</span>
@@ -460,7 +544,7 @@ export default function AgentsPage() {
             ) : null}
           </div>
 
-          <div className="form-field">
+          <div className="form-field" data-tour="agent-field-topics">
             <span className="field-label">
               {t("agents.questionTopicsLabel")}
               <span className="field-help" tabIndex={0} aria-label={t("agents.questionTopicsHelp")} title={t("agents.questionTopicsHelp")}>?</span>
@@ -532,7 +616,7 @@ export default function AgentsPage() {
             </div>
           </div>
 
-          <details className="assistant-texts">
+          <details className="assistant-texts" data-tour="agent-field-assistant-texts">
             <summary>{t("agents.assistantTextsLabel")}</summary>
             <small className="field-hint">{t("agents.assistantTextsHint")}</small>
             {ASSISTANT_TEXT_KEYS.map((key) => (
@@ -548,7 +632,7 @@ export default function AgentsPage() {
             ))}
           </details>
 
-          <div className="document-picker">
+          <div className="document-picker" data-tour="agent-field-knowledge-bases">
             <div>
               <span>{t("agents.knowledgeBasesLabel")}</span>
               <small>{t("agents.knowledgeBasesHelp")}</small>
@@ -564,6 +648,7 @@ export default function AgentsPage() {
               </label>
             )) : <p className="muted-copy">{t("agents.noKnowledgeBases")}</p>}
           </div>
+          <p className="form-required-note">{t("common.requiredFields")}</p>
           <div className="form-actions">
             {editingAgentId ? (
               <button className="secondary-button" type="button" onClick={resetForm} disabled={saving}>{t("common.cancel")}</button>
@@ -642,13 +727,6 @@ export default function AgentsPage() {
                           ) : null}
                         </div>
                         <div className="knowledge-meta">
-                          <strong>{t("agents.knowledgeBaseCount", { count: agent.knowledgeBaseCount })}</strong>
-                          <span>{agent.knowledgeBaseNames.slice(0, 3).join(", ") || t("agents.noLinkedBases")}</span>
-                          {agent.status === "READY" ? (
-                            <small className={`indexing-status ${indexingStatus(agent, indexingJobsByAgent[agent.id]).toLowerCase()}`}>
-                              {indexingLabel(agent, indexingJobsByAgent[agent.id], t)}
-                            </small>
-                          ) : null}
                           <div className="item-actions">
                             {agent.status === "DRAFT" ? (
                               <button className="small-action" type="button" onClick={() => publish(agent)} disabled={publishingId === agent.id || agent.knowledgeBaseCount === 0}>
@@ -670,6 +748,16 @@ export default function AgentsPage() {
                                     : t("agents.indexKnowledge")}
                               </button>
                             ) : null}
+                            <button
+                              className="icon-button"
+                              type="button"
+                              onClick={() => exportAgent(agent)}
+                              disabled={exportingId === agent.id}
+                              aria-label={t("agents.export", { name: agent.name })}
+                              title={t("agents.export", { name: agent.name })}
+                            >
+                              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" /></svg>
+                            </button>
                             <button className="icon-button" type="button" onClick={() => edit(agent)} disabled={saving && editingAgentId === agent.id} aria-label={t("agents.edit", { name: agent.name })} title={t("agents.edit", { name: agent.name })}>
                               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4l11-11a2.8 2.8 0 0 0-4-4L4 16v4Z" /><path d="M13.5 6.5l4 4" /></svg>
                             </button>
@@ -677,6 +765,13 @@ export default function AgentsPage() {
                               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" /></svg>
                             </button>
                           </div>
+                          <strong>{t("agents.knowledgeBaseCount", { count: agent.knowledgeBaseCount })}</strong>
+                          <span>{agent.knowledgeBaseNames.slice(0, 3).join(", ") || t("agents.noLinkedBases")}</span>
+                          {agent.status === "READY" ? (
+                            <small className={`indexing-status ${indexingStatus(agent, indexingJobsByAgent[agent.id]).toLowerCase()}`}>
+                              {indexingLabel(agent, indexingJobsByAgent[agent.id], t)}
+                            </small>
+                          ) : null}
                         </div>
                         {isAgentReadyToTest(agent, indexingJobsByAgent[agent.id]) ? (
                           <div className="agent-test-panel">
@@ -727,6 +822,7 @@ export default function AgentsPage() {
           </section>
         </div>
       ) : null}
+      <GuidedTour open={formTour.open} steps={AGENT_FORM_TOUR_STEPS} onClose={formTour.close} />
     </div>
   );
 }
@@ -738,6 +834,15 @@ function FieldLimit({ value, max }: { value: string; max: number }) {
 function messageOf(error: unknown, t: Translate): string {
   if (error instanceof AgentFactoryApiError) return t(error.code, error.variables);
   return t("common.unexpectedError");
+}
+
+function slugifyFileName(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "agente";
 }
 
 function formatDate(value: string, locale: string): string {

@@ -1,6 +1,42 @@
 # Current State
 
-Last updated: 2026-08-30
+Last updated: 2026-10-11
+
+## 2026-10-11 — Analytics: export, client access, tour
+
+- **Export**: Excel (`GET /agents/{id}/analytics/export`, Apache POI) and PDF (print stylesheet) from the analytics dashboard.
+- **Client access**: the consultant publishes an agent's analytics with a username/password; the end client logs in at `/client/analytics/{publicId}` without a platform account. Migration **V29** (`agent_analytics_access`). Full flow in `architecture.md` → "Client Analytics Access"; rationale in `decisions.md`.
+- Dashboard extracted to `components/analytics-dashboard.tsx` (shared by the consultant and client pages); guided tour `analytics-dashboard` and styled tooltips on the header icon buttons.
+- `AGENT_FACTORY_ANALYTICS_SESSION_SECRET` exists but is intentionally left empty in all environments.
+- Not verified end to end in a browser by the agent that built it; unit tests cover the access service and the exporter (`AgentAnalytics*Test`).
+- Knowledge-base and agent deletion now also delete their vectors in the RAG (`DELETE /knowledge-bases/{id}`, `DELETE /agents/{id}` in `ametis-ai`), best-effort.
+
+## 2026-09-14 — Storage abstraction (Drive/MinIO) + widget avatar
+
+- Implemented the paused MinIO proposal in full: `StorageProvider` interface,
+  `GoogleDriveStorageProvider` (default) and `MinioStorageProvider`
+  (`@ConditionalOnProperty`-gated, bucket per tenant), all document/provisioning
+  services rewired onto the interface. `V21` renamed storage columns to neutral
+  names. Every environment still defaults to `provider=drive` — nothing changes
+  in production until `AGENT_FACTORY_STORAGE_PROVIDER=minio` is set deliberately.
+  Full detail: `.agents/architecture.md` ("Document/Asset Storage"),
+  `.agents/decisions.md`.
+- Fixed a real (not-yet-deployed) bug found along the way: `agent_id` was
+  validated but never applied on `PATCH /deployments/{id}` — editing a
+  deployment's agent in the UI silently did nothing. Fixed in
+  `AgentDeployment.update()` / `DeploymentService.update()`.
+- Widget logo/avatar (the actual feature requested): `V22
+  agent_deployments.theme_avatar_key`. Upload via
+  `POST/DELETE /deployments/{id}/appearance/avatar` (multipart), stored through
+  `StorageProvider` (Drive or MinIO transparently), only the object key is
+  persisted — never a data URI. Served publicly at
+  `GET /public/{publicId}/avatar` (no JWT, like `widget.js`). Widget shows it in
+  the launcher bubble and header, live in the appearance-page preview too.
+- Local infra: `minio` service added to `infra/docker-compose.yml`
+  (ports 9000/9001), env vars in `.env.example`/`.env.local`/`.env.vps.example`
+  (commented-in but `provider` stays `drive` by default).
+- Not yet re-tested end-to-end with `provider=minio` locally — do that before
+  flipping any real environment.
 
 ## Active Branch
 

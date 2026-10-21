@@ -13,13 +13,20 @@
  * estilos viven dentro de un Shadow DOM aislado.
  */
 
+type BubbleAnimation = "none" | "bounce" | "float" | "ring";
+
 type DeploymentTheme = {
   primaryColor: string | null;
   font: string | null;
   position: string | null;
   title: string | null;
   subtitle: string | null;
+  avatarUrl: string | null;
+  bubbleAnimation: BubbleAnimation | null;
 };
+
+const DEFAULT_BUBBLE_ANIMATION: BubbleAnimation = "bounce";
+const BUBBLE_ANIMATIONS: BubbleAnimation[] = ["none", "bounce", "float", "ring"];
 
 const FONT_STACKS: Record<string, string> = {
   system: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
@@ -90,8 +97,14 @@ const WIDGET_CSS = `
   :host { all: initial; }
   * { box-sizing: border-box; font-family: var(--amw-font, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif); }
 
-  .root { position: fixed; right: 1.25rem; bottom: 1.25rem; z-index: 2147483000; display: flex; flex-direction: column; align-items: flex-end; gap: 0.75rem; }
+  /* pointer-events: none en .root -- en movil se ensancha a todo el ancho
+     (ver @media mas abajo) y, siendo position: fixed con z-index altisimo,
+     el hueco vacio de esa franja tapaba clics de la pagina del cliente que
+     quedaba debajo (p. ej. acordeones de FAQ). Los hijos visibles reactivan
+     pointer-events para seguir siendo clicables. */
+  .root { position: fixed; right: 1.25rem; bottom: 1.25rem; z-index: 2147483000; display: flex; flex-direction: column; align-items: flex-end; gap: 0.75rem; pointer-events: none; }
   .root.left { right: auto; left: 1.25rem; align-items: flex-start; }
+  .root > * { pointer-events: auto; }
 
   .bubble {
     position: relative;
@@ -104,9 +117,11 @@ const WIDGET_CSS = `
   .bubble:active { transform: scale(.95); }
   .bubble svg { width: 24px; height: 24px; }
   .bubble img { width: 100%; height: 100%; border-radius: 9999px; object-fit: cover; }
+  .bubble [data-bubble-icon] { display: inline-flex; align-items: center; justify-content: center; width: 100%; height: 100%; }
 
-  /* Llamada a la atención: rebote de pelota (con "aplastado" al tocar el suelo) mientras el chat está cerrado. */
-  .bubble.attention { animation: amw-launcher-bounce 1.8s infinite; transform-origin: bottom center; }
+  /* Llamadas a la atención de la burbuja cerrada -- una de cuatro, elegida
+     en la pantalla de apariencia (theme.bubbleAnimation). "none" no anima. */
+  .bubble.anim-bounce { animation: amw-launcher-bounce 1.8s infinite; transform-origin: bottom center; }
   @keyframes amw-launcher-bounce {
     0%, 100% { transform: translateY(0) scale(1.18, .82); animation-timing-function: cubic-bezier(0,0,.2,1); }
     12% { transform: translateY(0) scale(1, 1); animation-timing-function: cubic-bezier(.8,0,1,1); }
@@ -114,6 +129,25 @@ const WIDGET_CSS = `
     50% { transform: translateY(-20%) scale(1, 1); animation-timing-function: cubic-bezier(.8,0,1,1); }
     65% { transform: translateY(-15%) scale(.94, 1.06); animation-timing-function: cubic-bezier(0,0,.2,1); }
     88% { transform: translateY(0) scale(1, 1); animation-timing-function: cubic-bezier(.8,0,1,1); }
+  }
+
+  /* Sube y baja: flotación vertical suave, sin achatarse. */
+  .bubble.anim-float { animation: amw-launcher-float 2.6s ease-in-out infinite; }
+  @keyframes amw-launcher-float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+  }
+
+  /* Timbre periódico: quieta la mayor parte del ciclo, con un pequeño
+     temblor de campana cada tanto. */
+  .bubble.anim-ring { animation: amw-launcher-ring 2.4s ease-in-out infinite; transform-origin: top center; }
+  @keyframes amw-launcher-ring {
+    0%, 88%, 100% { transform: rotate(0deg); }
+    90% { transform: rotate(-13deg); }
+    92% { transform: rotate(10deg); }
+    94% { transform: rotate(-7deg); }
+    96% { transform: rotate(4deg); }
+    98% { transform: rotate(-2deg); }
   }
   .bubble-ping, .bubble-dot {
     position: absolute; top: -2px; right: -2px; width: .65rem; height: .65rem; border-radius: 9999px;
@@ -222,6 +256,31 @@ type PreviewPayload = {
   deploymentName: string;
 };
 
+const VISITOR_ID_STORAGE_KEY = "ametis-widget-visitor-id";
+
+/**
+ * Identificador estable del visitante, para el módulo de analíticas
+ * (visitantes únicos/recurrentes) sin pedir login. Vive en el localStorage
+ * del sitio del CLIENTE que embebe el widget (no el de AMETIS), así que es
+ * anónimo y propio de ese dominio -- no identifica a la persona, solo
+ * distingue "mismo navegador volvió a preguntar" de "visitante nuevo". Si
+ * localStorage no está disponible (modo incógnito estricto, etc.) simplemente
+ * no se manda; la pregunta se sigue respondiendo igual.
+ */
+function getOrCreateVisitorId(): string | null {
+  try {
+    const existing = window.localStorage.getItem(VISITOR_ID_STORAGE_KEY);
+    if (existing) return existing;
+    const id = typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `v-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+    window.localStorage.setItem(VISITOR_ID_STORAGE_KEY, id);
+    return id;
+  } catch {
+    return null;
+  }
+}
+
 /** Aclara un color hex hacia blanco para el extremo del gradiente. */
 function lighten(hex: string, amount: number): string {
   const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(hex.trim());
@@ -250,7 +309,9 @@ class AmetisWidget {
   private titleEl!: HTMLElement;
   private subtitleEl!: HTMLElement;
   private launcherEl!: HTMLButtonElement;
+  private brandIconEl!: HTMLElement;
   private open = false;
+  private bubbleAnimation: BubbleAnimation = DEFAULT_BUBBLE_ANIMATION;
   private loaded = false;
   private sending = false;
   private suggestedQuestions: string[] = [];
@@ -267,6 +328,11 @@ class AmetisWidget {
   mount(): void {
     const host = document.createElement("div");
     host.style.all = "initial";
+    // Marca el host para que un embebedor externo (p. ej. el probador de chat
+    // en vivo del panel de administración) pueda ubicarlo y retirarlo con
+    // precisión, sin tener que adivinar cuál nodo recién agregado a <body> es
+    // el suyo.
+    host.setAttribute("data-ametis-widget-host", this.publicId);
     document.body.appendChild(host);
     this.shadow = host.attachShadow({ mode: "open" });
 
@@ -297,8 +363,8 @@ class AmetisWidget {
           <button class="send" type="submit" data-send aria-label="${this.strings.sendLabel}">${ICONS.send}</button>
         </form>
       </div>
-      <button class="bubble attention" type="button" data-launcher aria-label="${this.strings.launcherLabel}">
-        ${ICONS.message}
+      <button class="bubble" type="button" data-launcher aria-label="${this.strings.launcherLabel}">
+        <span data-bubble-icon>${ICONS.message}</span>
         <span class="bubble-ping" data-launcher-badge aria-hidden="true"></span>
         <span class="bubble-dot" data-launcher-badge aria-hidden="true"></span>
       </button>
@@ -313,6 +379,7 @@ class AmetisWidget {
     this.titleEl = root.querySelector("[data-title]") as HTMLElement;
     this.subtitleEl = root.querySelector("[data-subtitle]") as HTMLElement;
     this.launcherEl = root.querySelector("[data-launcher]") as HTMLButtonElement;
+    this.brandIconEl = root.querySelector("[data-brand-icon]") as HTMLElement;
 
     this.launcherEl.addEventListener("click", () => this.toggle(true));
     (root.querySelector("[data-minimize]") as HTMLButtonElement).addEventListener("click", () => this.toggle(false));
@@ -323,6 +390,9 @@ class AmetisWidget {
     });
 
     if (this.preview) {
+      // Maqueta visual: edición en caliente del tema (color/fuente/logo) sin
+      // guardar, vía postMessage desde la pantalla de apariencia. No consulta
+      // ningún despliegue real.
       window.addEventListener("message", (event) => {
         const data = event.data as { type?: string; payload?: PreviewPayload };
         if (data && data.type === "ametis-preview" && data.payload) this.renderPreview(data.payload);
@@ -348,9 +418,11 @@ class AmetisWidget {
   private toggle(force?: boolean): void {
     this.open = force ?? !this.open;
     this.windowEl.classList.toggle("open", this.open);
-    // El rebote y el punto de aviso solo tienen sentido con el chat cerrado;
-    // reaparecen cada vez que se vuelve a cerrar.
-    this.launcherEl.classList.toggle("attention", !this.open);
+    // La animación de la burbuja y el punto de aviso solo tienen sentido con
+    // el chat cerrado; reaparecen cada vez que se vuelve a cerrar.
+    for (const animation of BUBBLE_ANIMATIONS) {
+      this.launcherEl.classList.toggle(`anim-${animation}`, !this.open && this.bubbleAnimation === animation);
+    }
     this.launcherEl.querySelectorAll("[data-launcher-badge]").forEach((el) => {
       (el as HTMLElement).hidden = this.open;
     });
@@ -376,6 +448,22 @@ class AmetisWidget {
     else root.removeProperty("--amw-font");
 
     this.rootEl.classList.toggle("left", (theme && theme.position) === "bottom-left");
+    this.applyAvatar(theme && theme.avatarUrl ? theme.avatarUrl : null);
+
+    this.bubbleAnimation = (theme && theme.bubbleAnimation) || DEFAULT_BUBBLE_ANIMATION;
+    // El tema puede llegar (loadInfo) después del primer render de la
+    // burbuja; reaplica las clases de animación con el valor ya resuelto.
+    for (const animation of BUBBLE_ANIMATIONS) {
+      this.launcherEl.classList.toggle(`anim-${animation}`, !this.open && this.bubbleAnimation === animation);
+    }
+  }
+
+  /**
+   * Sustituye el icono de la cabecera por el logo del negocio, si hay. La
+   * burbuja flotante conserva siempre el icono de chat por defecto.
+   */
+  private applyAvatar(avatarUrl: string | null): void {
+    this.brandIconEl.innerHTML = avatarUrl ? `<img src="${avatarUrl}" alt="" />` : ICONS.message;
   }
 
   private async loadInfo(): Promise<void> {
@@ -575,7 +663,11 @@ class AmetisWidget {
       const response = await fetch(`${this.endpoint}/${this.publicId}/query`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question })
+        body: JSON.stringify({
+          question,
+          visitorId: getOrCreateVisitorId(),
+          usedSuggestion: override !== undefined
+        })
       });
       loading.remove();
       if (!response.ok) throw new Error(String(response.status));
