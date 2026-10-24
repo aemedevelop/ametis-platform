@@ -569,9 +569,9 @@ class AmetisWidget {
     return text
       .replace(/```([\s\S]*?)```/g, (_, code: string) => code.trim())
       .replace(/`([^`]+)`/g, "$1")
-      // Enlaces markdown: se conserva la URL (si es http/s) para pintarla como enlace.
-      .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, "$1 $2")
-      .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+      // Enlaces markdown: los http/s se conservan ([Nombre](url) se pinta como
+      // enlace con el texto "Nombre"); cualquier otro esquema queda solo en texto.
+      .replace(/\[([^\]]+)\]\((?!https?:\/\/)[^)]+\)/g, "$1")
       .replace(/^\s{0,3}#{1,6}\s+/gm, "")
       .replace(/\*\*([^*]+)\*\*/g, "$1")
       .replace(/__([^_]+)__/g, "$1")
@@ -599,6 +599,8 @@ class AmetisWidget {
       paragraph = [];
     };
 
+    let lastItem: HTMLLIElement | null = null;
+
     for (const rawLine of lines) {
       const line = rawLine.trim();
       const bullet = line.match(/^([-*•·]|\d+[.)])\s+(.*)$/);
@@ -612,9 +614,18 @@ class AmetisWidget {
         const li = document.createElement("li");
         this.appendLinkified(li, bullet[2].trim());
         list.appendChild(li);
+        lastItem = li;
+        continue;
+      }
+      // Línea con sangría justo tras una viñeta: continúa esa viñeta en una
+      // línea nueva (p. ej. el enlace debajo del nombre) en vez de cerrar la lista.
+      if (line && list && lastItem && /^\s+/.test(rawLine)) {
+        lastItem.appendChild(document.createElement("br"));
+        this.appendLinkified(lastItem, line);
         continue;
       }
       list = null;
+      lastItem = null;
       if (!line) {
         flushParagraph();
       } else {
@@ -629,27 +640,32 @@ class AmetisWidget {
   }
 
   /**
-   * Añade `text` a `target` convirtiendo las URLs http/https en enlaces. Se
-   * construye con nodos (nunca innerHTML) y solo se aceptan esos esquemas, así
-   * que el texto del bot no puede inyectar HTML ni `javascript:`. La puntuación
-   * final (".", ",", ")"…) se deja fuera del enlace.
+   * Añade `text` a `target` convirtiendo en enlaces:
+   *  - `[Nombre](https://…)` → enlace con el texto "Nombre" (la URL no se ve);
+   *  - URLs sueltas http/https → enlace con la propia URL.
+   * Se construye con nodos (nunca innerHTML) y solo se aceptan esos esquemas,
+   * así que el texto del bot no puede inyectar HTML ni `javascript:`. En las
+   * URLs sueltas la puntuación final (".", ",", ")"…) queda fuera del enlace.
    */
   private appendLinkified(target: HTMLElement, text: string): void {
-    const urlPattern = /https?:\/\/[^\s<>"']+/g;
+    const linkPattern = /\[([^\]\n]+)\]\((https?:\/\/[^)\s]+)\)|https?:\/\/[^\s<>"']+/g;
     let last = 0;
     let match: RegExpExecArray | null;
-    while ((match = urlPattern.exec(text)) !== null) {
+    while ((match = linkPattern.exec(text)) !== null) {
       const start = match.index;
-      const url = match[0].replace(/[.,;:!?)\]]+$/, "");
+      const named = match[1] !== undefined;
+      const url = named ? match[2] : match[0].replace(/[.,;:!?)\]]+$/, "");
+      const consumed = named ? match[0].length : url.length;
       if (start > last) target.appendChild(document.createTextNode(text.slice(last, start)));
       const link = document.createElement("a");
       link.className = "rt-link";
       link.href = url;
       link.target = "_blank";
       link.rel = "noopener noreferrer nofollow";
-      link.textContent = url;
+      link.textContent = named ? match[1].trim() : url;
       target.appendChild(link);
-      last = start + url.length;
+      last = start + consumed;
+      linkPattern.lastIndex = last;
     }
     if (last < text.length) target.appendChild(document.createTextNode(text.slice(last)));
   }
