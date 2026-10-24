@@ -196,6 +196,7 @@ const WIDGET_CSS = `
   .bubble-text .rt-p + .rt-p, .bubble-text .rt-p + .rt-list, .bubble-text .rt-list + .rt-p { margin-top: .5rem; }
   .bubble-text .rt-list { margin: 0; padding-left: 1.15rem; }
   .bubble-text .rt-list li { margin: .18rem 0; }
+  .bubble-text .rt-link { color: var(--amw-primary, ${DEFAULT_PRIMARY}); text-decoration: underline; word-break: break-all; }
 
   .suggestions { display: flex; flex-direction: column; gap: .45rem; margin-top: .55rem; }
   .suggestion {
@@ -568,6 +569,8 @@ class AmetisWidget {
     return text
       .replace(/```([\s\S]*?)```/g, (_, code: string) => code.trim())
       .replace(/`([^`]+)`/g, "$1")
+      // Enlaces markdown: se conserva la URL (si es http/s) para pintarla como enlace.
+      .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, "$1 $2")
       .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
       .replace(/^\s{0,3}#{1,6}\s+/gm, "")
       .replace(/\*\*([^*]+)\*\*/g, "$1")
@@ -591,7 +594,7 @@ class AmetisWidget {
       if (!paragraph.length) return;
       const p = document.createElement("p");
       p.className = "rt-p";
-      p.textContent = paragraph.join(" ");
+      this.appendLinkified(p, paragraph.join(" "));
       container.appendChild(p);
       paragraph = [];
     };
@@ -607,7 +610,7 @@ class AmetisWidget {
           container.appendChild(list);
         }
         const li = document.createElement("li");
-        li.textContent = bullet[2].trim();
+        this.appendLinkified(li, bullet[2].trim());
         list.appendChild(li);
         continue;
       }
@@ -621,8 +624,34 @@ class AmetisWidget {
     flushParagraph();
 
     if (!container.childElementCount) {
-      container.textContent = text;
+      this.appendLinkified(container, text);
     }
+  }
+
+  /**
+   * Añade `text` a `target` convirtiendo las URLs http/https en enlaces. Se
+   * construye con nodos (nunca innerHTML) y solo se aceptan esos esquemas, así
+   * que el texto del bot no puede inyectar HTML ni `javascript:`. La puntuación
+   * final (".", ",", ")"…) se deja fuera del enlace.
+   */
+  private appendLinkified(target: HTMLElement, text: string): void {
+    const urlPattern = /https?:\/\/[^\s<>"']+/g;
+    let last = 0;
+    let match: RegExpExecArray | null;
+    while ((match = urlPattern.exec(text)) !== null) {
+      const start = match.index;
+      const url = match[0].replace(/[.,;:!?)\]]+$/, "");
+      if (start > last) target.appendChild(document.createTextNode(text.slice(last, start)));
+      const link = document.createElement("a");
+      link.className = "rt-link";
+      link.href = url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer nofollow";
+      link.textContent = url;
+      target.appendChild(link);
+      last = start + url.length;
+    }
+    if (last < text.length) target.appendChild(document.createTextNode(text.slice(last)));
   }
 
   /**
