@@ -61,176 +61,6 @@ docker logs ametis-agent-factory-app --tail 160
 docker logs ametis-kong --tail 120
 ```
 
-## VPS Pre Start (aislado de produccion, mismo VPS)
-
-Requiere una red Docker propia (una sola vez) y un checkout de repo separado
-del de produccion, p. ej. `/opt/ametis-platform-pre` y `/opt/ametis-ai-pre`
-(rama `develop`, en vez de `main`):
-
-```bash
-docker network create ametis_internal_pre
-```
-
-Run from `/opt/ametis-platform-pre`:
-
-```bash
-docker compose --env-file .env.pre \
-  -f ./infra/docker-compose.yml \
-  -f ./infra/platform-stack.compose.yml \
-  up -d --build
-```
-
-Run from `/opt/ametis-ai-pre/docker/compose/rag`:
-
-```bash
-docker compose --env-file .env.pre -f docker-compose.pre.yml up -d --build
-```
-
-Useful checks (mismo patron que produccion, puertos +1000):
-
-```bash
-docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" | grep ametis-pre
-curl -i http://127.0.0.1:9440/v1/health
-curl -i http://127.0.0.1:9440/api/agent-factory/drive/connection
-docker logs ametis-pre-kong --tail 120
-docker logs ametis-pre-agent-factory-app --tail 160
-docker logs ametis_pre_rag_service --tail 160
-```
-
-`.env.pre` (ametis-platform) y `.env.pre`/`.env.secrets.pre` (ametis-ai) se
-copian de sus `.example` respectivos y nunca se suben a Git (ya cubiertos por
-`.env.*` en `.gitignore`). Ver [[ametis-platform-web-container]] y
-[[ametis-secrets-per-tenant-llm-key]] en la memoria de Claude para el
-contexto de por que este entorno existe.
-
-### Gotcha: Kong se queda con la IP vieja tras un redeploy (502 en /v1/... o /api/agent-factory/...)
-
-`infra/kong/kong.yml` apunta a los servicios por **nombre de contenedor**
-(`http://ametis-core-api:8080`, `http://ametis-agent-factory-app:8083`) --
-en `pre` esto funciona porque `ametis-pre-core-api`/`ametis-pre-agent-factory-app`
-tienen un alias de red con ese mismo nombre generico, asi el mismo `kong.yml`
-sirve para prod y para pre sin parametrizar nada.
-
-El problema: Kong resuelve ese nombre a una IP y la cachea. Si `core-api` o
-`agent-factory-app` se recrean (redeploy, `docker compose up -d --build`) sin
-reiniciar Kong, Docker les asigna una IP nueva pero Kong sigue mandando
-trafico a la IP vieja -> `502 Bad Gateway` / `connect() failed (111: Connection
-refused)` en los logs de Kong, aunque el contenedor nuevo este "Up" y sano.
-
-Diagnostico rapido:
-```bash
-docker logs --tail 100 ametis-pre-kong | grep "connect() failed"
-docker inspect ametis-pre-core-api --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}'
-```
-Si la IP del log no coincide con la del `inspect`, es esto.
-
-Arreglo (no requiere tocar ningun archivo):
-```bash
-docker restart ametis-pre-kong   # o ametis-kong en produccion
-```
-
-**Regla practica**: despues de cualquier redeploy que recree `core-api` o
-`agent-factory-app` (en pre o en produccion), reiniciar tambien el `kong` de
-ese mismo entorno.
-
-Mitigacion en codigo (2026-10-18): `KONG_DNS_VALID_TTL`/`KONG_DNS_STALE_TTL`
-a 10s en `infra/docker-compose.yml`, para que Kong vuelva a resolver la IP
-solo. Hasta confirmarlo en pre, seguir reiniciando Kong tras los redeploys.
-
-### Reinicio del VPS: politica de reinicio (2026-10-18)
-
-El 2026-10-18 el VPS se reinicio (actualizacion de kernel) y ningun
-contenedor de `ametis-platform` volvio a arrancar: los compose no tenian
-`restart:`. Ahora todos los servicios usan `restart: ${RESTART_POLICY:-unless-stopped}`;
-`.env.vps`/`.env.pre` -> `unless-stopped`, `.env.local` -> `no`.
-
-Para aplicarlo a contenedores ya creados sin recrearlos:
-```bash
-docker ps -a --format '{{.Names}}' | grep -iE '^ametis' | xargs -r docker update --restart unless-stopped
-```
-Verificar tras un reinicio: `uptime -s`, `last -x reboot shutdown | head`,
-`docker inspect <c> --format '{{.HostConfig.RestartPolicy.Name}} exit={{.State.ExitCode}}'`.
-
-### Gotcha: despliegue de prueba fijo (`workspace-test`) con Origin viejo -> 403 en el widget
-
-El despliegue interno `workspace-test` (usado por el toggle "Probar chat en
-vivo" del panel de despliegues) se autoaprovisiona la primera vez que se
-pide, con `allowedOrigins` = `AGENT_FACTORY_WEB_URL` en ese momento. Si se
-creo ANTES de que esa variable estuviera bien puesta en el entorno (o si el
-dominio cambia mas adelante), queda con el origen viejo guardado para
-siempre -> el widget responde `403` (`GET /api/agent-factory/public/<id>`)
-y el chat se queda pensando / muestra "No se pudo conectar con el servidor".
-
-Diagnostico:
-```bash
-docker logs --tail 60 ametis-pre-agent-factory-app | grep "public/"   # busca el 403
-docker exec ametis-pre-agent-factory-app env | grep AGENT_FACTORY_WEB_URL
-```
-Si la variable de entorno ya esta correcta pero el 403 persiste, es esto:
-el despliegue ya existente tiene el origen viejo grabado en la base.
-
-Arreglo manual (mientras el fix de codigo de abajo no este desplegado):
-borrar el despliegue "Chat de prueba del workspace" desde el listado y
-volver a activar el chat de prueba -- se recrea con el origen correcto.
-
-Arreglo de fondo (ya en el codigo, agregado 2026-09-26, pendiente de
-desplegar a pre/produccion): `DeploymentService.getOrCreateWorkspaceTestDeployment`
-ahora resincroniza `allowedOrigins` con `AGENT_FACTORY_WEB_URL` en CADA uso,
-no solo al crear -- se autocorrige solo, sin necesidad de borrar nada.
-
-## Incidente 2026-09-26 en pre: resumen de lo que hubo que hacer
-
-Contexto: se desplego a `develop`/pre la funcionalidad de despliegues en
-borrador/publicado + chat de prueba en vivo. Dos cosas se rompieron:
-
-1. **Login roto (502 en `/v1/auth/code/exchange`)**: Kong (`ametis-pre-kong`,
-   6 dias sin reiniciarse) se quedo con la IP vieja de `ametis-pre-core-api`
-   tras el redeploy. Arreglo: `docker restart ametis-pre-kong`.
-2. **Widget de prueba con 403**: el despliegue fijo `workspace-test` se
-   habia creado (en una prueba anterior) con `allowedOrigins` apuntando a
-   `localhost` en vez del dominio real de pre. Arreglo manual: borrarlo
-   desde el listado para que se recreara con el origen correcto. Arreglo de
-   fondo en codigo (ver gotcha arriba): pendiente de desplegar.
-
-Ninguno de los dos fue un bug del feature en si -- ambos son gotchas de
-infraestructura que ya quedaron documentados arriba para la proxima vez.
-
-## Incidente 2026-09-25/27: rag-service de produccion eliminado por completo
-
-Sintoma: el webchat real (produccion) responde siempre "No se pudo conectar
-con el servidor". Logs de `ametis-agent-factory-app`:
-```
-java.nio.channels.UnresolvedAddressException: null
-... I/O error on POST request for "http://rag-service:8000/tenants/.../query"
-```
-No es un 502/403 de Kong -- es que `agent-factory-app` no puede resolver el
-host `rag-service` porque **el contenedor no existe** (`docker ps -a | grep
-rag` no lo muestra en absoluto, ni corriendo ni caido).
-
-**Causa raiz**: `/opt/ametis-ai/docker/compose/rag` (produccion) y
-`/opt/ametis-ai-pre/docker/compose/rag` (pre) terminan en la misma carpeta
-`rag` -- Compose calcula el nombre de proyecto por defecto a partir de ese
-nombre de carpeta, asi que **ambos entornos compartian el mismo proyecto de
-Compose por defecto** aunque usan archivos distintos
-(`docker-compose.vps.yml` / `docker-compose.pre.yml`). Un `docker compose
-down` corrido en cualquiera de los dos directorios sin fijar el proyecto se
-lleva puestos los contenedores de AMBOS entornos -- eso fue lo que paso el
-2026-09-25 mientras se armaba `pre` (el rag-service de produccion desaparecio
-sin dejar rastro; el de pre se volvio a levantar despues, el de produccion
-no).
-
-**Arreglo de fondo (ya aplicado, 2026-09-27)**: se agrego una clave `name:`
-fija al inicio de ambos compose files (`ametis-ai-rag` en vps,
-`ametis-ai-rag-pre` en pre) -- Compose ya no puede confundir los dos
-proyectos sin importar desde que directorio se invoque.
-
-**Recuperacion manual** (si vuelve a faltar el contenedor):
-```bash
-cd /opt/ametis-ai/docker/compose/rag
-docker compose --env-file .env.vps -f docker-compose.vps.yml up -d --build
-docker exec ametis-agent-factory-app getent hosts rag-service   # confirma que ya resuelve
-```
-
 ## VPS Platform Start
 
 Run from `/opt/ametis-platform`:
@@ -356,3 +186,21 @@ does not yet exist) — it must be configured by hand in **every** Keycloak inst
    Google, not something to edit.
 3. Repeat step 2 on every other Keycloak instance (VPS) with the same Google
    Client ID/secret — each realm DB is separate and needs its own Identity Provider row.
+
+## Keycloak redirect URIs — per-environment manual step
+
+`infra/keycloak/realm-export.json` only ships `http://localhost:3200/auth/callback`
+as a valid redirect URI for the `agent-factory-web` client (and the matching
+`http://localhost:3200` web origin) — it is intentionally generic and never
+carries real domains. The import only runs once per fresh Keycloak instance,
+so **every** new instance (VPS pre, VPS prod) needs its own domain added by
+hand, or login fails with Keycloak's `Invalid parameter: redirect_uri` error.
+
+For each new instance, in the admin console (realm **ametis** -> **Clients**
+-> `agent-factory-web` -> Settings):
+
+- **Valid redirect URIs**: add `https://<its-own-domain>/auth/callback`
+- **Web origins**: add `https://<its-own-domain>`
+
+Repeat for `ametis-hub-web` too if that frontend is also exposed on the same
+instance.

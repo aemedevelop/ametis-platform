@@ -105,7 +105,14 @@ function LoginContent() {
             </button>
 
             <p className="auth-alt">
-              {t("login.noAccount")} <Link href="/auth/register">{t("login.createAccount")}</Link>
+              {t("login.noAccount")}{" "}
+              {process.env.NEXT_PUBLIC_REGISTRATION_ENABLED !== "false" ? (
+                <Link href="/auth/register">{t("login.createAccount")}</Link>
+              ) : (
+                <span className="auth-alt-disabled" aria-disabled="true" title={t("auth.error.registrationDisabled")}>
+                  {t("login.createAccount")}
+                </span>
+              )}
             </p>
 
             <div className="login-status" aria-live="polite">
