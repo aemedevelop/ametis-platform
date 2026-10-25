@@ -455,7 +455,7 @@ export default function AgentsPage() {
               {t("agents.targetAudienceLabel")} <span className="req" aria-hidden="true">*</span>
               <span className="field-help" tabIndex={0} aria-label={t("agents.targetAudienceHelp")} title={t("agents.targetAudienceHelp")}>?</span>
             </span>
-            <input value={targetAudience} onChange={(event) => setTargetAudience(event.target.value)} placeholder={t("agents.targetAudiencePlaceholder")} maxLength={AGENT_FIELD_LIMITS.targetAudience} required aria-required="true" />
+            <textarea value={targetAudience} onChange={(event) => setTargetAudience(event.target.value)} placeholder={t("agents.targetAudiencePlaceholder")} maxLength={AGENT_FIELD_LIMITS.targetAudience} required aria-required="true" />
             <FieldLimit value={targetAudience} max={AGENT_FIELD_LIMITS.targetAudience} />
           </label>
           <div className="form-split">
@@ -491,12 +491,13 @@ export default function AgentsPage() {
             <FieldLimit value={instructions} max={AGENT_FIELD_LIMITS.instructions} />
           </label>
 
-          <div className="form-field" data-tour="agent-field-suggested">
-            <span className="field-label">
-              {t("agents.suggestedQuestionsLabel")}
+          <details className="assistant-texts" data-tour="agent-field-suggested">
+            <summary>
+              {t("agents.suggestedQuestionsLabel")} ({suggestedQuestions.filter((question) => question.trim()).length})
               <span className="field-help" tabIndex={0} aria-label={t("agents.suggestedQuestionsHelp")} title={t("agents.suggestedQuestionsHelp")}>?</span>
-            </span>
+            </summary>
             <small className="field-hint">{t("agents.suggestedQuestionsHint")}</small>
+            <div className="form-field">
             <div className="suggested-questions">
               {suggestedQuestions.map((question, index) => (
                 <div className="suggested-question-row" key={index}>
@@ -542,14 +543,16 @@ export default function AgentsPage() {
                 </label>
               </div>
             ) : null}
-          </div>
+            </div>
+          </details>
 
-          <div className="form-field" data-tour="agent-field-topics">
-            <span className="field-label">
-              {t("agents.questionTopicsLabel")}
+          <details className="assistant-texts" data-tour="agent-field-topics">
+            <summary>
+              {t("agents.questionTopicsLabel")} ({questionTopics.length})
               <span className="field-help" tabIndex={0} aria-label={t("agents.questionTopicsHelp")} title={t("agents.questionTopicsHelp")}>?</span>
-            </span>
+            </summary>
             <small className="field-hint">{t("agents.questionTopicsHint")}</small>
+            <div className="form-field">
             <div className="question-topics">
               {questionTopics.map((topic, topicIndex) => (
                 <div className="question-topic" key={topicIndex}>
@@ -614,7 +617,8 @@ export default function AgentsPage() {
                 {t("agents.questionTopicAdd")}
               </button>
             </div>
-          </div>
+            </div>
+          </details>
 
           <details className="assistant-texts" data-tour="agent-field-assistant-texts">
             <summary>{t("agents.assistantTextsLabel")}</summary>
