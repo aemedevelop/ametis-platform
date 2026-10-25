@@ -198,13 +198,15 @@ const WIDGET_CSS = `
   .bubble-text .rt-list li { margin: .18rem 0; }
   .bubble-text .rt-link { color: var(--amw-primary, ${DEFAULT_PRIMARY}); text-decoration: underline; word-break: break-all; }
 
-  .suggestions { display: flex; flex-direction: column; gap: .45rem; margin-top: .55rem; }
+  /* Chips ajustados al texto: se colocan en fila y saltan de línea al no caber. */
+  .suggestions { display: flex; flex-wrap: wrap; align-items: flex-start; gap: .4rem; margin-top: .55rem; }
   .suggestion {
-    display: block; width: 100%; padding: .7rem .85rem; border: 1px solid rgba(30,58,138,.18);
-    border-radius: .9rem; background: #fff; color: #0f172a; text-align: left; font-size: .86rem;
-    line-height: 1.4; cursor: pointer; box-shadow: 0 6px 14px rgba(15,23,42,.05);
+    display: inline-block; max-width: 100%; padding: .45rem .8rem; border: 1px solid rgba(30,58,138,.18);
+    border-radius: 9999px; background: #fff; color: #0f172a; text-align: left; font-size: .84rem;
+    line-height: 1.35; cursor: pointer; box-shadow: 0 3px 8px rgba(15,23,42,.05);
+    transition: border-color .15s ease, background-color .15s ease, transform .15s ease;
   }
-  .suggestion:hover { border-color: rgba(30,58,138,.42); background: #eff6ff; }
+  .suggestion:hover { border-color: var(--amw-primary, ${DEFAULT_PRIMARY}); background: #eff6ff; transform: translateY(-1px); }
 
   .dots { display: inline-flex; align-items: center; gap: .2rem; }
   .dots span { display: inline-block; width: .35rem; height: .35rem; border-radius: 9999px; background: currentColor; opacity: .7; animation: amw-bounce 1s infinite ease-in-out; }
