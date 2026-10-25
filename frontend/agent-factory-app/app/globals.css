@@ -771,9 +771,24 @@ tbody tr:last-child td { border-bottom: 0; }
 .suggested-questions-display .form-field.compact { flex: 0 1 auto; margin: 0; }
 .suggested-questions-display .form-field.compact input[type="number"] { width: 5rem; }
 .question-topics { display: flex; flex-direction: column; gap: .7rem; }
-.question-topic { border: 1px solid var(--border, #e2e8f0); border-radius: .6rem; padding: .7rem .85rem; background: rgba(15,23,42,.02); }
+.question-topic { border: 0; border-top: 1px solid var(--line); border-radius: 0; padding: .8rem 0 0; background: none; }
+.question-topic:first-child { border-top: 0; padding-top: 0; }
 .question-topic-head { display: flex; gap: .5rem; align-items: center; margin-bottom: .5rem; }
 .question-topic-head input { flex: 1; min-width: 0; font-weight: 600; }
+/* Botón para plegar/desplegar las preguntas de un tema: flecha + nº de preguntas. */
+.question-topic-head .topic-toggle { display: inline-flex; align-items: center; justify-content: center; width: auto; min-width: 0; padding: 0 5px; gap: 1px; flex-shrink: 0; }
+.question-topic-head .topic-toggle svg { transform: rotate(-90deg); transition: transform .15s ease; }
+.question-topic-head .topic-toggle.expanded svg { transform: rotate(0deg); }
+.question-topic-head .topic-toggle .topic-count { font-size: 12px; font-weight: 800; letter-spacing: 0; }
+/* Nombre del tema: destacado frente a sus preguntas. */
+.form-field .question-topic-head input {
+  border-color: color-mix(in srgb, var(--blue) 45%, var(--line));
+  border-left: 4px solid var(--blue);
+  background: color-mix(in srgb, var(--blue) 14%, transparent);
+  color: #fff;
+  font-weight: 800;
+}
+:root[data-theme="light"] .form-field .question-topic-head input { color: var(--ink); }
 .avatar-picker { display: flex; align-items: center; gap: .85rem; margin-top: .5rem; }
 .avatar-preview {
   flex-shrink: 0; width: 3rem; height: 3rem; border-radius: 9999px; object-fit: cover;

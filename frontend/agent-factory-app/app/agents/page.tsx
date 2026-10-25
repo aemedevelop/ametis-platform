@@ -96,6 +96,8 @@ export default function AgentsPage() {
   const [suggestedQuestionsCount, setSuggestedQuestionsCount] = useState(3);
   const [suggestedQuestionsOrder, setSuggestedQuestionsOrder] = useState<SuggestedQuestionsOrder>("random");
   const [questionTopics, setQuestionTopics] = useState<QuestionTopic[]>([]);
+  // Índices de los temas con sus preguntas desplegadas (plegados por defecto).
+  const [expandedTopics, setExpandedTopics] = useState<Set<number>>(new Set());
   const [assistantTexts, setAssistantTexts] = useState<AssistantTexts>({});
   const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
   const [expandedAgentId, setExpandedAgentId] = useState<string | null>(null);
@@ -285,6 +287,7 @@ export default function AgentsPage() {
     setSuggestedQuestionsCount(agent.suggestedQuestionsCount ?? 3);
     setSuggestedQuestionsOrder(agent.suggestedQuestionsOrder ?? "random");
     setQuestionTopics(agent.questionTopics ?? []);
+    setExpandedTopics(new Set());
     setAssistantTexts(agent.assistantTexts ?? {});
     setSelectedBases(agent.knowledgeBaseIds ?? []);
     setError(null);
@@ -303,6 +306,7 @@ export default function AgentsPage() {
     setSuggestedQuestionsCount(3);
     setSuggestedQuestionsOrder("random");
     setQuestionTopics([]);
+    setExpandedTopics(new Set());
     setAssistantTexts({});
     setSelectedBases([]);
   }
@@ -554,9 +558,28 @@ export default function AgentsPage() {
             <small className="field-hint">{t("agents.questionTopicsHint")}</small>
             <div className="form-field">
             <div className="question-topics">
-              {questionTopics.map((topic, topicIndex) => (
+              {questionTopics.map((topic, topicIndex) => {
+                const expanded = expandedTopics.has(topicIndex);
+                const questionCount = topic.questions.filter((question) => question.trim()).length;
+                return (
                 <div className="question-topic" key={topicIndex}>
                   <div className="question-topic-head">
+                    <button
+                      type="button"
+                      className={`icon-button topic-toggle${expanded ? " expanded" : ""}`}
+                      onClick={() => setExpandedTopics((current) => {
+                        const next = new Set(current);
+                        if (next.has(topicIndex)) next.delete(topicIndex);
+                        else next.add(topicIndex);
+                        return next;
+                      })}
+                      aria-expanded={expanded}
+                      aria-label={t("agents.questionTopicToggle", { count: questionCount })}
+                      title={t("agents.questionTopicToggle", { count: questionCount })}
+                    >
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 10 4 4 4-4" /></svg>
+                      <span className="topic-count">{questionCount}</span>
+                    </button>
                     <input
                       value={topic.label}
                       onChange={(event) => setQuestionTopics((current) => current.map((item, index) => index === topicIndex ? { ...item, label: event.target.value } : item))}
@@ -566,13 +589,20 @@ export default function AgentsPage() {
                     <button
                       type="button"
                       className="icon-button danger"
-                      onClick={() => setQuestionTopics((current) => current.filter((_, index) => index !== topicIndex))}
+                      onClick={() => {
+                        setQuestionTopics((current) => current.filter((_, index) => index !== topicIndex));
+                        // Los índices posteriores se desplazan una posición.
+                        setExpandedTopics((current) => new Set(
+                          Array.from(current).filter((index) => index !== topicIndex).map((index) => (index > topicIndex ? index - 1 : index))
+                        ));
+                      }}
                       aria-label={t("agents.questionTopicRemove")}
                       title={t("agents.questionTopicRemove")}
                     >
                       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
                     </button>
                   </div>
+                  {expanded ? (
                   <div className="suggested-questions">
                     {topic.questions.map((question, questionIndex) => (
                       <div className="suggested-question-row" key={questionIndex}>
@@ -607,12 +637,18 @@ export default function AgentsPage() {
                       {t("agents.suggestedQuestionAdd")}
                     </button>
                   </div>
+                  ) : null}
                 </div>
-              ))}
+                );
+              })}
               <button
                 type="button"
                 className="secondary-button"
-                onClick={() => setQuestionTopics((current) => [...current, { id: "", label: "", questions: [""] }])}
+                onClick={() => {
+                  // El tema nuevo aparece desplegado para poder escribir sus preguntas.
+                  setExpandedTopics((current) => new Set(current).add(questionTopics.length));
+                  setQuestionTopics((current) => [...current, { id: "", label: "", questions: [""] }]);
+                }}
               >
                 {t("agents.questionTopicAdd")}
               </button>

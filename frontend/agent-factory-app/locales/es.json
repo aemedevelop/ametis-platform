@@ -578,6 +578,7 @@
   "agents.questionTopicLabelPlaceholder": "Nombre del tema (p. ej. Precios)",
   "agents.questionTopicAdd": "Añadir tema",
   "agents.questionTopicRemove": "Quitar tema",
+  "agents.questionTopicToggle": "Mostrar u ocultar las preguntas del tema ({count})",
   "agents.suggestedQuestionPlaceholder": "¿Cómo puedo contratar el servicio?",
   "agents.suggestedQuestionAdd": "Añadir pregunta",
   "agents.suggestedQuestionRemove": "Quitar pregunta",

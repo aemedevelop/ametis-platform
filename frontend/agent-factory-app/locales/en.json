@@ -578,6 +578,7 @@
   "agents.questionTopicLabelPlaceholder": "Topic name (e.g. Pricing)",
   "agents.questionTopicAdd": "Add topic",
   "agents.questionTopicRemove": "Remove topic",
+  "agents.questionTopicToggle": "Show or hide the topic's questions ({count})",
   "agents.suggestedQuestionPlaceholder": "How do I sign up for the service?",
   "agents.suggestedQuestionAdd": "Add question",
   "agents.suggestedQuestionRemove": "Remove question",
